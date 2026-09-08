@@ -45,9 +45,9 @@ services:
     ports:
       - "8000:8000"
 
-  frontend:
+  web:
     build:
-      context: ../frontend
+      context: ../web
       dockerfile: Dockerfile
     restart: unless-stopped
     depends_on:
