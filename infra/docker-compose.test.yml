@@ -1,0 +1,24 @@
+services:
+  postgres-test:
+    image: postgis/postgis:15-3.4
+    environment:
+      POSTGRES_DB: sahayak_test
+      POSTGRES_USER: sahayak
+      POSTGRES_PASSWORD: testpass
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sahayak -d sahayak_test"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis-test:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10

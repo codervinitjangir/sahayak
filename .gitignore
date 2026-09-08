@@ -1,0 +1,61 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.venv/
+venv/
+env/
+.env
+*.env.local
+
+# Node / Frontend
+node_modules/
+dist/
+.next/
+out/
+*.tsbuildinfo
+
+# Docker
+.docker/
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+*.pid
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+.nyc_output/
+playwright-report/
+test-results/
+
+# Database / secrets
+*.sqlite3
+*.pem
+*.key
+*.p12
+secrets/
+
+# OS
+.DS_Store
+desktop.ini
+
+# Alembic
+# Keep alembic/versions tracked — do NOT ignore it
