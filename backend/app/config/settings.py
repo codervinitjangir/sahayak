@@ -17,6 +17,15 @@ class Settings(BaseSettings):
     # Database Configuration (Supabase PostgreSQL)
     DATABASE_URL: str = ""
 
+    @property
+    def ASYNC_DATABASE_URL(self) -> str:
+        """Return DATABASE_URL formatted for SQLAlchemy async engine (asyncpg)."""
+        if not self.DATABASE_URL:
+            return ""
+        if self.DATABASE_URL.startswith("postgresql://"):
+            return self.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return self.DATABASE_URL
+
 
 @lru_cache
 def get_settings() -> Settings:
