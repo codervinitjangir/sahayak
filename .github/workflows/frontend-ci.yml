@@ -31,7 +31,7 @@ jobs:
         run: npx tsc --noEmit
         working-directory: web
 
-  # TODO: Uncomment when frontend has lint config and unit tests set up
+  # TODO: Uncomment when web app is production-ready
   # lint-and-build:
   #   name: Lint & Build
   #   steps:

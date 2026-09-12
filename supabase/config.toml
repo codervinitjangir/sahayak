@@ -1,0 +1,22 @@
+# A string used to distinguish different Supabase projects on the same host. Defaults to the
+# working directory of the CLI tool.
+project_id = "pefyozsahazextxkmhdh"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "storage", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 17
+
+[db.pooler]
+enabled = false
+port = 54329
+pool_mode = "transaction"
+default_pool_size = 20
+max_client_conn = 100

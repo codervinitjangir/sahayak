@@ -1,42 +1,68 @@
-# Sahayak — Backend
+# Sahayak Backend API
 
-FastAPI + Python backend for the Sahayak roadside assistance dispatch platform.
+> Real-time emergency vehicle assistance and service dispatch platform.
 
-## Setup
+---
+
+## 🚀 Setup & Local Development
+
+### 1. Create and Activate Virtual Environment
 
 ```bash
+# Windows
 python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+venv\Scripts\activate
+
+# macOS/Linux
+python3 -m venv venv
+source venv/bin/activate
+```
+
+### 2. Install Dependencies
+
+```bash
 pip install -r requirements.txt
+```
 
-# Run migrations
-alembic upgrade head
+### 3. Configure Environment Variables
 
-# Start dev server
+Copy `.env.example` to `.env` and fill in your actual Supabase credentials:
+
+```bash
+cp .env.example .env
+```
+
+Ensure `DATABASE_URL` is set to your Supabase PostgreSQL connection string.
+
+### 4. Run the Development Server
+
+```bash
 uvicorn app.main:app --reload
 ```
 
-API docs available at `http://localhost:8000/docs`
+- API Base URL: `http://localhost:8000`
+- Interactive API Docs (Swagger): `http://localhost:8000/docs`
+- Health Check Endpoint: `http://localhost:8000/health`
 
-## Structure
+---
 
-```
-app/
-├── api/          # Route handlers and FastAPI dependencies
-├── models/       # SQLAlchemy ORM table definitions
-├── schemas/      # Pydantic request/response contracts
-├── services/     # Business logic: dispatch, jobs, partner, notifications
-├── repositories/ # Database access and query composition
-├── utils/        # Scoring algorithm, helpers, error utilities
-├── middlewares/  # Correlation ID, auth validation, error handling
-└── config/       # Settings (Pydantic BaseSettings) and DI wiring
-```
+## 📌 Architecture Note
 
-## Test
+This is the initial FastAPI project skeleton connecting directly to our existing Supabase PostgreSQL database. 
 
-```bash
-pytest
-pytest tests/unit/
-pytest tests/integration/
-pytest tests/api/
-```
+ORM models (`app/models/`) and Pydantic schemas (`app/schemas/`) will be added next to mirror the 15 existing Supabase tables:
+1. `users`
+2. `vehicles`
+3. `service_categories`
+4. `services`
+5. `admins`
+6. `partners`
+7. `partner_services`
+8. `partner_equipment`
+9. `partner_documents`
+10. `jobs`
+11. `job_assignments`
+12. `job_status_history`
+13. `ratings`
+14. `payments`
+15. `notifications`

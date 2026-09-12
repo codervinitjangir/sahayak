@@ -280,7 +280,6 @@ Every dispatch also records which partner the **nearest-only baseline** would ha
 | [Vinit Jangir](https://github.com/codervinitjangir) | Backend, database, dispatch engine, infrastructure |
 | Adarsh Pratap Singh | Frontend (owner/partner/admin), UX implementation |
 
-Polaris School of Technology, Bengaluru — OJT Sem-3, 2026
 
 ---
 
