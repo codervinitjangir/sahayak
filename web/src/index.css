@@ -1,0 +1,82 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-primary: #0F766E;
+  --color-primary-hover: #115E59;
+  --color-danger: #B91C1C;
+  --color-success: #15803D;
+  --color-warning: #B45309;
+  --color-surface: #FFFFFF;
+  --color-canvas: #F8FAFC;
+}
+
+body {
+  margin: 0;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background-color: var(--color-canvas);
+  color: #1E293B;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Accessibility focus styles (WCAG 2.1 AA) */
+button:focus-visible, 
+input:focus-visible, 
+select:focus-visible, 
+textarea:focus-visible, 
+a:focus-visible {
+  outline: 2px solid #0F766E;
+  outline-offset: 2px;
+}
+
+/* Minimum 44x44px touch target class for mobile accessibility */
+.touch-target {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+/* ==========================================================================
+   Custom Roadside Assistance Repair Wrench Cursor (Desktop)
+   Single-Sided Mechanic Wrench
+   ========================================================================== */
+@media (pointer: fine) {
+  html, body {
+    cursor: url('/cursor-repair.svg') 4 4, auto;
+  }
+
+  /* Interactive Elements: Glowing Active Amber Repair Wrench with Action Spark */
+  a, 
+  button, 
+  [role="button"], 
+  input[type="button"], 
+  input[type="submit"], 
+  input[type="reset"], 
+  select, 
+  label, 
+  summary,
+  .cursor-pointer,
+  .landing-btn,
+  .nav-action-btn,
+  .pill-tab,
+  .step-nav-btn {
+    cursor: url('/cursor-repair-hover.svg') 4 4, pointer !important;
+  }
+
+  /* Active Click State: Wrench lights up on mousedown anywhere */
+  body:active {
+    cursor: url('/cursor-repair-hover.svg') 4 4, pointer;
+  }
+
+  /* Text inputs / textareas retain standard text selection beam */
+  input[type="text"],
+  input[type="tel"],
+  input[type="email"],
+  input[type="password"],
+  input[type="search"],
+  input[type="number"],
+  textarea {
+    cursor: text !important;
+  }
+}
+
