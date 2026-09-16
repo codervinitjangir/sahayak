@@ -1,12 +1,24 @@
+"""
+Liveness endpoint.
+
+Left unversioned at /health on purpose: container health checks and deploy
+smoke tests point at this path, so it must not move when the API version does.
+"""
 import psycopg2
 from fastapi import APIRouter
+
 from app.config.settings import get_settings
+from app.schemas.common import ApiResponse, HealthResponse, envelope
 
 router = APIRouter(tags=["health"])
 
 
-@router.get("/health")
-def health_check():
+@router.get(
+    "/health",
+    response_model=ApiResponse[HealthResponse],
+    summary="Process liveness and database reachability",
+)
+def health_check() -> ApiResponse[HealthResponse]:
     """
     Lightweight health check verifying API liveness and Supabase PostgreSQL connectivity.
     """
@@ -26,7 +38,4 @@ def health_check():
         except Exception:
             db_status = "unreachable"
 
-    return {
-        "status": "ok",
-        "database": db_status
-    }
+    return envelope({"status": "ok", "database": db_status})
