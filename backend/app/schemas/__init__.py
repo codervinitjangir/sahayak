@@ -10,6 +10,8 @@ from app.schemas.service import (
 from app.schemas.admin import AdminBase, AdminCreate, AdminResponse
 from app.schemas.partner import (
     PartnerBase, PartnerCreate, PartnerUpdate, PartnerResponse,
+    PartnerCreateRequest, PartnerAvailabilityRequest, PartnerAvailabilityResponse,
+    PartnerServicesLinkRequest, PartnerServiceItem, PartnerServicesResponse,
     PartnerServiceBase, PartnerServiceCreate, PartnerServiceResponse,
     PartnerEquipmentBase, PartnerEquipmentCreate, PartnerEquipmentResponse,
     PartnerDocumentBase, PartnerDocumentCreate, PartnerDocumentResponse
@@ -33,6 +35,8 @@ __all__ = [
     "ServiceBase", "ServiceCreate", "ServiceResponse",
     "AdminBase", "AdminCreate", "AdminResponse",
     "PartnerBase", "PartnerCreate", "PartnerUpdate", "PartnerResponse",
+    "PartnerCreateRequest", "PartnerAvailabilityRequest", "PartnerAvailabilityResponse",
+    "PartnerServicesLinkRequest", "PartnerServiceItem", "PartnerServicesResponse",
     "PartnerServiceBase", "PartnerServiceCreate", "PartnerServiceResponse",
     "PartnerEquipmentBase", "PartnerEquipmentCreate", "PartnerEquipmentResponse",
     "PartnerDocumentBase", "PartnerDocumentCreate", "PartnerDocumentResponse",

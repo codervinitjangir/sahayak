@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.health import router as health_router
 from app.api.jobs import router as jobs_router
+from app.api.partners import router as partners_router
 from app.middlewares.error_handlers import register_error_handlers
 from app.middlewares.request_id import RequestIdMiddleware
 from app.utils.logging import configure_logging, log_event
@@ -48,3 +49,6 @@ app.include_router(health_router)
 
 # Include the jobs router (POST /api/v1/jobs, GET /api/v1/jobs/{job_id})
 app.include_router(jobs_router)
+
+# Include the partners router (registration, availability, service coverage)
+app.include_router(partners_router)
