@@ -1,8 +1,8 @@
 import uuid
 from datetime import datetime, date
 from decimal import Decimal
-from typing import Optional, Literal
-from pydantic import BaseModel, ConfigDict
+from typing import List, Optional, Literal
+from pydantic import BaseModel, ConfigDict, Field
 
 
 # Partner Service schemas
@@ -99,3 +99,65 @@ class PartnerResponse(PartnerBase):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class PartnerCreateRequest(BaseModel):
+    """Inbound payload for POST /partners — what a mechanic signs up with.
+
+    Deliberately narrower than PartnerCreate above: it takes a
+    primary_category_code instead of a primary_category_id, so a client never
+    has to know database ids, and it accepts nothing else. verification_status,
+    is_available and the rating fields are server-owned — letting a registrant
+    post their own verification_status would be a trivial privilege escalation.
+    """
+    name: str = Field(..., min_length=1, max_length=100)
+    phone: str = Field(..., min_length=1, max_length=15)
+    primary_category_code: Optional[str] = Field(default=None, max_length=30)
+
+
+class PartnerAvailabilityRequest(BaseModel):
+    """Inbound payload for PATCH /partners/{partner_id}/availability."""
+    is_available: bool
+
+
+class PartnerAvailabilityResponse(BaseModel):
+    """Just the fields the availability toggle changes.
+
+    Narrow on purpose: this endpoint is called repeatedly by a partner app
+    going on and off shift, and it has no reason to re-send the partner's
+    phone number or verification state on every toggle.
+    """
+    id: uuid.UUID
+    is_available: bool
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PartnerServicesLinkRequest(BaseModel):
+    """Inbound payload for POST /partners/{partner_id}/services.
+
+    A list because one partner offers several services, and codes rather than
+    ids for the same reason as everywhere else in the API.
+    """
+    service_codes: List[str] = Field(..., min_length=1)
+
+
+class PartnerServiceItem(BaseModel):
+    """One service a partner offers, joined back to the services table."""
+    service_id: int
+    code: str
+    name: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PartnerServicesResponse(BaseModel):
+    """The partner's complete service list after the link operation.
+
+    The full current set is returned rather than only the newly-inserted rows,
+    because the endpoint is idempotent: a caller re-submitting an existing link
+    gets the same answer as the first time, and never has to reconcile a delta.
+    """
+    partner_id: uuid.UUID
+    services: List[PartnerServiceItem] = Field(default_factory=list)

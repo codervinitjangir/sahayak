@@ -22,7 +22,7 @@ from app.schemas.job import (
     JobDetailResponse,
     JobTimelineEntry,
 )
-from app.utils.errors import BadRequestError, InternalError, NotFoundError
+from app.utils.errors import BadRequestError, ErrorCode, InternalError, NotFoundError
 from app.utils.logging import log_event
 
 # The status every job starts in; dispatch moves it on from here.
@@ -87,7 +87,7 @@ async def create_job(db: AsyncSession, payload: JobCreateRequest) -> Job:
             outcome="rejected_vehicle_not_found",
             duration_ms=round((time.perf_counter() - started) * 1000, 2),
         )
-        raise NotFoundError("VEHICLE_NOT_FOUND", "Vehicle not found for this user")
+        raise NotFoundError(ErrorCode.VEHICLE_NOT_FOUND, "Vehicle not found for this user")
 
     service = await job_repository.get_service_by_code(db, payload.service_code)
     if service is None:
@@ -99,7 +99,7 @@ async def create_job(db: AsyncSession, payload: JobCreateRequest) -> Job:
             outcome="rejected_invalid_service_code",
             duration_ms=round((time.perf_counter() - started) * 1000, 2),
         )
-        raise BadRequestError("INVALID_SERVICE_CODE", "Invalid service_code")
+        raise BadRequestError(ErrorCode.INVALID_SERVICE_CODE, "Invalid service_code")
 
     pickup_location = _build_pickup_point(payload.pickup_lat, payload.pickup_lng)
 
@@ -180,7 +180,7 @@ async def get_job_with_status(
     """
     job = await job_repository.get_job_by_id(db, job_id)
     if job is None:
-        raise NotFoundError("JOB_NOT_FOUND", "Job not found")
+        raise NotFoundError(ErrorCode.JOB_NOT_FOUND, "Job not found")
 
     current_assignment = None
     assignment = await job_repository.get_latest_assignment(db, job.id)

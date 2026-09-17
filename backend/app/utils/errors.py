@@ -14,6 +14,32 @@ from typing import Optional
 
 from fastapi import HTTPException
 
+
+class ErrorCode:
+    """The stable, machine-readable half of every error response.
+
+    Collected in one place so a code is defined once and reused across
+    features rather than retyped as a literal — INVALID_SERVICE_CODE means the
+    same thing whether a job or a partner is being created, and a client that
+    branches on it must not have to care which endpoint produced it.
+
+    These are API contract: they change only with an API version.
+    """
+
+    # Shared
+    INVALID_SERVICE_CODE = "INVALID_SERVICE_CODE"
+    INTERNAL_ERROR = "INTERNAL_ERROR"
+
+    # Jobs
+    VEHICLE_NOT_FOUND = "VEHICLE_NOT_FOUND"
+    JOB_NOT_FOUND = "JOB_NOT_FOUND"
+
+    # Partners
+    PARTNER_ALREADY_EXISTS = "PARTNER_ALREADY_EXISTS"
+    PARTNER_NOT_FOUND = "PARTNER_NOT_FOUND"
+    INVALID_CATEGORY_CODE = "INVALID_CATEGORY_CODE"
+
+
 # Codes for HTTPExceptions raised by FastAPI itself (unknown route, unsupported
 # method) or by third-party dependencies, which never went through AppError.
 _DEFAULT_CODES = {
