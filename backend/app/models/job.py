@@ -4,9 +4,9 @@ from typing import Optional, List
 from decimal import Decimal
 from sqlalchemy import (
     String, DateTime, Numeric, Integer, SmallInteger, ForeignKey,
-    CheckConstraint, func, Text
+    CheckConstraint, func, Text, Boolean
 )
-from sqlalchemy.dialects.postgresql import UUID, ARRAY
+from sqlalchemy.dialects.postgresql import UUID, ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from geoalchemy2 import Geography
 from app.config.database import Base
@@ -125,6 +125,18 @@ class JobAssignment(Base):
         SmallInteger, nullable=True
     )
     rejection_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # The individual weighted terms behind matching_score, snapshotted at offer
+    # time: every input (distance, load, rating) moves, so a score recomputed
+    # later explains a decision nobody made. Written by app/utils/scoring.py,
+    # which owns the key set — Postgres does not enforce the shape. See
+    # db/migrations/002.
+    score_components: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    # True when a nearest-partner-only search would have picked this candidate
+    # too. The control arm for the divergence-rate metric. Always written
+    # explicitly, so false means "checked, and no" rather than "never looked".
+    was_baseline_choice: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=True
+    )
 
     __table_args__ = (
         CheckConstraint(

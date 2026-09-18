@@ -61,8 +61,13 @@ async def create_job(
     Returns 401 UNAUTHORIZED without a valid token, 403 FORBIDDEN if the token
     belongs to a partner rather than a vehicle owner, 404 VEHICLE_NOT_FOUND if
     the vehicle does not exist or is not owned by the caller, and 400
-    INVALID_SERVICE_CODE if service_code is not a known service. Dispatch is not
-    triggered here — the job is left for the matching engine to pick up.
+    INVALID_SERVICE_CODE if service_code is not a known service.
+
+    Dispatch runs automatically as part of this call, so the returned job is
+    usually already in 'matching' with an offer out to one partner — or in
+    'no_match_found' if nobody eligible was within the search radius. Both are
+    201s: the job was created either way, and 'no_match_found' is an answer the
+    driver needs, not a failure to record their request.
     """
     job = await job_service.create_job(db, payload, identity.local_id)
     return envelope(job)

@@ -4,6 +4,7 @@ Partner endpoints: registration, availability toggle, service coverage, auth lin
   POST  /api/v1/partners
   POST  /api/v1/partners/{partner_id}/link-auth
   PATCH /api/v1/partners/{partner_id}/availability
+  POST  /api/v1/partners/{partner_id}/location
   POST  /api/v1/partners/{partner_id}/services
 
 Handlers stay thin, exactly as in app/api/jobs.py: FastAPI validates the body,
@@ -32,6 +33,8 @@ from app.schemas.partner import (
     PartnerAvailabilityRequest,
     PartnerAvailabilityResponse,
     PartnerCreateRequest,
+    PartnerLocationRequest,
+    PartnerLocationResponse,
     PartnerResponse,
     PartnerServicesLinkRequest,
     PartnerServicesResponse,
@@ -144,6 +147,45 @@ async def set_availability(
         db, partner_id, payload.is_available, identity
     )
     return envelope(partner)
+
+
+@router.post(
+    "/{partner_id}/location",
+    response_model=ApiResponse[PartnerLocationResponse],
+    status_code=status.HTTP_200_OK,
+    summary="Report a partner's current location",
+)
+async def update_location(
+    partner_id: uuid.UUID,
+    payload: PartnerLocationRequest,
+    identity: Identity = Depends(require_partner),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[PartnerLocationResponse]:
+    """Report where this partner is right now.
+
+    The position is stored in Redis only. Nothing is written to Postgres — a
+    partner app on shift calls this every few seconds, and a durable write per
+    ping would be a write storm for data that is stale within the minute. There
+    is no current_location column to write to, deliberately.
+
+    A partner may only report their own position; another partner's id in the
+    path is refused with 403 FORBIDDEN. Returns 404 PARTNER_NOT_FOUND for an
+    unknown id, and 500 if the location store is unreachable — which is a real
+    failure and is reported as one, rather than being swallowed into a dispatch
+    that then finds nobody nearby.
+
+    Coordinates are taken lat-first, as a GPS API reports them. The
+    longitude-first order the geo index needs is applied server-side.
+
+    200 rather than 201: the call overwrites one partner's position in place and
+    creates no addressable resource.
+    """
+    recorded_at = await partner_service.update_location(
+        db, partner_id, payload.lat, payload.lng, identity
+    )
+    return envelope(
+        PartnerLocationResponse(partner_id=partner_id, recorded_at=recorded_at)
+    )
 
 
 @router.post(

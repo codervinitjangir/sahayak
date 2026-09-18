@@ -62,6 +62,18 @@ class Settings(BaseSettings):
     # Database Configuration (Supabase PostgreSQL)
     DATABASE_URL: str = ""
 
+    # Redis — live partner positions only.
+    #
+    # Holds a GEO set that moves every few seconds and is worthless five minutes
+    # after the fact, which is exactly why it is not in Postgres: writing every
+    # location ping to the durable store would be a write storm in service of
+    # data nobody will ever read twice. partners has no current_location column
+    # on purpose.
+    #
+    # Losing this store costs dispatch its candidate search until partners
+    # report in again. It costs no history.
+    REDIS_URL: str = "redis://127.0.0.1:6379/0"
+
     @property
     def SUPABASE_JWT_ISSUER(self) -> str:
         """Expected `iss` claim, derived from SUPABASE_URL.
