@@ -161,3 +161,23 @@ class PartnerServicesResponse(BaseModel):
     """
     partner_id: uuid.UUID
     services: List[PartnerServiceItem] = Field(default_factory=list)
+
+
+class PartnerAuthLinkResponse(BaseModel):
+    """Confirmation that a Supabase account now owns this partner profile.
+
+    Narrow like PartnerAvailabilityResponse, and for a sharper reason: the
+    caller has just proved they hold the account, so echoing the profile's phone
+    number back adds nothing they do not have — while making this endpoint one
+    more place a mechanic's number can leak from.
+
+    verification_status is included because it is the first thing a partner app
+    needs after linking: a linked partner still cannot be dispatched until ops
+    verify them, and the app should say so rather than show an availability
+    toggle that will never produce work.
+    """
+    id: uuid.UUID
+    auth_user_id: uuid.UUID
+    verification_status: str
+
+    model_config = ConfigDict(from_attributes=True)

@@ -1,7 +1,7 @@
 # Frontend contract handoff — for Adarsh
 
-**Date:** 2026-09-17
-**From:** backend (jobs + partner endpoints)
+**Date:** 2026-09-17 (updated same day — auth landed, see §2.5)
+**From:** backend (jobs + partner endpoints + auth)
 **Read time:** ~5 min. Two things need action, one is just confirmation.
 
 ---
@@ -13,7 +13,9 @@
 | `web/` envelope handling | **Already correct — no action.** You built it before the backend shipped it. |
 | `web/` job payload + types | **Action needed.** 4 changes, listed in §2. They 422 today. |
 | `mobile/` envelope + base URL | **Already fixed by backend** (§3). Don't redo it. |
+| **Auth — `Authorization: Bearer`** | **New, action needed.** Every call except partner registration now needs a Supabase token. `user_id` is gone from the job body. §2.5. |
 | Partner screens | **Nothing exists yet.** Blocks auth. See §4 — this is the one that needs a decision this week. |
+
 
 ---
 
@@ -59,9 +61,10 @@ These are yours to make; they sit inside your type model and I did not want to r
    drop_location?: LocationPoint;
    issue_description?: string;
    issue_photo_urls?: string[];
-+  user_id: string; // interim, see §2.5
  }
 ```
+
+There is no `user_id` field — see §2.5. The server takes it from your token.
 
 Call site becomes:
 
@@ -77,7 +80,6 @@ Call site becomes:
 +          pickup_address_text: pickupLocation.address,
            issue_description: issueDescription || undefined,
            issue_photo_urls: photoUrls.length > 0 ? photoUrls : undefined,
-+          user_id: currentUserId,
          },
          idempotencyKey,
        });
@@ -129,11 +131,45 @@ Add `timeline: JobTimelineEntry[]` to `Job`. It always has at least one entry (`
 
 `service` and `partner` (the nested convenience objects) are also not returned. `service_id` is; there's no `GET /services` yet to resolve it against (see §2.6).
 
-### 2.5 `user_id` in the request body is temporary — do not build on it
+### 2.5 `user_id` is gone from the request body — auth has landed
 
-Right now `POST /api/v1/jobs` takes `user_id` in the body because there is no auth. **This is a known security hole**, tracked as a TODO in the backend. When the Auth module lands (next task), `user_id` moves to the verified token and is **removed from the request body entirely**.
+**Updated 2026-09-17.** This section previously said `POST /api/v1/jobs` took `user_id` in the body as an interim hole. That is no longer true: the Auth module shipped, and `user_id` has been **removed from `JobCreateRequest` entirely**. Sending it now does nothing — Pydantic drops unknown fields — so a client that still sends it will silently create the job against *the token's* user, not the id it sent.
 
-Isolate it: put it in one place in your API layer, not threaded through component props. When auth lands, the change should be deleting one line rather than touching six screens.
+What you need instead, on every call except partner registration:
+
+```
+Authorization: Bearer <supabase access token>
+```
+
+The token comes from Supabase Auth (phone OTP). The backend does not send OTPs and does not issue tokens; it only verifies them. Get the access token from the Supabase JS client's session and put it on the request.
+
+Responses you should handle:
+
+| Status | `error.code` | What it means for you |
+|---|---|---|
+| 401 | `UNAUTHORIZED` | No token, malformed token, or expired. Refresh the session and retry once; if it fails again, send them to login. |
+| 403 | `IDENTITY_NOT_LINKED` | The token is genuine but no local profile is bound to it. Call the link-auth endpoint (below). Do **not** log the user out — that would loop them. |
+| 403 | `FORBIDDEN` | Right kind of account, wrong account — e.g. a partner touching another partner's profile. A bug on the client, not a session problem. |
+
+**Linking a Supabase account to a profile** — once per account, after signup:
+
+```
+POST /api/v1/users/{user_id}/link-auth        Authorization: Bearer <token>
+POST /api/v1/partners/{partner_id}/link-auth  Authorization: Bearer <token>
+```
+
+Returns 200 with `{ id, auth_user_id, ... }`, is idempotent if you re-send the same account, and 409 `AUTH_ALREADY_LINKED` if that profile already belongs to someone else.
+
+⚠️ **Owner signup is still blocked** and this is on me, not you: there is no endpoint that *creates* a `users` row. A brand-new owner can get a valid Supabase token and will then hit 403 `IDENTITY_NOT_LINKED` forever, because there is no profile for link-auth to point at. Partners are fine — `POST /api/v1/partners` creates their profile. Don't build the owner signup screen against a registration endpoint yet; ask me first, it's a backend gap I've flagged and not invented a shape for.
+
+### 2.5b What the two roles can see on `GET /api/v1/jobs/{id}`
+
+The response shape is the same for everyone, but `current_assignment` redacts by caller:
+
+* **The job's owner** and **the assigned partner** get `partner_name`, `partner_phone`, `partner_rating`, `partner_id`.
+* **Anyone else** with a valid token gets a `200` with those four fields set to `null`, while `status` and `estimated_arrival_min` stay populated.
+
+So do not assume `partner_name` is present just because `current_assignment` is. Render the contact block conditionally.
 
 ### 2.6 Endpoints you call that don't exist yet
 
@@ -188,19 +224,20 @@ Meanwhile the backend now has three live partner endpoints:
 | `PATCH /api/v1/partners/{id}/availability` | Go on / off shift |
 | `POST /api/v1/partners/{id}/services` | Declare which services they can perform |
 
-**Why this is time-sensitive.** The build order is locked: **partner endpoints → auth → dispatch.** Auth is next. Auth is not one login screen — a mechanic and a vehicle owner authenticate into different apps with different home screens and different permissions. Designing the auth module against a client where the partner side doesn't exist means guessing at that surface, and guessing wrong is expensive to unwind once tokens and route guards are built on it.
+**Why this is time-sensitive.** The build order is locked: **partner endpoints → auth → dispatch.** Auth has now shipped (§2.5) — which changes this from "coming" to "here". Every partner endpoint above except registration requires a Supabase token today, and a partner can only modify their own profile, so there is no longer any way to drive the partner side except by minting tokens in a script. A mechanic and a vehicle owner authenticate into different home screens with different permissions; that surface still doesn't exist on the client.
 
-And dispatch, which comes after auth, is unusable without it: the matching engine only offers jobs to partners with `is_available = true`, and nothing today can set that flag except curl.
+And dispatch, which comes next, is unusable without it: the matching engine only offers jobs to partners with `is_available = true`, and nothing today can set that flag except an authenticated partner — i.e. nothing in either app.
 
-**What's actually needed before auth — not a full app, just the shape:**
+**What's actually needed — not a full app, just the shape:**
 
-1. Does the partner use the same app with a role switch, or a separate build? (`UserRole = "owner" | "partner"` already exists in `mobile/src/types/index.ts:3`, which suggests role switch — confirm that's still the plan.)
+1. Does the partner use the same app with a role switch, or a separate build? (`UserRole = "owner" | "partner"` already exists in `mobile/src/types/index.ts:3`, which suggests role switch — confirm that's still the plan.) **This is the one I need an answer on.** I built the auth endpoints role-agnostic so either answer works, so this is no longer blocking me — but it blocks you, and it blocks dispatch testing.
 2. A partner route tree, even if the screens are stubs.
-3. An availability toggle. This is the one screen that genuinely blocks dispatch testing.
+3. Partner login → `POST /api/v1/partners` (open, no token) → `POST /api/v1/partners/{id}/link-auth` (with token). Two calls, once, at signup.
+4. An availability toggle. This is the one screen that genuinely blocks dispatch testing.
 
 Service-code selection and the registration form can come later. Documents, equipment upload and the verification workflow are explicitly **not** in scope yet — those endpoints don't exist.
 
-**Tell me which way you want to go on #1 and I'll shape the auth endpoints to match** rather than build them and ask you to adapt.
+**Answer #1 when you can.** I shipped auth without waiting, so nothing is stalled on my side, but dispatch testing will be.
 
 ---
 
@@ -216,7 +253,41 @@ Service-code selection and the registration form can come later. Documents, equi
 | `INVALID_CATEGORY_CODE` | 400 | Unknown `primary_category_code` |
 | `VALIDATION_ERROR` | 422 | Malformed body/path; `details[]` names each field |
 | `INTERNAL_ERROR` | 500 | Server fault, safe to retry |
+| `UNAUTHORIZED` | 401 | Missing, malformed or expired token. Carries `WWW-Authenticate: Bearer`. Refresh the session, retry once, then send to login. |
+| `FORBIDDEN` | 403 | Valid session, wrong account or wrong role for this route. A client bug — don't log them out. |
+| `IDENTITY_NOT_LINKED` | 403 | Valid Supabase token, but no local profile bound to it. Call link-auth. **Don't** log them out — you'll loop. |
+| `AUTH_ALREADY_LINKED` | 409 | That profile already belongs to a different Supabase account. |
+| `USER_NOT_FOUND` | 404 | No user with that id (link-auth). |
+
+The 401 message is deliberately vague — "Token has expired." or "Authentication required." and nothing more. The specific reason (bad signature, wrong audience, wrong issuer, non-UUID subject) goes to the server log under `auth_token_rejected`, not to the client. If you need to know why a token was rejected, quote the `X-Request-ID` and I'll read it out of the log.
 
 Valid `primary_category_code` values: `towing`, `mechanical`, `fuel`.
 
 Interactive docs: `http://localhost:8000/docs` with the backend running.
+
+
+
+message
+
+Backend auth shipped — two sections of HANDOFF-frontend-contract.md changed, both affect you.
+
+§2.5 — POST /api/v1/jobs no longer takes user_id in the body. It's removed from the
+schema entirely, so if you leave it in it gets silently dropped and the job is created
+against whoever the token says you are. Every call except POST /api/v1/partners now
+needs "Authorization: Bearer <supabase access token>" — grab it off the Supabase JS
+session. Two new responses to handle: 403 IDENTITY_NOT_LINKED means the token is fine
+but no profile is bound yet — call the link-auth endpoint, do NOT log them out or
+you'll loop them. 401 UNAUTHORIZED means refresh once, then send to login.
+
+§4 — your auth work no longer blocks me; I built the endpoints role-agnostic and
+shipped without waiting. But it now runs the other way: your partner client blocks
+real dispatch testing. Dispatch only offers jobs to partners with is_available=true,
+and that flag can only be set by an authenticated partner — which nothing in either
+app can be. I'll drive it with scripted tokens meanwhile, so I'm not stalled, but
+it won't be tested through a real client until partner screens exist.
+
+Still need an answer on §4 item 1: same app with a role switch, or a separate build?
+UserRole = "owner" | "partner" in mobile/src/types/index.ts suggests role switch —
+just confirm. An availability toggle is the one screen that genuinely matters.
+
+Nothing about the signing algorithm affects you — you pass the token through untouched.

@@ -30,6 +30,28 @@ class ErrorCode:
     INVALID_SERVICE_CODE = "INVALID_SERVICE_CODE"
     INTERNAL_ERROR = "INTERNAL_ERROR"
 
+    # Auth
+    #
+    # UNAUTHORIZED covers every "we could not establish who you are" case —
+    # missing header, wrong scheme, bad signature, expired, no `sub`. They are
+    # deliberately one code: telling a caller *which* part of their token failed
+    # helps an attacker probing for a valid one far more than it helps a client,
+    # and a client's response is identical in all cases (re-authenticate).
+    UNAUTHORIZED = "UNAUTHORIZED"
+    # FORBIDDEN is the opposite: identity is established, the action is not
+    # permitted. A partner touching another partner's profile, or a user calling
+    # a partner-only route.
+    FORBIDDEN = "FORBIDDEN"
+    # Valid Supabase token, but its `sub` matches no row in users or partners.
+    # Separate from both of the above because it is the one auth failure with a
+    # specific client remedy: call link-auth. 403 rather than 401 — the token is
+    # genuine, there is simply no profile behind it yet.
+    IDENTITY_NOT_LINKED = "IDENTITY_NOT_LINKED"
+    # The target row already points at a different Supabase account. Refusing is
+    # what stops a second account from claiming a partner profile that is
+    # already in use.
+    AUTH_ALREADY_LINKED = "AUTH_ALREADY_LINKED"
+
     # Jobs
     VEHICLE_NOT_FOUND = "VEHICLE_NOT_FOUND"
     JOB_NOT_FOUND = "JOB_NOT_FOUND"
@@ -39,12 +61,18 @@ class ErrorCode:
     PARTNER_NOT_FOUND = "PARTNER_NOT_FOUND"
     INVALID_CATEGORY_CODE = "INVALID_CATEGORY_CODE"
 
+    # Users
+    USER_NOT_FOUND = "USER_NOT_FOUND"
+
 
 # Codes for HTTPExceptions raised by FastAPI itself (unknown route, unsupported
 # method) or by third-party dependencies, which never went through AppError.
 _DEFAULT_CODES = {
     400: "BAD_REQUEST",
-    401: "UNAUTHENTICATED",
+    # Matches ErrorCode.UNAUTHORIZED on purpose: a client branching on the code
+    # must not have to handle two spellings of the same condition depending on
+    # whether our code or Starlette's produced the 401.
+    401: "UNAUTHORIZED",
     403: "FORBIDDEN",
     404: "NOT_FOUND",
     405: "METHOD_NOT_ALLOWED",
@@ -72,8 +100,13 @@ class AppError(HTTPException):
         code: str,
         message: str,
         details: Optional[list[str]] = None,
+        headers: Optional[dict] = None,
     ) -> None:
-        super().__init__(status_code=status_code, detail=message)
+        # headers is forwarded to HTTPException rather than stored separately so
+        # that error_handlers.http_exception_handler, which reads exc.headers,
+        # picks it up. It exists for WWW-Authenticate on 401s, which RFC 9110
+        # requires on that status.
+        super().__init__(status_code=status_code, detail=message, headers=headers)
         self.code = code
         self.message = message
         self.details = details
@@ -91,6 +124,45 @@ class BadRequestError(AppError):
 
     def __init__(self, code: str, message: str) -> None:
         super().__init__(status_code=400, code=code, message=message)
+
+
+class UnauthorizedError(AppError):
+    """Caller's identity could not be established — no token, or a bad one.
+
+    Carries `WWW-Authenticate: Bearer` because RFC 9110 requires a 401 to say
+    how to authenticate. Without it a strict HTTP client cannot tell a genuine
+    auth challenge from a misconfigured endpoint.
+
+    The default message is deliberately vague. Distinguishing "expired" from
+    "bad signature" in a response body tells an attacker which of their guesses
+    was closer; a legitimate client's next move is the same either way.
+    """
+
+    def __init__(
+        self,
+        message: str = "Authentication required.",
+        code: str = ErrorCode.UNAUTHORIZED,
+    ) -> None:
+        super().__init__(
+            status_code=401,
+            code=code,
+            message=message,
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+
+class ForbiddenError(AppError):
+    """Identity is known; this action is not permitted for it."""
+
+    def __init__(self, code: str = ErrorCode.FORBIDDEN, message: str = "Not permitted.") -> None:
+        super().__init__(status_code=403, code=code, message=message)
+
+
+class ConflictError(AppError):
+    """Request contradicts the current state of the resource."""
+
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(status_code=409, code=code, message=message)
 
 
 class InternalError(AppError):

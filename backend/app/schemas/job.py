@@ -89,8 +89,13 @@ class JobCreateRequest(BaseModel):
     of a service_id and plain pickup_lat/pickup_lng floats, so a client never has
     to know database ids or how to spell PostGIS WKT. The service layer resolves
     the code and builds the geography point.
+
+    There is no user_id here, and there must not be one. The requester's identity
+    comes from the verified Supabase token via Depends(require_user); a client
+    that sends user_id anyway has it ignored, because Pydantic drops unknown
+    fields by default. Re-adding it would reopen the impersonation hole this
+    field used to be.
     """
-    user_id: uuid.UUID
     vehicle_id: uuid.UUID
     service_code: str = Field(..., min_length=1, max_length=40)
     pickup_lat: float = Field(..., ge=-90.0, le=90.0)

@@ -5,21 +5,21 @@ Mirrors app/services/job_service.py: the route handlers in app/api/partners.py
 stay thin, every database call goes through app/repositories/partner_repository,
 and this module owns the rules, the transaction boundary and the error mapping.
 
-SECURITY TODO (auth task): every function here takes the partner's identity from
-the caller — a phone number in the request body on registration, a partner_id in
-the URL path afterwards. Nothing verifies that the caller *is* that partner. As
-it stands, anyone who learns a partner_id can flip that mechanic's availability
-or change which services they are offered, and anyone can register a partner
-under someone else's phone number. The consequences are worse here than on the
-jobs endpoints, because these rows are a real person's identity and their
-livelihood: availability decides whether they get dispatched work at all.
+Authorization model, since it differs per endpoint:
 
-Once the Auth module lands, partner_id must come from the verified token, not
-the path, and the availability and services endpoints must reject a token whose
-subject is a different partner (admins excepted). Registration must be gated by
-phone OTP verification so a number can only be claimed by whoever holds it.
-Until then, do not point this at production data: real mechanics' phone numbers
-must not sit behind endpoints that trust the caller's word about who they are.
+  * register_partner is deliberately open. It is how a mechanic who has no
+    account yet comes into existence, so requiring a token would be circular.
+    What it creates is inert — unverified, off-shift, linked to no Supabase
+    account — so the worst a spammer achieves is junk rows, not access.
+  * set_availability and link_partner_services require a partner token *and*
+    that the token's partner is the one named in the path. Role alone is not
+    enough: every mechanic on the platform holds a partner token, so without
+    the ownership check any of them could take a competitor off shift.
+
+The ownership comparison lives here rather than in the route handler because it
+is a rule about who may change a partner's state, and rules belong in the
+service — a second caller (an admin tool, a background job) must not be able to
+reach these functions and bypass it by not being an HTTP request.
 """
 import logging
 import time
@@ -36,11 +36,18 @@ from app.schemas.partner import (
     PartnerServiceItem,
     PartnerServicesResponse,
 )
-from app.utils.errors import BadRequestError, ErrorCode, InternalError, NotFoundError
+from app.services.auth_service import Identity
+from app.utils.errors import (
+    BadRequestError,
+    ErrorCode,
+    ForbiddenError,
+    InternalError,
+    NotFoundError,
+)
 from app.utils.logging import log_event
 
 
-async def _require_partner(db: AsyncSession, partner_id: uuid.UUID) -> Partner:
+async def _load_partner_or_404(db: AsyncSession, partner_id: uuid.UUID) -> Partner:
     """Load a partner or raise 404.
 
     Shared by both post-registration endpoints so "unknown partner" reads
@@ -52,10 +59,40 @@ async def _require_partner(db: AsyncSession, partner_id: uuid.UUID) -> Partner:
     return partner
 
 
+def _require_own_profile(identity: Identity, partner_id: uuid.UUID) -> None:
+    """Refuse a partner acting on a profile that is not theirs.
+
+    Depends(require_partner) has already established that the caller is *a*
+    partner. This establishes that they are *this* partner — the check that
+    actually protects a mechanic from a competitor flipping their availability.
+
+    403 rather than 404: hiding the profile's existence would be pointless here,
+    because the caller supplied the id and partner ids are already visible to
+    the owner of any job a partner is assigned to.
+    """
+    if identity.local_id != partner_id:
+        log_event(
+            "partner_access_denied",
+            level=logging.WARNING,
+            partner_id=str(partner_id),
+            actor_partner_id=str(identity.local_id),
+            actor_role=identity.role,
+            outcome="failure",
+        )
+        raise ForbiddenError(
+            code=ErrorCode.FORBIDDEN,
+            message="You can only modify your own partner profile.",
+        )
+
+
 async def register_partner(
     db: AsyncSession, payload: PartnerCreateRequest
 ) -> Partner:
     """Register a mechanic, unverified and off-shift.
+
+    Intentionally unauthenticated — see the authorization note in the module
+    docstring. It creates the profile; POST /partners/{id}/link-auth is what
+    later binds it to a Supabase account.
 
     Steps, in order:
       1. The phone number must not already be registered. phone is unique in the
@@ -167,7 +204,7 @@ async def register_partner(
 
 
 async def set_availability(
-    db: AsyncSession, partner_id: uuid.UUID, is_available: bool
+    db: AsyncSession, partner_id: uuid.UUID, is_available: bool, identity: Identity
 ) -> Partner:
     """Turn a partner's dispatchable flag on or off.
 
@@ -176,16 +213,25 @@ async def set_availability(
     phone with patchy signal, so it is written to be idempotent — setting the
     flag to the value it already holds is a success, not a conflict.
 
+    Only the partner themselves may call this. Taking a rival off shift would be
+    a direct attack on their earnings, so ownership is checked before anything
+    else happens.
+
     Deliberately does not touch current_location. Live position is Redis-only
     and moves on a completely different cadence; conflating the two here would
     make a shift toggle depend on the location pipeline being up.
 
     Raises:
+        ForbiddenError (403): the token belongs to a different partner.
         NotFoundError (404): no partner with this id.
         InternalError (500): the write failed; the transaction is rolled back.
     """
     started = time.perf_counter()
-    partner = await _require_partner(db, partner_id)
+    # Before the load, not after: checking ownership first means a caller
+    # probing ids gets an identical 403 whether or not the id exists, so this
+    # endpoint cannot be used to enumerate which partner ids are real.
+    _require_own_profile(identity, partner_id)
+    partner = await _load_partner_or_404(db, partner_id)
 
     try:
         await partner_repository.set_partner_availability(db, partner, is_available)
@@ -219,12 +265,19 @@ async def set_availability(
 
 
 async def link_partner_services(
-    db: AsyncSession, partner_id: uuid.UUID, service_codes: List[str]
+    db: AsyncSession,
+    partner_id: uuid.UUID,
+    service_codes: List[str],
+    identity: Identity,
 ) -> PartnerServicesResponse:
     """Declare which services a partner can perform.
 
+    Only the partner themselves may call this: service coverage decides what
+    work they are offered, so another partner editing it is both sabotage and a
+    way to be sent jobs they are not equipped for.
+
     Steps, in order:
-      1. The partner must exist.
+      1. The caller must own this profile, and the partner must exist.
       2. Every code must resolve. If any one is unknown the whole request is
          rejected and the bad codes are named — linking three of four services
          and silently dropping the fourth would leave the partner believing they
@@ -235,12 +288,14 @@ async def link_partner_services(
          this call inserted, so the caller never has to merge a delta.
 
     Raises:
+        ForbiddenError (403): the token belongs to a different partner.
         NotFoundError (404): no partner with this id.
         BadRequestError (400): one or more unknown service codes.
         InternalError (500): the write failed; the transaction is rolled back.
     """
     started = time.perf_counter()
-    await _require_partner(db, partner_id)
+    _require_own_profile(identity, partner_id)
+    await _load_partner_or_404(db, partner_id)
 
     # Preserve request order while removing repeats, so the error message below
     # reads back in the order the caller sent them.
