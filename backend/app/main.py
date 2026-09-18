@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.health import router as health_router
 from app.api.jobs import router as jobs_router
 from app.api.partners import router as partners_router
+from app.api.users import router as users_router
 from app.middlewares.error_handlers import register_error_handlers
 from app.middlewares.request_id import RequestIdMiddleware
 from app.utils.logging import configure_logging, log_event
@@ -52,3 +53,7 @@ app.include_router(jobs_router)
 
 # Include the partners router (registration, availability, service coverage)
 app.include_router(partners_router)
+
+# Include the users router (auth link only — see the registration gap noted in
+# app/api/users.py)
+app.include_router(users_router)

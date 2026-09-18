@@ -17,6 +17,12 @@ class User(Base):
     phone: Mapped[str] = mapped_column(String(15), unique=True, nullable=False)
     email: Mapped[Optional[str]] = mapped_column(String(150), unique=True, nullable=True)
     phone_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=True)
+    # Supabase Auth's `sub` claim. Nullable because rows predating auth (and any
+    # created outside the OTP flow) have no auth account yet; unique so a token
+    # can never resolve to two different users. See db/migrations/001.
+    auth_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), unique=True, nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

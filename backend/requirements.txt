@@ -6,3 +6,9 @@ python-dotenv
 pydantic-settings
 psycopg2-binary
 geoalchemy2
+# [crypto] is not optional here. Supabase signs access tokens with ES256, and
+# PyJWT can only verify elliptic-curve signatures when `cryptography` is
+# present — without it every real token is rejected at runtime, on a box where
+# `import jwt` succeeded just fine. Plain PyJWT installs and imports cleanly,
+# which is exactly what makes this worth a comment.
+PyJWT[crypto]>=2.8

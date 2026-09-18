@@ -1,7 +1,9 @@
 from app.schemas.common import (
     ApiResponse, Meta, ErrorDetail, ErrorResponse, HealthResponse, envelope
 )
-from app.schemas.user import UserBase, UserCreate, UserUpdate, UserResponse
+from app.schemas.user import (
+    UserBase, UserCreate, UserUpdate, UserResponse, UserAuthLinkResponse
+)
 from app.schemas.vehicle import VehicleBase, VehicleCreate, VehicleUpdate, VehicleResponse
 from app.schemas.service import (
     ServiceCategoryBase, ServiceCategoryCreate, ServiceCategoryResponse,
@@ -12,6 +14,7 @@ from app.schemas.partner import (
     PartnerBase, PartnerCreate, PartnerUpdate, PartnerResponse,
     PartnerCreateRequest, PartnerAvailabilityRequest, PartnerAvailabilityResponse,
     PartnerServicesLinkRequest, PartnerServiceItem, PartnerServicesResponse,
+    PartnerAuthLinkResponse,
     PartnerServiceBase, PartnerServiceCreate, PartnerServiceResponse,
     PartnerEquipmentBase, PartnerEquipmentCreate, PartnerEquipmentResponse,
     PartnerDocumentBase, PartnerDocumentCreate, PartnerDocumentResponse
@@ -29,7 +32,7 @@ from app.schemas.notification import NotificationBase, NotificationCreate, Notif
 
 __all__ = [
     "ApiResponse", "Meta", "ErrorDetail", "ErrorResponse", "HealthResponse", "envelope",
-    "UserBase", "UserCreate", "UserUpdate", "UserResponse",
+    "UserBase", "UserCreate", "UserUpdate", "UserResponse", "UserAuthLinkResponse",
     "VehicleBase", "VehicleCreate", "VehicleUpdate", "VehicleResponse",
     "ServiceCategoryBase", "ServiceCategoryCreate", "ServiceCategoryResponse",
     "ServiceBase", "ServiceCreate", "ServiceResponse",
@@ -37,6 +40,7 @@ __all__ = [
     "PartnerBase", "PartnerCreate", "PartnerUpdate", "PartnerResponse",
     "PartnerCreateRequest", "PartnerAvailabilityRequest", "PartnerAvailabilityResponse",
     "PartnerServicesLinkRequest", "PartnerServiceItem", "PartnerServicesResponse",
+    "PartnerAuthLinkResponse",
     "PartnerServiceBase", "PartnerServiceCreate", "PartnerServiceResponse",
     "PartnerEquipmentBase", "PartnerEquipmentCreate", "PartnerEquipmentResponse",
     "PartnerDocumentBase", "PartnerDocumentCreate", "PartnerDocumentResponse",

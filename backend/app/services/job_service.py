@@ -22,6 +22,7 @@ from app.schemas.job import (
     JobDetailResponse,
     JobTimelineEntry,
 )
+from app.services.auth_service import Identity
 from app.utils.errors import BadRequestError, ErrorCode, InternalError, NotFoundError
 from app.utils.logging import log_event
 
@@ -40,13 +41,21 @@ def _build_pickup_point(latitude: float, longitude: float) -> WKTElement:
     return WKTElement(f"POINT({longitude} {latitude})", srid=4326)
 
 
-async def create_job(db: AsyncSession, payload: JobCreateRequest) -> Job:
+async def create_job(
+    db: AsyncSession, payload: JobCreateRequest, user_id: uuid.UUID
+) -> Job:
     """Create a job in 'requested' state and open its status audit trail.
 
+    user_id is a parameter rather than a field on payload because it comes from
+    the caller's verified token, not from the request body. That separation is
+    the point: a value the client can set and a value the server established are
+    different kinds of thing, and keeping them in different arguments means no
+    future edit can quietly start trusting the wrong one.
+
     Steps, in order, because each one guards the next:
-      1. The vehicle must exist *and* belong to the requesting user. Checking
-         ownership (not just existence) stops a caller from raising a job
-         against somebody else's vehicle by guessing an id.
+      1. The vehicle must exist *and* belong to the requesting user. With
+         user_id now authenticated, this is a real ownership check rather than a
+         consistency check between two client-supplied ids.
       2. The service_code must resolve to a services row, which gives us the
          service_id actually stored on the job.
       3. vehicle_number is copied onto the job rather than read through the
@@ -62,13 +71,6 @@ async def create_job(db: AsyncSession, payload: JobCreateRequest) -> Job:
     Both inserts commit together — a job with no history row, or a history row
     with no job, would both be corrupt states.
 
-    SECURITY TODO (auth task): payload.user_id is currently supplied by the
-    caller, so the API trusts the client's claim about who it is. The ownership
-    check in step 1 limits the damage — an impersonator needs a vehicle id that
-    genuinely belongs to the user being impersonated — but once authentication
-    lands, user_id must come from the verified token and be dropped from the
-    request body entirely. Client-supplied identity must never decide access.
-
     Raises:
         NotFoundError (404): vehicle missing, or not owned by this user.
         BadRequestError (400): unknown service_code.
@@ -77,7 +79,7 @@ async def create_job(db: AsyncSession, payload: JobCreateRequest) -> Job:
     started = time.perf_counter()
 
     vehicle = await job_repository.get_vehicle_by_id(db, payload.vehicle_id)
-    if vehicle is None or vehicle.user_id != payload.user_id:
+    if vehicle is None or vehicle.user_id != user_id:
         # One message for both cases on purpose: telling a caller "that vehicle
         # exists but isn't yours" would leak the existence of other users' rows.
         log_event(
@@ -106,7 +108,7 @@ async def create_job(db: AsyncSession, payload: JobCreateRequest) -> Job:
     try:
         job = await job_repository.create_job_row(
             db,
-            user_id=payload.user_id,
+            user_id=user_id,
             vehicle_id=vehicle.id,
             vehicle_number=vehicle.vehicle_number,
             service_id=service.id,
@@ -154,7 +156,7 @@ async def create_job(db: AsyncSession, payload: JobCreateRequest) -> Job:
 
 
 async def get_job_with_status(
-    db: AsyncSession, job_id: uuid.UUID
+    db: AsyncSession, job_id: uuid.UUID, identity: Identity
 ) -> JobDetailResponse:
     """Read one job together with its current assignment and status timeline.
 
@@ -169,11 +171,18 @@ async def get_job_with_status(
     current_assignment is None when the dispatcher has not offered the job yet.
     Nothing here writes to job_assignments; matching is a separate concern.
 
-    SECURITY TODO (auth task): this returns the assigned partner's name and
-    phone number to anyone who knows the job id. A random UUID is not hard to
-    guess, but it is not authorization either — once authentication lands, this
-    must verify the caller owns the job (or is the assigned partner, or an
-    admin) before releasing contact details.
+    Contact details are released to two callers and withheld from everyone else:
+
+      * the job's owner, who needs to phone the mechanic coming to them;
+      * the assigned partner, for whom name and phone are their *own* details,
+        so withholding them would protect nobody.
+
+    Any other authenticated caller gets a 200 with the job, but with the
+    assignment reduced to `status` and `estimated_arrival_min`. A 404 or 403
+    would be the tidier-looking choice and the wrong one: a partner legitimately
+    polling a job they are about to be offered, or one they were just unassigned
+    from, is not an error case, and turning it into one would make the client
+    handle a failure that is really a visibility rule.
 
     Raises:
         NotFoundError (404): no job with this id.
@@ -182,26 +191,48 @@ async def get_job_with_status(
     if job is None:
         raise NotFoundError(ErrorCode.JOB_NOT_FOUND, "Job not found")
 
+    is_owner = identity.role == "user" and identity.local_id == job.user_id
+
     current_assignment = None
     assignment = await job_repository.get_latest_assignment(db, job.id)
     if assignment is not None:
+        is_assigned_partner = (
+            identity.role == "partner"
+            and assignment.partner_id is not None
+            and identity.local_id == assignment.partner_id
+        )
+        may_see_contact_details = is_owner or is_assigned_partner
+
         # partner_id is nullable on job_assignments, so an offer can exist
         # without a resolvable partner; the partner fields then stay None
         # rather than failing the whole read.
         partner = None
-        if assignment.partner_id is not None:
+        if may_see_contact_details and assignment.partner_id is not None:
             partner = await job_repository.get_partner_by_id(
                 db, assignment.partner_id
             )
 
         current_assignment = CurrentAssignmentResponse(
             status=assignment.status,
-            partner_id=assignment.partner_id,
+            # partner_id is withheld along with the rest. On its own it is only
+            # an opaque uuid, but it is the lookup key for every partner-scoped
+            # route, so handing it to an unrelated caller would undo the point
+            # of hiding the name and number.
+            partner_id=assignment.partner_id if may_see_contact_details else None,
             partner_name=partner.name if partner else None,
             partner_phone=partner.phone if partner else None,
             partner_rating=partner.rating_avg if partner else None,
+            # Kept for everyone: an ETA says when, never who.
             estimated_arrival_min=assignment.estimated_arrival_min,
         )
+
+        if not may_see_contact_details:
+            log_event(
+                "job_contact_details_withheld",
+                job_id=str(job.id),
+                actor_role=identity.role,
+                outcome="redacted",
+            )
 
     history = await job_repository.get_status_history(db, job.id)
 

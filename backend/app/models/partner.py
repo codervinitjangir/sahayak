@@ -37,6 +37,14 @@ class Partner(Base):
     rating_count: Mapped[int] = mapped_column(
         Integer, default=0, nullable=True
     )
+    # Supabase Auth's `sub` claim. Nullable because POST /api/v1/partners stays
+    # open (a mechanic can be registered before they hold an account) and unique
+    # so one Supabase account cannot control two partner profiles. The null check
+    # in auth_service.link_partner_auth is what stops an unlinked profile from
+    # being claimed twice. See db/migrations/001.
+    auth_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), unique=True, nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
