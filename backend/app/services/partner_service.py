@@ -24,11 +24,18 @@ reach these functions and bypass it by not being an HTTP request.
 import logging
 import time
 import uuid
+from datetime import datetime, timezone
 from typing import List, Sequence
 
+from redis.exceptions import RedisError
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config.redis_client import (
+    PARTNER_LOCATIONS_KEY,
+    get_redis,
+    location_updated_at_key,
+)
 from app.models.partner import Partner
 from app.repositories import partner_repository
 from app.schemas.partner import (
@@ -262,6 +269,91 @@ async def set_availability(
         duration_ms=round((time.perf_counter() - started) * 1000, 2),
     )
     return partner
+
+
+async def update_location(
+    db: AsyncSession,
+    partner_id: uuid.UUID,
+    lat: float,
+    lng: float,
+    identity: Identity,
+) -> datetime:
+    """Record where a partner is right now. Redis only — nothing hits Postgres.
+
+    This is the highest-frequency write in the whole API: a partner app on shift
+    posts a position every few seconds, and every one of those is obsolete within
+    a minute. Writing them to Postgres would mean a durable-storage write storm
+    in service of data nobody will ever read twice, and it would put the row a
+    dispatch decision reads under constant lock contention. partners has no
+    current_location column, and that absence is a decision, not an oversight.
+
+    Two keys are written:
+
+      * the GEO set, which dispatch's radius search reads;
+      * a timestamp, so a coordinate can be recognised as stale. A GEO set stores
+        coordinates and nothing else — there is no per-member "when" to read, so
+        without this a phone that died an hour ago looks exactly like a partner
+        standing still.
+
+    **Longitude first.** GEOADD takes (longitude, latitude), the same axis order
+    as the PostGIS POINT(x y) convention used when a job's pickup point is
+    stored. Transposing them does not raise — it silently files the partner
+    somewhere else on the planet, and the only symptom is a candidate search that
+    quietly returns nobody. The request schema takes lat first because that is
+    how humans and GPS APIs quote a coordinate; the flip happens here, once.
+
+    Only the partner themselves may report their position. Someone else moving a
+    partner's pin could pull work toward or away from them at will.
+
+    Returns the timestamp recorded, so the response does not have to invent its
+    own slightly-different "now".
+
+    Raises:
+        ForbiddenError (403): the token belongs to a different partner.
+        NotFoundError (404): no partner with this id.
+        InternalError (500): the location store is unreachable.
+    """
+    started = time.perf_counter()
+    # Ownership before the load, for the same anti-enumeration reason as
+    # set_availability.
+    _require_own_profile(identity, partner_id)
+    # The partner must still exist and the caller's claim to them is checked
+    # against the database, not only against the token: a token outlives the row
+    # it names, and writing positions for a deleted partner would leave a ghost
+    # in the GEO set that dispatch would happily offer jobs to.
+    await _load_partner_or_404(db, partner_id)
+
+    recorded_at = datetime.now(timezone.utc)
+    client = get_redis()
+    try:
+        await client.geoadd(PARTNER_LOCATIONS_KEY, (lng, lat, str(partner_id)))
+        await client.set(
+            location_updated_at_key(partner_id), str(recorded_at.timestamp())
+        )
+    except RedisError as exc:
+        log_event(
+            "partner_location_updated",
+            level=logging.ERROR,
+            partner_id=partner_id,
+            actor_role="partner",
+            outcome="failure",
+            error_type=type(exc).__name__,
+            duration_ms=round((time.perf_counter() - started) * 1000, 2),
+        )
+        raise InternalError("Could not record your location right now") from exc
+
+    # No coordinates in this log line. log_event redacts lat/lng keys anyway, but
+    # a partner's live position is a tracking record of a working person, and the
+    # place it is least justifiable is a log file nobody set a retention policy
+    # on.
+    log_event(
+        "partner_location_updated",
+        partner_id=partner_id,
+        actor_role="partner",
+        outcome="success",
+        duration_ms=round((time.perf_counter() - started) * 1000, 2),
+    )
+    return recorded_at
 
 
 async def link_partner_services(

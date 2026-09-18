@@ -163,6 +163,39 @@ class PartnerServicesResponse(BaseModel):
     services: List[PartnerServiceItem] = Field(default_factory=list)
 
 
+class PartnerLocationRequest(BaseModel):
+    """Inbound payload for POST /partners/{partner_id}/location.
+
+    Bounds are enforced here rather than trusted, because an out-of-range
+    coordinate does not fail loudly downstream — Redis rejects a latitude past
+    ±85.05 with an error, but a longitude of 720 or a transposed lat/lng pair is
+    a perfectly valid point somewhere nobody is standing. Catching it at the edge
+    turns a silently-empty candidate search into a 422 that names the field.
+
+    Written lat-first because that is how a human reads a coordinate and how a
+    phone's GPS API returns one. The longitude-first order Redis and PostGIS want
+    is applied at the call site, in one place, rather than being pushed onto
+    every client.
+    """
+    lat: float = Field(..., ge=-90, le=90)
+    lng: float = Field(..., ge=-180, le=180)
+
+
+class PartnerLocationResponse(BaseModel):
+    """Acknowledgement that a position was recorded.
+
+    Echoes nothing back but the time it landed. A partner app posts this every
+    few seconds while on shift, so the response is the one place in the API where
+    payload size is a real cost — and the client already knows where it is.
+
+    Deliberately not a Postgres shape: nothing was written to Postgres. Live
+    position lives only in Redis, which is why there is no updated_at column
+    anywhere to read this from.
+    """
+    partner_id: uuid.UUID
+    recorded_at: datetime
+
+
 class PartnerAuthLinkResponse(BaseModel):
     """Confirmation that a Supabase account now owns this partner profile.
 

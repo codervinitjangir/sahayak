@@ -15,6 +15,9 @@ CREATE TABLE IF NOT EXISTS users (
     phone           VARCHAR(15) UNIQUE NOT NULL,
     email           VARCHAR(150) UNIQUE,
     phone_verified  BOOLEAN DEFAULT FALSE,
+    -- Supabase Auth `sub`. Nullable (a row can predate its owner's account),
+    -- unique (one account must not control two profiles). See migration 001.
+    auth_user_id    UUID UNIQUE,
     created_at      TIMESTAMPTZ DEFAULT now()
 );
 
@@ -76,6 +79,8 @@ CREATE TABLE IF NOT EXISTS partners (
     is_available                BOOLEAN DEFAULT FALSE,
     rating_avg                  NUMERIC(2,1) DEFAULT 0.0,
     rating_count                INTEGER DEFAULT 0,
+    -- Supabase Auth `sub`. See users.auth_user_id above and migration 001.
+    auth_user_id                UUID UNIQUE,
     created_at                  TIMESTAMPTZ DEFAULT now(),
     updated_at                  TIMESTAMPTZ DEFAULT now()
 );
@@ -168,11 +173,21 @@ CREATE TABLE IF NOT EXISTS job_assignments (
     estimated_arrival_min   INTEGER,
     matching_score          NUMERIC(5,4),
     assignment_rank         SMALLINT,
-    rejection_reason        TEXT
+    rejection_reason        TEXT,
+    -- The weighted terms behind matching_score, e.g. {"distance_score": 0.62,
+    -- "load_score": 0.8, "skill_score": 1.0, "rating_score": 0.92}. Snapshotted
+    -- at offer time because every input moves. See migration 002.
+    score_components        JSONB,
+    -- Would a nearest-partner-only search have picked this candidate too? The
+    -- control arm the divergence-rate metric is computed from. See migration 002.
+    was_baseline_choice     BOOLEAN DEFAULT FALSE
 );
 
 CREATE INDEX IF NOT EXISTS idx_assignments_job ON job_assignments (job_id);
 CREATE INDEX IF NOT EXISTS idx_assignments_partner ON job_assignments (partner_id);
+-- Dispatch counts a candidate's active jobs on every offer, filtering on both
+-- columns; partner_id alone leaves a heap lookup per row. See migration 002.
+CREATE INDEX IF NOT EXISTS job_assignments_partner_id_status_idx ON job_assignments (partner_id, status);
 
 -- ============================
 -- 12. JOB STATUS HISTORY

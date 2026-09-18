@@ -12,3 +12,18 @@ geoalchemy2
 # `import jwt` succeeded just fine. Plain PyJWT installs and imports cleanly,
 # which is exactly what makes this worth a comment.
 PyJWT[crypto]>=2.8
+
+# Live partner positions. >=5.0 because that is where redis-py folded the async
+# client into the main package — on 4.x `redis.asyncio` exists but `aclose()`
+# does not, so the lifespan shutdown would fail on an install that otherwise
+# looked fine.
+redis>=5.0
+
+# Test-only, listed here because there is no separate requirements-dev.txt yet
+# and an undeclared dependency the test suite imports is a dependency that is
+# missing on the next machine.
+#   fakeredis  - an in-process Redis with real GEO support, so the dispatch
+#                tests run without a server or a container.
+#   httpx      - the transport FastAPI's TestClient/ASGITransport runs on.
+fakeredis>=2.20
+httpx>=0.27

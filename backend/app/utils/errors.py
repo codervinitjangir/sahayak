@@ -56,6 +56,19 @@ class ErrorCode:
     VEHICLE_NOT_FOUND = "VEHICLE_NOT_FOUND"
     JOB_NOT_FOUND = "JOB_NOT_FOUND"
 
+    # Dispatch
+    #
+    # The job has already left 'requested', so dispatch has run for it. Its own
+    # code rather than a bare 409 because the client's remedy is specific and
+    # not a retry: stop asking, read the job and show its current assignment.
+    JOB_ALREADY_DISPATCHED = "JOB_ALREADY_DISPATCHED"
+    ASSIGNMENT_NOT_FOUND = "ASSIGNMENT_NOT_FOUND"
+    # The offer was already accepted, rejected or timed out. Distinct from
+    # JOB_ALREADY_DISPATCHED because it is the *partner's* view of a race —
+    # typically their own second tap, or an offer that expired under them — and
+    # a partner app should refresh its offer list, not the job.
+    ASSIGNMENT_ALREADY_ANSWERED = "ASSIGNMENT_ALREADY_ANSWERED"
+
     # Partners
     PARTNER_ALREADY_EXISTS = "PARTNER_ALREADY_EXISTS"
     PARTNER_NOT_FOUND = "PARTNER_NOT_FOUND"

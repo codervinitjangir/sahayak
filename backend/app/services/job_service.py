@@ -71,6 +71,11 @@ async def create_job(
     Both inserts commit together — a job with no history row, or a history row
     with no job, would both be corrupt states.
 
+    Once they are durable, dispatch is triggered automatically: the job is
+    normally already in 'matching' with one offer outstanding by the time this
+    returns. That happens *after* the commit and inside a guard — see
+    _try_dispatch for why a dispatch failure must not fail this call.
+
     Raises:
         NotFoundError (404): vehicle missing, or not owned by this user.
         BadRequestError (400): unknown service_code.
@@ -152,7 +157,69 @@ async def create_job(
         outcome="success",
         duration_ms=round((time.perf_counter() - started) * 1000, 2),
     )
+
+    await _try_dispatch(db, job)
     return job
+
+
+async def _try_dispatch(db: AsyncSession, job: Job) -> None:
+    """Start matching for a freshly created job, without risking the job itself.
+
+    Dispatch runs the moment a job exists — a stranded driver should not need a
+    second API call, and no client should be able to create a job and then
+    neglect to ask for help with it.
+
+    Three things about *how* this is called matter more than that it is:
+
+      * **After the commit, not inside it.** The job and its history row are
+        already durable before a candidate search is attempted. A search touches
+        Redis and runs several more queries; folding it into the creation
+        transaction would hold that transaction open across a network call to a
+        different system, and a Redis timeout would roll back a job that was
+        perfectly valid.
+
+      * **Guarded.** Any failure in dispatch is logged at ERROR and swallowed.
+        The POST genuinely succeeded: the job exists, is 'requested', and is
+        visible in the timeline. Returning a 500 for it would tell the driver
+        their request failed when it did not, and — worse — invite a retry that
+        creates a duplicate job for one breakdown. A job stuck in 'requested'
+        is recoverable by re-running dispatch; a driver who gave up because they
+        saw an error is not.
+
+      * **The status is left alone on failure.** 'requested' is exactly what the
+        job is: nobody has been asked yet. Marking it 'no_match_found' would
+        conflate "we looked and there was nobody" with "we never got to look",
+        and those need different responses from ops.
+
+    The obvious next step, once there is a worker to run it, is a sweep that
+    re-dispatches jobs left in 'requested' past some age. That is deliberately
+    not built here — it is a background job, and this task is synchronous
+    dispatch only.
+    """
+    # Imported here rather than at module scope: dispatch_service imports
+    # job_repository and its own models, and a top-level import in both
+    # directions would be a cycle the first time either module is loaded.
+    from app.services import dispatch_service
+
+    try:
+        await dispatch_service.dispatch_job(db, job.id)
+    except Exception as exc:  # noqa: BLE001 - see docstring: never fail the POST
+        log_event(
+            "dispatch_after_create_failed",
+            level=logging.ERROR,
+            job_id=job.id,
+            job_status=job.status,
+            error_type=type(exc).__name__,
+            outcome="failure",
+        )
+
+    # The job may have moved to 'matching' or 'no_match_found', and the caller is
+    # about to serialise it. Refresh so the response reports the status the
+    # database holds rather than the one loaded before dispatch ran.
+    try:
+        await db.refresh(job)
+    except SQLAlchemyError:
+        pass
 
 
 async def get_job_with_status(
