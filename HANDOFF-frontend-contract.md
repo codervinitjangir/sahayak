@@ -1,8 +1,8 @@
 # Frontend contract handoff — for Adarsh
 
-**Date:** 2026-09-17 (updated same day — auth landed, see §2.5)
-**From:** backend (jobs + partner endpoints + auth)
-**Read time:** ~5 min. Two things need action, one is just confirmation.
+**Date:** 2026-09-17 · **updated 2026-09-21** — the job lifecycle endpoint landed (§6), so job status now actually advances past `assigned` — your tracking screen changes behaviour with no change on your side
+**From:** backend (jobs + partner endpoints + auth + dispatch + owner registration + job lifecycle)
+**Read time:** ~7 min. Two things need action, one is just confirmation.
 
 ---
 
@@ -14,7 +14,10 @@
 | `web/` job payload + types | **Action needed.** 4 changes, listed in §2. They 422 today. |
 | `mobile/` envelope + base URL | **Already fixed by backend** (§3). Don't redo it. |
 | **Auth — `Authorization: Bearer`** | **New, action needed.** Every call except partner registration now needs a Supabase token. `user_id` is gone from the job body. §2.5. |
+| **Owner signup** | **Unblocked — you can build the screen now.** `POST /api/v1/users` exists as of 2026-09-20. One call, not two. §2.5c. |
+| `current_assignment` / `timeline` on `GET /jobs/{id}` | **Was a server bug, now fixed.** If you tested before 2026-09-20 and those two fields were never there, that was me, not you. §2.2. |
 | Partner screens | **Nothing exists yet.** Blocks auth. See §4 — this is the one that needs a decision this week. |
+| **Job status past `assigned`** | **Now real — no action, but retest.** Jobs used to freeze at `assigned` forever because no endpoint could move them. Tracking will now show en-route → in-progress → completed. §6. |
 
 
 ---
@@ -109,7 +112,9 @@ export interface CurrentAssignment {
 
 `null` while the job is still unmatched. The partner fields are independently nullable — an offer can exist before a partner resolves.
 
-Fields you have typed that the endpoint does **not** return: `id`, `job_id`, `offered_at`, `responded_at`, `accepted_at`, `distance_at_offer_m`, `matching_score`, `assignment_rank`, `rejection_reason`, `score_components`, `was_baseline_choice`. The last two don't exist as columns yet at all — they're deferred with the dispatch engine.
+Fields you have typed that the endpoint does **not** return: `id`, `job_id`, `offered_at`, `responded_at`, `accepted_at`, `distance_at_offer_m`, `matching_score`, `assignment_rank`, `rejection_reason`, `score_components`, `was_baseline_choice`. The last two now exist as columns (the dispatch engine writes them), but they are dispatch-internal audit data and are deliberately not exposed on this route.
+
+⚠️ **Fixed 2026-09-20, and this one was mine.** `current_assignment` was *never actually reaching you*. The response model didn't declare the field while the service was already passing it, and Pydantic drops undeclared keyword arguments silently — so the server built the object on every request and then threw it away, with a `200` and nothing in the log. Same for `timeline` (§2.3). If you already wrote the tracking screen against this and gave up because the field was permanently `undefined`: it works now, your code was probably right. Requires the backend restarted on or after 2026-09-20.
 
 ### 2.3 `timeline` — new field, not yet typed
 
@@ -124,6 +129,8 @@ export interface JobTimelineEntry {
 ```
 
 Add `timeline: JobTimelineEntry[]` to `Job`. It always has at least one entry (`"requested"` / `"Job created"`), so `JobTrackingPage` can render a real progress trail instead of a single current-status badge.
+
+Same caveat as §2.2 — this field was being stripped server-side until 2026-09-20. It arrives now.
 
 ### 2.4 Fields `Job` claims that the endpoints don't return
 
@@ -148,8 +155,11 @@ Responses you should handle:
 | Status | `error.code` | What it means for you |
 |---|---|---|
 | 401 | `UNAUTHORIZED` | No token, malformed token, or expired. Refresh the session and retry once; if it fails again, send them to login. |
-| 403 | `IDENTITY_NOT_LINKED` | The token is genuine but no local profile is bound to it. Call the link-auth endpoint (below). Do **not** log the user out — that would loop them. |
+| 403 | `USER_NOT_REGISTERED` | The token is genuine and there is no profile at all. Send them to the **signup screen** — §2.5c. Do **not** log them out and do **not** re-send an OTP. |
+| 403 | `IDENTITY_NOT_LINKED` | The token is genuine and an *unclaimed* profile exists that matches their number. Call the link-auth endpoint (below). Do **not** log the user out — that would loop them. |
 | 403 | `FORBIDDEN` | Right kind of account, wrong account — e.g. a partner touching another partner's profile. A bug on the client, not a session problem. |
+
+**These first three are three different remedies, so branch on the code, not the status.** All that separates the two 403s is what the server found: `USER_NOT_REGISTERED` means nothing exists and the fix is registration; `IDENTITY_NOT_LINKED` means something exists and the fix is to claim it. Getting them the wrong way round is a dead end in both directions — sending an unlinked mechanic to owner signup fails with `PARTNER_ALREADY_EXISTS`, and sending a brand-new owner to link-auth fails with `USER_NOT_FOUND`. Neither error tells the user anything they can act on.
 
 **Linking a Supabase account to a profile** — once per account, after signup:
 
@@ -160,7 +170,7 @@ POST /api/v1/partners/{partner_id}/link-auth  Authorization: Bearer <token>
 
 Returns 200 with `{ id, auth_user_id, ... }`, is idempotent if you re-send the same account, and 409 `AUTH_ALREADY_LINKED` if that profile already belongs to someone else.
 
-⚠️ **Owner signup is still blocked** and this is on me, not you: there is no endpoint that *creates* a `users` row. A brand-new owner can get a valid Supabase token and will then hit 403 `IDENTITY_NOT_LINKED` forever, because there is no profile for link-auth to point at. Partners are fine — `POST /api/v1/partners` creates their profile. Don't build the owner signup screen against a registration endpoint yet; ask me first, it's a backend gap I've flagged and not invented a shape for.
+✅ **Owner signup was blocked here until 2026-09-20. It isn't any more** — `POST /api/v1/users` exists, and the section below is the shape. Build the screen.
 
 ### 2.5b What the two roles can see on `GET /api/v1/jobs/{id}`
 
@@ -170,6 +180,67 @@ The response shape is the same for everyone, but `current_assignment` redacts by
 * **Anyone else** with a valid token gets a `200` with those four fields set to `null`, while `status` and `estimated_arrival_min` stay populated.
 
 So do not assume `partner_name` is present just because `current_assignment` is. Render the contact block conditionally.
+
+### 2.5c Owner signup — `POST /api/v1/users` (new, 2026-09-20)
+
+**One call, not two.** Unlike partners, an owner does *not* register and then link-auth. The endpoint binds the Supabase account inside the same INSERT, so there is no intermediate state to clean up if the second call never happens.
+
+```
+POST /api/v1/users        Authorization: Bearer <supabase access token>
+```
+
+The token is required even though no profile exists yet — that's the point: it's how the server learns which Supabase account owns the new profile. Send the session you just got from OTP.
+
+**Request:**
+```ts
+export interface RegisterUserPayload {
+  name: string;            // 1–100 chars
+  phone: string;           // E.164, e.g. "+919876543210" — max 15 chars
+  email?: string;          // optional, max 150 chars
+}
+```
+
+**`201` response** (`data`, inside the usual envelope):
+```ts
+export interface RegisteredUser {
+  id: string;              // local user id — the FK every later call needs
+  name: string;
+  phone: string;
+  phone_verified: boolean;
+  created_at: string;      // ISO 8601
+}
+```
+
+`id` is the one field worth storing. It's what `vehicle.user_id` and `job.user_id` point at; the Supabase id is not usable as a foreign key anywhere in this API.
+
+No `auth_user_id` and no `email` come back — you sent both, so echoing them tells you nothing.
+
+**Errors:**
+
+| Status | `error.code` | What it means for you |
+|---|---|---|
+| 400 | `USER_ALREADY_EXISTS` | That phone (or email) is already registered. **Don't retry.** Either they already have an account — in which case something upstream is wrong, since a returning user's token resolves fine and never reaches this screen — or they typed someone else's number. Show it on the phone field. |
+| 400 | `PHONE_MISMATCH` | The number in the body isn't the number the token verified. Pre-fill the phone field from the Supabase session and make it read-only and this is unreachable. |
+| 409 | `AUTH_ALREADY_LINKED` | This Supabase account already owns a profile (owner *or* partner). Don't show a form error — re-resolve their identity and route them to their home screen; they're already signed up. |
+| 422 | `VALIDATION_ERROR` | Field-level; `details[]` names each one. |
+
+**`phone_verified` is server-owned — you cannot set it, and the value you get back may not be what you expect.** It's `true` only when the access token carries a phone claim matching the number submitted. If the account signed in by email or OAuth, the token has no phone claim, registration still succeeds, and the field comes back **`false`**. That is correct and not an error: it records that the number wasn't *proved*, not that it's wrong or unreachable. So don't render it as "unverified number ⚠️" or block anything on it — treat `false` as unknown. (Also relevant: phone sign-in is currently **disabled** on our Supabase project, so in practice everything you register today comes back `false` until that's switched on.)
+
+**The flow end to end:**
+
+```
+Supabase OTP / sign-in  →  access token
+        ↓
+GET anything authenticated  →  403 USER_NOT_REGISTERED
+        ↓
+POST /api/v1/users  →  201 { id, ... }        ← store id
+        ↓
+POST /api/v1/jobs   →  201, job.user_id === that id
+```
+
+Once registered, the same token resolves on every route with no further setup — no link-auth, no second token, no refresh needed.
+
+**Keep `POST /api/v1/users/{user_id}/link-auth`** in your API module. It is not deprecated, it is just not part of *this* path: it exists for `users` rows that arrive by seed or data migration, which registration can't create. A client that only ever does normal signup will never call it — but if you get a `403 IDENTITY_NOT_LINKED` (not `USER_NOT_REGISTERED`), that's the case it's for.
 
 ### 2.6 Endpoints you call that don't exist yet
 
@@ -255,15 +326,85 @@ Service-code selection and the registration form can come later. Documents, equi
 | `INTERNAL_ERROR` | 500 | Server fault, safe to retry |
 | `UNAUTHORIZED` | 401 | Missing, malformed or expired token. Carries `WWW-Authenticate: Bearer`. Refresh the session, retry once, then send to login. |
 | `FORBIDDEN` | 403 | Valid session, wrong account or wrong role for this route. A client bug — don't log them out. |
-| `IDENTITY_NOT_LINKED` | 403 | Valid Supabase token, but no local profile bound to it. Call link-auth. **Don't** log them out — you'll loop. |
-| `AUTH_ALREADY_LINKED` | 409 | That profile already belongs to a different Supabase account. |
+| `IDENTITY_NOT_LINKED` | 403 | Valid Supabase token, and an **unclaimed** profile matching their number exists. Call link-auth. **Don't** log them out — you'll loop. |
+| `USER_NOT_REGISTERED` | 403 | Valid Supabase token, **no profile at all**. Send them to owner signup (§2.5c). **Don't** log them out and don't re-OTP — the token is fine. |
+| `AUTH_ALREADY_LINKED` | 409 | That profile already belongs to a different Supabase account — or, on `POST /users`, this account already owns a profile. |
+| `USER_ALREADY_EXISTS` | 400 | Phone or email already registered (`POST /users`). |
+| `PHONE_MISMATCH` | 400 | The phone in the body isn't the one the token verified (`POST /users`). |
 | `USER_NOT_FOUND` | 404 | No user with that id (link-auth). |
+| `INVALID_STATUS_TRANSITION` | 409 | The job can't go from where it is to where you asked (§6). Includes any move out of `completed`/`cancelled`. Re-read the job, don't retry. |
+| `PRICE_FINAL_REQUIRED` | 400 | `status: "completed"` with no `price_final` (§6). |
+| `FIELD_NOT_APPLICABLE` | 400 | A body field that doesn't belong with that status — `price_final` on a non-completion, `cancellation_reason` on a non-cancellation (§6). |
 
 The 401 message is deliberately vague — "Token has expired." or "Authentication required." and nothing more. The specific reason (bad signature, wrong audience, wrong issuer, non-UUID subject) goes to the server log under `auth_token_rejected`, not to the client. If you need to know why a token was rejected, quote the `X-Request-ID` and I'll read it out of the log.
 
 Valid `primary_category_code` values: `towing`, `mechanical`, `fuel`.
 
 Interactive docs: `http://localhost:8000/docs` with the backend running.
+
+---
+
+## 6. Job lifecycle — `POST /api/v1/jobs/{job_id}/status` (new, 2026-09-21)
+
+**Read this even though it's a partner endpoint** — the owner-side tracking screen changes behaviour because of it, and you didn't do anything.
+
+### 6.1 What changed for the owner app: nothing, and everything
+
+Until yesterday there was no way — none, in the whole API — to move a job off `assigned`. Dispatch could create a job, offer it, and record a partner accepting it, and then the status stopped moving forever. If `JobTrackingPage` looked like it was stuck polling a job that never progressed, **it was stuck, and it wasn't your code.** That's two of these in two days; the other was §2.2. Sorry.
+
+So: no contract change on your side. `GET /api/v1/jobs/{id}` is the same shape. But `status` will now walk through `partner_en_route` → `in_progress` → `completed`, `current_assignment.status` will move `accepted` → `completed`, `timeline` will grow to six entries, and `price_final` / `completed_at` will stop being null on finished jobs. If any of your UI assumed `assigned` was effectively terminal, that assumption is now wrong.
+
+**Worth building now:** the three states between `assigned` and `completed` are the whole point of a tracking screen. `timeline[]` gives you `{status, changed_at, note}` per step, in order, which is enough for a progress stepper with timestamps and no extra calls.
+
+### 6.2 The endpoint itself (for whenever the partner client exists)
+
+```
+POST /api/v1/jobs/{job_id}/status
+Authorization: Bearer <partner's supabase token>
+```
+
+```jsonc
+// body
+{
+  "status": "partner_en_route" | "in_progress" | "completed" | "cancelled",
+  "price_final": 1250.50,          // required when status="completed", rejected otherwise
+  "cancellation_reason": "string"  // optional, ONLY with status="cancelled"
+}
+```
+
+Returns `200` with `{ job_id, status, price_final, completed_at, cancelled_at, cancellation_reason, assignment_status }` inside the usual envelope. `assignment_status` is the half you can't otherwise see — it's what the partner's job list is filtered on.
+
+**Legal moves.** Anything else is `409`:
+
+```
+assigned ──▶ partner_en_route ──▶ in_progress ──▶ completed
+    │                │                  │
+    └────────────────┴──────────────────┴──▶ cancelled
+
+completed ──▶ ✗        cancelled ──▶ ✗        (terminal, nothing leaves them)
+```
+
+You can't request `assigned`, `matching`, `requested` or `no_match_found` at all — those belong to dispatch, and asking for one is a `422` naming the four you can send. A partner can't rewind their own job.
+
+**Errors, and what to do about each:**
+
+| | |
+|---|---|
+| `404 JOB_NOT_FOUND` | No such job. |
+| `403 FORBIDDEN` | You're not the partner on this job — **or** the job id is real but belongs to someone else. Deliberately the same answer for both, so a job's status can't be probed by a stranger sweeping transitions at it. Don't log them out. |
+| `409 INVALID_STATUS_TRANSITION` | Re-fetch the job; your local copy is behind. Don't retry the same call. |
+| `400 PRICE_FINAL_REQUIRED` | You sent `completed` without a price. |
+| `400 FIELD_NOT_APPLICABLE` | You sent a field that doesn't belong with that status. Refused rather than ignored, so "the price was saved" is never a thing you believe wrongly. |
+| `422 VALIDATION_ERROR` | Unknown status value, or a negative price. |
+
+Note the ordering: on a **finished** job, the partner who finished it gets `409` (truthful: it's done), anyone else gets `403`. Both are correct, they're just answering different questions.
+
+### 6.3 Two things to not get wrong
+
+**`price_final` is a number in rupees, sent by the partner, and it is final.** There's no edit-after-completion path and no dispute flow. If the pilot needs one, it's a new endpoint and a conversation — don't build a UI that implies the price can be changed.
+
+**Cancellation here is the partner cancelling.** There is currently **no owner-side cancel endpoint** — `POST /api/v1/jobs/{id}/status` is partner-only and an owner calling it gets `403`. If the owner app has a "cancel my booking" button, it has nothing to call yet. Tell me and I'll build it; I deliberately didn't fold owners into this route, because a partner-authenticated endpoint that quietly also accepts owners is the kind of thing nobody notices until it's a permissions bug.
+
 
 
 
@@ -291,3 +432,81 @@ UserRole = "owner" | "partner" in mobile/src/types/index.ts suggests role switch
 just confirm. An availability toggle is the one screen that genuinely matters.
 
 Nothing about the signing algorithm affects you — you pass the token through untouched.
+
+
+
+message — 2026-09-20
+
+Owner signup is unblocked. §2.5c of HANDOFF-frontend-contract.md is new and has the
+full shape; three other sections changed under it.
+
+The short version: POST /api/v1/users, with the Authorization header on it even though
+no profile exists yet — that's how the server learns which Supabase account the new
+profile belongs to. Body is { name, phone, email? }, you get back 201 with the local
+id, and that id is the thing to store: it's what job.user_id and vehicle.user_id point
+at. The Supabase id isn't a foreign key anywhere in this API. It's ONE call, not the
+register-then-link-auth pair partners do — the account gets bound in the same insert,
+so there's no half-finished state to handle if the second call never lands.
+
+One new error code you have to branch on: 403 USER_NOT_REGISTERED. It is NOT the same
+as IDENTITY_NOT_LINKED, and please don't collapse them — they have opposite remedies.
+USER_NOT_REGISTERED means nothing exists, send them to signup. IDENTITY_NOT_LINKED
+means a profile exists unclaimed, call link-auth. Cross them over and both dead-end:
+an unlinked mechanic sent to owner signup gets PARTNER_ALREADY_EXISTS, a new owner sent
+to link-auth gets USER_NOT_FOUND. Neither 403 should ever log the user out or re-send
+an OTP — the token is valid in both cases, and treating it as a login failure loops
+them through OTP entry forever with no exit.
+
+phone_verified is server-owned. You can't set it, and it may come back false even on a
+perfectly good signup — it's true only when the token carries a phone claim matching
+the number you sent. Phone sign-in is disabled on our Supabase project right now, so
+in practice everything you register today reads false. Don't render that as a warning
+badge and don't gate anything on it; false means "not proved", not "bad number". If
+you pre-fill the phone field from the Supabase session and lock it, you'll also never
+see the 400 PHONE_MISMATCH.
+
+Separately, and this one's an apology: current_assignment and timeline were never
+actually reaching you on GET /jobs/{id}. Response model didn't declare the two fields
+while the service was already passing them, and Pydantic drops undeclared kwargs
+silently — so the server built both on every single request and binned them, 200, no
+log line, nothing to notice. If you built JobTrackingPage against those and gave up
+because they were permanently undefined, your code was probably fine. Fixed 2026-09-20,
+§2.2 and §2.3. Pull and restart the backend before you retest.
+
+Still open from last time: §4 item 1, same app with a role switch or a separate build.
+That's now the only thing on the list that's waiting on you.
+
+
+
+message — 2026-09-21
+
+Job status actually moves now. §6 of HANDOFF-frontend-contract.md is new — it's a
+partner endpoint, but read it anyway, because your tracking screen behaves differently
+from today and you didn't change anything.
+
+Short version: until yesterday nothing in the entire API could move a job off
+'assigned'. Dispatch created it, a partner accepted it, and it sat there forever. So
+if JobTrackingPage looked like it was polling a job that never progressed — it was,
+and that was my gap, not your bug. Second one of these in two days after the
+current_assignment thing, so I'd rather say it plainly than let you find it.
+
+Nothing in the contract changed. GET /jobs/{id} is the same shape. What changes is
+that status now walks partner_en_route → in_progress → completed, current_assignment
+.status goes accepted → completed, timeline grows to six entries, and price_final and
+completed_at stop being null on finished jobs. If anything in the UI treated 'assigned'
+as the last state, that's now wrong. The three intermediate states are the whole reason
+a tracking screen exists, and timeline[] already gives you {status, changed_at, note}
+in order — enough for a stepper with timestamps, no extra calls.
+
+One thing I need from you rather than the other way round: there is no owner-side
+cancel endpoint. The new route is partner-only and an owner hits 403 on it. If the
+owner app has a "cancel my booking" button anywhere, it currently has nothing to call.
+Say the word and I'll build it as its own endpoint — I didn't want to quietly let
+owners into a partner-authenticated route, because that's a permissions bug waiting to
+be discovered later.
+
+Three new error codes in the §5 table: 409 INVALID_STATUS_TRANSITION (re-fetch, don't
+retry), 400 PRICE_FINAL_REQUIRED, 400 FIELD_NOT_APPLICABLE.
+
+Still open from last time, and now it's the only thing: §4 item 1 — same app with a
+role switch, or a separate build?

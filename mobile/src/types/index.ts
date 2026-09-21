@@ -1,61 +1,164 @@
-// ─── Shared TypeScript types ──────────────────────────────────────────────────
+// ─── Sahayak — Shared TypeScript Types ────────────────────────────────────────
 
 export type UserRole = "owner" | "partner";
 
+// ─── Auth ─────────────────────────────────────────────────────────────────────
 export interface User {
   id: string;
-  full_name: string;
+  name: string;
   phone: string;
   email?: string;
   role: UserRole;
-  avatar_url?: string;
-  created_at: string;
+  avatarUrl?: string;
+  rating?: number;
+  totalJobs?: number;
+  isVerified?: boolean;
+  createdAt?: string;
 }
 
+// ─── Vehicle ──────────────────────────────────────────────────────────────────
 export interface Vehicle {
   id: string;
-  owner_id: string;
   make: string;
   model: string;
   year: number;
-  license_plate: string;
-  vehicle_type: "two_wheeler" | "four_wheeler" | "heavy";
+  licensePlate: string;
+  type: "two-wheeler" | "four-wheeler";
+  color?: string;
+  fuelType?: "petrol" | "diesel" | "electric" | "cng";
 }
 
-export interface Location {
+// ─── Location ─────────────────────────────────────────────────────────────────
+export interface LatLng {
   latitude: number;
   longitude: number;
-  address?: string;
 }
 
+export interface Location extends LatLng {
+  address?: string;
+  city?: string;
+  state?: string;
+}
+
+// ─── Services ─────────────────────────────────────────────────────────────────
+export type ServiceType =
+  | "towing"
+  | "battery"
+  | "tyre"
+  | "fuel"
+  | "lockout"
+  | "mechanic";
+
+export interface SubService {
+  id: string;
+  name: string;
+  description?: string;
+  estimatedPrice?: number;
+}
+
+// ─── Job / Request ─────────────────────────────────────────────────────────────
 export type JobStatus =
   | "pending"
-  | "assigned"
+  | "searching"
+  | "matched"
   | "en_route"
+  | "arrived"
   | "in_progress"
-  | "completed"
+  | "complete"
   | "cancelled";
 
 export interface Job {
   id: string;
-  owner_id: string;
-  partner_id?: string;
-  vehicle_id: string;
-  service_type: string;
+  ownerId: string;
+  partnerId?: string;
+  vehicleId: string;
+  vehicle?: Vehicle;
+  serviceType: ServiceType;
+  subServiceId?: string;
+  subService?: SubService;
   status: JobStatus;
-  description?: string;
-  location: Location;
-  created_at: string;
-  updated_at: string;
+  pickupLocation: Location;
+  notes?: string;
+  photoUrls?: string[];
+  estimatedPrice?: number;
+  finalPrice?: number;
+  eta?: number; // minutes
+  rating?: number;
+  tip?: number;
+  createdAt: string;
+  updatedAt?: string;
+  completedAt?: string;
 }
 
+// ─── Partner ──────────────────────────────────────────────────────────────────
 export interface Partner {
   id: string;
-  user_id: string;
-  business_name: string;
-  services: string[];
+  name: string;
+  phone: string;
+  avatarUrl?: string;
   rating: number;
-  total_jobs: number;
-  location: Location;
-  distance_km?: number; // computed during dispatch
+  totalJobs: number;
+  services: ServiceType[];
+  isOnline: boolean;
+  location?: LatLng;
+  distanceKm?: number;
+  etaMinutes?: number;
+  vehicleNumber?: string;
+  vehicleModel?: string;
+  isVerified: boolean;
+  earningsToday?: number;
+  earningsTotal?: number;
 }
+
+// ─── Offer (for Partner incoming offer screen) ────────────────────────────────
+export interface IncomingOffer {
+  jobId: string;
+  job: Job;
+  estimatedEarning: number;
+  distanceKm: number;
+  etaMinutes: number;
+  expiresAt: string; // ISO timestamp, offer expires if not accepted
+}
+
+// ─── API Responses ────────────────────────────────────────────────────────────
+export interface ApiResponse<T> {
+  data: T;
+  message?: string;
+  success: boolean;
+}
+
+export interface PaginatedResponse<T> {
+  data: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+// ─── Navigation Param Lists ───────────────────────────────────────────────────
+export type AuthStackParamList = {
+  Splash: undefined;
+  Login: { role?: UserRole };
+  OTPVerify: { phone: string; role: UserRole };
+};
+
+export type OwnerStackParamList = {
+  OwnerHome: undefined;
+  ServiceSelect: { vehicleId?: string };
+  PickupLocation: { serviceType: ServiceType; vehicleId: string; subServiceId?: string; notes?: string };
+  FindingPartner: { jobId: string };
+  PartnerMatched: { jobId: string };
+  JobComplete: { jobId: string };
+};
+
+export type PartnerStackParamList = {
+  PartnerHome: undefined;
+  IncomingOffer: { jobId: string };
+  ActiveJob: { jobId: string };
+  PartnerJobDone: { jobId: string };
+};
+
+export type RootTabParamList = {
+  Home: undefined;
+  Tracking: undefined;
+  Profile: undefined;
+};
