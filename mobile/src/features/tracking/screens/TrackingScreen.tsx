@@ -1,18 +1,45 @@
+// ─── Sahayak — Tracking Screen ────────────────────────────────────────────────
 import React from "react";
-import { View, Text, StyleSheet } from "react-native";
+import { View, Text, StyleSheet, StatusBar } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
+import { Colors, Typography, Spacing } from "../../../constants/theme";
 
-// TODO: Live map tracking mechanic ETA using expo-location + react-native-maps
 export default function TrackingScreen() {
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Live Tracking 📍</Text>
-      <Text style={styles.subtitle}>Mechanic location on map — coming soon</Text>
-    </View>
+    <SafeAreaView style={styles.safe} edges={["top"]}>
+      <StatusBar barStyle="dark-content" backgroundColor={Colors.surface} />
+      <View style={styles.center}>
+        <Ionicons name="navigate-circle-outline" size={72} color={Colors.shimmerBase} />
+        <Text style={styles.title}>No Active Job</Text>
+        <Text style={styles.sub}>
+          Your live tracking will appear here once a request is matched.
+        </Text>
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#0f172a" },
-  title: { fontSize: 24, fontWeight: "700", color: "#f8fafc" },
-  subtitle: { fontSize: 14, color: "#94a3b8", marginTop: 8 },
+  safe: { flex: 1, backgroundColor: Colors.surface },
+  center: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: Spacing["2xl"],
+    gap: Spacing.base,
+  },
+  title: {
+    fontSize: Typography.fontSize["2xl"],
+    fontFamily: Typography.fontFamily.bold,
+    color: Colors.textPrimary,
+  },
+  sub: {
+    fontSize: Typography.fontSize.base,
+    color: Colors.textSecondary,
+    fontFamily: Typography.fontFamily.regular,
+    textAlign: "center",
+    lineHeight: 24,
+  },
 });
+

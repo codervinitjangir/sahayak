@@ -1,25 +1,60 @@
 {
   "expo": {
-    "name": "mobile",
-    "slug": "mobile",
+    "name": "Sahayak",
+    "slug": "sahayak",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#F59E0B"
+    },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.sahayak.app",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Sahayak needs your location to find nearby service partners.",
+        "NSLocationAlwaysUsageDescription": "Sahayak uses your location to track service partner arrival.",
+        "NSCameraUsageDescription": "Sahayak needs camera access to upload vehicle photos.",
+        "NSPhotoLibraryUsageDescription": "Sahayak needs photo library access to upload vehicle photos."
+      },
+      "config": {
+        "googleMapsApiKey": "AIzaSyBkhF8T0ev-w4kYDgVvk7IxIAMH6m3YEvM"
+      }
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#F59E0B",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.sahayak.app",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
+      ],
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyBkhF8T0ev-w4kYDgVvk7IxIAMH6m3YEvM"
+        }
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      "expo-font",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Sahayak needs your location to find nearby service partners."
+        }
+      ]
+    ]
   }
 }
