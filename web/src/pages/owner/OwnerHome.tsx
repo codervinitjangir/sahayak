@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertOctagon, ChevronRight, Shield, Clock, MapPin } from 'lucide-react';
 import { useVehicles } from '../../features/vehicles/hooks';
 import { useJobs } from '../../features/jobs/hooks';
 import { VehicleSelector } from '../../components/VehicleSelector';
+import { AddVehicleModal } from '../../components/AddVehicleModal';
 import { StatusBadge } from '../../components/StatusBadge';
 import { Button } from '../../components/ui/Button';
 
@@ -11,6 +12,11 @@ export const OwnerHome: React.FC = () => {
   const navigate = useNavigate();
   const { data: vehicles = [], isLoading: isLoadingVehicles } = useVehicles();
   const { data: jobs = [], isLoading: isLoadingJobs } = useJobs();
+
+  // Highlighting only — the vehicle for a job is chosen on the request form.
+  const [selectedVehicleId, setSelectedVehicleId] = useState<string | undefined>();
+  const [isAddVehicleOpen, setIsAddVehicleOpen] = useState(false);
+  const highlightedVehicleId = selectedVehicleId ?? vehicles[0]?.id;
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-6 sm:py-8 space-y-8">
@@ -65,12 +71,16 @@ export const OwnerHome: React.FC = () => {
 
         <VehicleSelector
           vehicles={vehicles}
-          selectedVehicleId={vehicles[0]?.id}
-          onSelectVehicle={(v) => {
-            // Optional selection preview
-            console.log('Selected vehicle:', v);
-          }}
+          selectedVehicleId={highlightedVehicleId}
+          onSelectVehicle={(v) => setSelectedVehicleId(v.id)}
+          onAddNewVehicle={() => setIsAddVehicleOpen(true)}
           isLoading={isLoadingVehicles}
+        />
+
+        <AddVehicleModal
+          isOpen={isAddVehicleOpen}
+          onClose={() => setIsAddVehicleOpen(false)}
+          onSuccess={(veh) => setSelectedVehicleId(veh.id)}
         />
       </section>
 
@@ -124,7 +134,7 @@ export const OwnerHome: React.FC = () => {
                   <div className="flex items-center gap-1 text-xs text-slate-500">
                     <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                     <span className="truncate max-w-xs sm:max-w-md">
-                      {job.pickup_address_text || `${job.pickup_location.lat}, ${job.pickup_location.lng}`}
+                      {job.pickup_address_text || (job.pickup_location ? `${job.pickup_location.lat}, ${job.pickup_location.lng}` : 'Bengaluru')}
                     </span>
                   </div>
                 </div>

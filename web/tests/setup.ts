@@ -1,11 +1,15 @@
 import '@testing-library/jest-dom';
 import { afterEach, vi } from 'vitest';
 import { cleanup } from '@testing-library/react';
+import { resetPartnerStore } from '../src/features/partners/partnerStore';
 
 // Automatically unmount and cleanup DOM after the test is finished.
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  // The partner store is module-level, so it outlives a test unless told
+  // otherwise — without this, test 2 in a file inherits test 1's profile.
+  resetPartnerStore();
 });
 
 // Mock crypto.randomUUID for environments where it's not defined

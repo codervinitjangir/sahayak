@@ -3,8 +3,10 @@
    Adapted from the Pairly/Craft.do aesthetic for Sahayak's roadside-rescue identity.
    ========================================================================== */
 
-/* ----- Landing-Specific Design Tokens ----- */
-:root {
+/* ----- Landing-Specific Design Tokens -----
+   Scoped to .landing-root (rendered by LandingPage) rather than :root so the
+   landing page's warm-paper palette cannot bleed into the teal app shell. */
+.landing-root {
   --paper: #F6F1E6;
   --paper-card: #FBF8F1;
   --ink: #1B1712;
@@ -849,6 +851,382 @@
 }
 
 /* ==========================================================================
+   5b. CUSTOMER REVIEWS CAROUSEL SECTION (LIGHT THEME)
+   ========================================================================== */
+.reviews-section {
+  padding: 100px 24px 110px;
+  background: #FAF7F0; /* Soft warm light theme matching Sahayak's aesthetic */
+  position: relative;
+  border-top: 1px solid rgba(27, 23, 18, 0.06);
+  border-bottom: 1px solid rgba(27, 23, 18, 0.06);
+  overflow: hidden;
+}
+
+.reviews-layout {
+  max-width: 1360px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  gap: 48px;
+  align-items: center;
+}
+
+/* Left Header Column */
+.reviews-header {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 24px;
+}
+
+/* Star Rating Badge */
+.reviews-badge {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 6px 14px;
+  background: #FFFFFF;
+  border: 1px solid rgba(27, 23, 18, 0.08);
+  border-radius: 9999px;
+  box-shadow: 0 2px 8px rgba(27, 23, 18, 0.03);
+}
+
+.reviews-badge__stars {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  color: #F59E0B;
+}
+
+.reviews-badge__star {
+  width: 15px;
+  height: 15px;
+}
+
+.reviews-badge__score {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1B1712;
+}
+
+.reviews-badge__google {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding-left: 6px;
+  border-left: 1px solid rgba(27, 23, 18, 0.12);
+}
+
+.reviews-badge__label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #0F766E;
+}
+
+/* Title */
+.reviews-title {
+  font-family: var(--font-display);
+  font-size: clamp(34px, 3.6vw, 46px);
+  font-weight: 600;
+  line-height: 1.15;
+  color: #1B1712;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+/* Controls */
+.reviews-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.reviews-btn {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(27, 23, 18, 0.18);
+  background: #FFFFFF;
+  color: #1B1712;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(27, 23, 18, 0.04);
+}
+
+.reviews-btn:hover:not(:disabled) {
+  background: #1B1712;
+  color: #FFFFFF;
+  border-color: #1B1712;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(27, 23, 18, 0.12);
+}
+
+.reviews-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.reviews-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  border-color: rgba(27, 23, 18, 0.1);
+  box-shadow: none;
+}
+
+/* Right Column: Carousel Column & Track */
+.reviews-carousel-column {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.reviews-track {
+  display: flex;
+  gap: 24px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  padding: 12px 4px 20px 4px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.reviews-track::-webkit-scrollbar {
+  display: none;
+}
+
+/* Review Card */
+.review-card {
+  flex: 0 0 350px;
+  scroll-snap-align: start;
+  background: #FFFFFF;
+  border: 1px solid rgba(27, 23, 18, 0.08);
+  border-radius: 22px;
+  padding: 28px 24px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 18px;
+  box-shadow: 0 4px 18px rgba(27, 23, 18, 0.04);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.review-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(15, 118, 110, 0.25);
+  box-shadow: 0 10px 26px rgba(27, 23, 18, 0.07);
+}
+
+.review-card__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.review-card__rating-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.review-card__stars {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  color: #F59E0B;
+}
+
+.review-card__star {
+  width: 15px;
+  height: 15px;
+}
+
+.review-card__date {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: #78716C;
+}
+
+/* Service Type Tag Pill in Top-Right */
+.review-card__service-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3.5px 9px;
+  border-radius: 9999px;
+  border: 1px solid;
+  flex-shrink: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.review-card__text {
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: #3A3630;
+  margin: 0;
+  flex-grow: 1;
+}
+
+.review-card__author {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(27, 23, 18, 0.06);
+}
+
+.review-card__avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.review-card__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5px;
+  min-width: 0;
+}
+
+.review-card__name {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: #1B1712;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.review-card__role {
+  font-size: 12.5px;
+  color: #78716C;
+  font-weight: 450;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Partner Credit Line */
+.review-card__partner-credit {
+  font-size: 11.5px;
+  color: #0F766E;
+  font-weight: 550;
+  margin-top: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Carousel Pagination Dots */
+.reviews-dots {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.reviews-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  border: 1.5px solid #0F766E;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.25s ease;
+  opacity: 0.35;
+}
+
+.reviews-dot:hover:not(.reviews-dot--active) {
+  opacity: 0.7;
+}
+
+.reviews-dot--active {
+  width: 24px;
+  background: #0F766E;
+  opacity: 1;
+}
+
+/* Responsive */
+@media (max-width: 960px) {
+  .reviews-section {
+    padding: 64px 20px 72px;
+  }
+
+  .reviews-layout {
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
+
+  .reviews-header {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+  }
+
+  .reviews-title {
+    width: 100%;
+  }
+
+  .review-card {
+    flex: 0 0 310px;
+    padding: 24px 20px;
+  }
+}
+
+@media (max-width: 480px) {
+  .reviews-section {
+    padding: 48px 16px 60px;
+  }
+
+  .review-card {
+    flex: 0 0 calc(100vw - 52px);
+    max-width: 320px;
+    padding: 20px 16px;
+    gap: 14px;
+  }
+
+  .review-card__text {
+    font-size: 13.5px;
+    line-height: 1.55;
+  }
+
+  .review-card__author {
+    padding-top: 12px;
+    gap: 10px;
+  }
+
+  .review-card__name {
+    font-size: 14px;
+  }
+
+  .review-card__role {
+    font-size: 11.5px;
+  }
+
+  .review-card__partner-credit {
+    font-size: 11px;
+  }
+}
+
+/* ==========================================================================
    6. PRICING SECTION
    ========================================================================== */
 .pricing-section {
@@ -915,6 +1293,7 @@
   gap: 20px;
   max-width: 1140px;
   margin: 0 auto;
+  align-items: start; /* Equalize card height naturally without empty filler space */
 }
 
 @media (max-width: 1024px) {
@@ -949,7 +1328,9 @@
   color: #FFFFFF;
 }
 .pricing-card--featured .pricing-card__feature {
-  color: rgba(255, 255, 255, 0.75);
+  /* 0.75 alpha over the featured card's dark fill fell below the 4.5:1 AA
+     threshold for body text. */
+  color: rgba(255, 255, 255, 0.92);
 }
 
 .pricing-card__featured-badge {
@@ -989,7 +1370,7 @@
 
 .pricing-card__price {
   font-family: var(--font-display);
-  font-size: 36px;
+  font-size: 34px;
   font-weight: 600;
   color: var(--ink);
   margin: 0 0 4px;
@@ -1000,29 +1381,74 @@
   opacity: 0.7;
 }
 
-.pricing-card__desc {
+.pricing-card__cost-line {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+}
+
+.pricing-card__per {
   font-size: 14px;
+  font-weight: 500;
   color: var(--ink-soft);
-  margin: 0 0 24px;
+}
+.pricing-card--featured .pricing-card__per {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* Rupee Savings Badge Per-Card */
+.pricing-card__savings-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2.5px 8px;
+  border-radius: 9999px;
+  background: rgba(15, 118, 110, 0.12);
+  color: #0F766E;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+.pricing-card--featured .pricing-card__savings-badge {
+  background: rgba(134, 239, 172, 0.18);
+  color: #86EFAC;
+}
+
+.pricing-card__desc {
+  font-size: 13.5px;
+  color: var(--ink-soft);
+  margin: 0 0 18px;
   line-height: 1.5;
 }
 .pricing-card--featured .pricing-card__desc {
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(255, 255, 255, 0.65);
+}
+
+/* "Everything in X, plus:" Framing */
+.pricing-card__inherit {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #0F766E;
+  margin-bottom: 12px;
+  letter-spacing: 0.01em;
+}
+.pricing-card--featured .pricing-card__inherit {
+  color: #86EFAC;
 }
 
 .pricing-card__features {
   list-style: none;
   padding: 0;
-  margin: 0 0 28px;
-  flex: 1;
+  margin: 0 0 24px;
 }
 
 .pricing-card__feature {
-  font-size: 14px;
+  font-size: 13.5px;
   color: var(--ink-soft);
-  padding: 6px 0;
+  padding: 5px 0;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
   line-height: 1.4;
 }
@@ -1031,10 +1457,12 @@
   flex-shrink: 0;
   width: 16px;
   height: 16px;
+  margin-top: 2px;
   color: #0F766E;
 }
+/* WCAG AA checkmark on Fleet dark card: #86EFAC provides 13.5:1 contrast against #1B1712 */
 .pricing-card--featured .pricing-card__feature svg {
-  color: var(--mint-cta);
+  color: #86EFAC;
 }
 
 .pricing-card__btn {
@@ -1046,6 +1474,7 @@
   color: var(--ink);
   font-size: 14px;
   font-weight: 600;
+  text-decoration: none;
   cursor: pointer;
   transition: all 0.2s;
   display: inline-flex;
@@ -1074,6 +1503,38 @@
 }
 .pricing-card--featured .pricing-card__btn:hover {
   background: #7ECDA0;
+}
+
+/* Free-Tier Trust Microcopy (Pay Per Use only) */
+.pricing-card__microcopy {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-soft);
+  text-align: center;
+  margin: 8px 0 0;
+  opacity: 0.8;
+}
+
+/* Compare All Features Link */
+.pricing-compare {
+  text-align: center;
+  margin-top: 36px;
+}
+.pricing-compare__link {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--ink-soft);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+.pricing-compare__link:hover {
+  color: #0F766E;
+}
+.pricing-compare__link span {
+  font-weight: 600;
+  color: #0F766E;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 /* ==========================================================================
@@ -1117,6 +1578,98 @@
   font-size: clamp(1.1rem, 2vw, 1.5rem);
   color: var(--ink);
   margin-top: 8px;
+}
+
+.final-cta__content {
+  flex: 1;
+  max-width: 620px;
+}
+
+.final-cta__badges {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 24px;
+  flex-wrap: wrap;
+}
+
+.final-cta__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: #000000;
+  color: #ffffff;
+  padding: 8px 18px;
+  border-radius: 10px;
+  text-decoration: none;
+  transition: opacity 0.2s, transform 0.15s;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+.final-cta__badge:hover {
+  opacity: 0.88;
+  transform: translateY(-1px);
+}
+
+.final-cta__badge-icon {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.final-cta__badge-text {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  line-height: 1.1;
+}
+
+.final-cta__badge-sub {
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  opacity: 0.8;
+  text-transform: uppercase;
+}
+
+.final-cta__badge-title {
+  font-size: 14.5px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.final-cta__qr-card {
+  background: #ffffff;
+  border-radius: 24px;
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
+  flex-shrink: 0;
+  max-width: 220px;
+}
+
+.final-cta__qr-text {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #2D3134;
+  margin: 0 0 12px;
+  line-height: 1.3;
+}
+
+.final-cta__qr-frame {
+  width: 130px;
+  height: 130px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.final-cta__qr-svg {
+  width: 100%;
+  height: 100%;
 }
 
 .final-cta__buttons {
@@ -1550,33 +2103,9 @@
   color: var(--ink);
 }
 
-/* ==========================================================================
-   Custom Roadside Repair Wrench Cursor Integration (Desktop)
-   Single-Sided Mechanic Wrench
-   ========================================================================== */
-@media (pointer: fine) {
-  html, body, .landing-page {
-    cursor: url('/cursor-repair.svg') 4 4, auto;
-  }
-
-  a, 
-  button, 
-  [role="button"], 
-  input[type="button"], 
-  input[type="submit"], 
-  select, 
-  label, 
-  summary,
-  .landing-nav__link,
-  .landing-nav__cta,
-  .landing-btn,
-  .pill-tab,
-  .step-nav-btn,
-  .price-card__cta,
-  .cursor-pointer {
-    cursor: url('/cursor-repair-hover.svg') 4 4, pointer !important;
-  }
-}
+/* The wrench cursor is defined once, globally, in src/index.css. The block that
+   used to live here restated those same rules (plus a .landing-page selector that
+   is rendered nowhere) and overrode the app shell's own cursors. */
 
 /* ==========================================================================
    ACCESSIBLE KEYBOARD FOCUS STATES (WCAG 2.1 AA)
@@ -1602,6 +2131,40 @@
   outline: 2px solid #0F766E !important;
   outline-offset: 3px !important;
   box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.25) !important;
+}
+
+/* ==========================================================================
+   KEYFRAMES
+   ========================================================================== */
+
+/* Live-tracking indicator dots (.hiw-match-meta__dot, .hiw-track-step__dot).
+   Both referenced this animation while it was never defined, so the dots sat
+   static. Opacity + scale only, so it stays on the compositor. */
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.82);
+  }
+}
+
+/* ==========================================================================
+   REDUCED MOTION (WCAG 2.1 — 2.3.3 Animation from Interactions)
+   Users who ask the OS for less motion get the end state, not the movement.
+   ========================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  .landing-root *,
+  .landing-root *::before,
+  .landing-root *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 

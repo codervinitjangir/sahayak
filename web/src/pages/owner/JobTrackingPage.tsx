@@ -1,9 +1,36 @@
 import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Phone, UserCheck, Shield, Clock, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Phone, UserCheck, Shield, Clock, AlertTriangle, Navigation } from 'lucide-react';
 import { useJob, useCancelJob } from '../../features/jobs/hooks';
 import { StatusBadge } from '../../components/StatusBadge';
+import { JobTimeline } from '../../components/JobTimeline';
 import { Button } from '../../components/ui/Button';
+import { Job, JobStatus, JobTimelineEvent } from '../../types/jobs';
+
+function extractTimestamps(job: Job): Partial<Record<JobStatus, string | undefined>> {
+  const result: Partial<Record<JobStatus, string | undefined>> = {
+    requested: job.requested_at,
+    assigned: job.current_assignment?.accepted_at || job.current_assignment?.offered_at,
+    completed: job.completed_at,
+    cancelled: job.cancelled_at,
+  };
+
+  if (Array.isArray(job.timeline)) {
+    (job.timeline as JobTimelineEvent[]).forEach((ev) => {
+      if (ev.status && (ev.timestamp || ev.created_at)) {
+        result[ev.status] = ev.timestamp || ev.created_at;
+      }
+    });
+  } else if (job.timeline && typeof job.timeline === 'object') {
+    Object.entries(job.timeline).forEach(([statusKey, timestamp]) => {
+      if (typeof timestamp === 'string') {
+        result[statusKey as JobStatus] = timestamp;
+      }
+    });
+  }
+
+  return result;
+}
 
 export const JobTrackingPage: React.FC = () => {
   const { jobId } = useParams<{ jobId: string }>();
@@ -37,6 +64,18 @@ export const JobTrackingPage: React.FC = () => {
       await cancelJobMutation.mutateAsync({ jobId: job.id, reason: 'Cancelled by owner' });
     }
   };
+
+  // Reported by the dispatch engine on the current assignment; absent until a
+  // partner has been matched. Checked by type so an ETA of 0 still renders.
+  const etaMinutes =
+    typeof job.current_assignment?.estimated_arrival_min === 'number'
+      ? job.current_assignment.estimated_arrival_min
+      : null;
+
+  const distanceKm =
+    typeof job.current_assignment?.distance_at_offer_m === 'number'
+      ? (job.current_assignment.distance_at_offer_m / 1000).toFixed(1)
+      : null;
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
@@ -93,7 +132,11 @@ export const JobTrackingPage: React.FC = () => {
             <div className="space-y-1">
               <div className="flex items-center gap-2 text-sky-800 font-semibold text-sm">
                 <Clock className="w-4 h-4 text-sky-700" />
-                <span>Partner En Route (Estimated Arrival: ~12-15 mins)</span>
+                <span>
+                  {etaMinutes !== null
+                    ? `Partner En Route (Estimated Arrival Time: ~${etaMinutes} min)`
+                    : 'Partner En Route (Estimated Arrival Time: calculating…)'}
+                </span>
               </div>
               <p className="text-xs text-slate-500">Live coordinates are being tracked.</p>
             </div>
@@ -136,9 +179,18 @@ export const JobTrackingPage: React.FC = () => {
                   <h4 className="text-sm font-bold text-slate-900">{job.partner.name}</h4>
                   <Shield className="w-3.5 h-3.5 text-brand-700" />
                 </div>
-                <span className="text-xs text-slate-500">
-                  ★ {job.partner.rating_avg.toFixed(1)} ({job.partner.rating_count} jobs)
-                </span>
+                <div className="flex items-center gap-2 text-xs text-slate-500">
+                  <span>★ {job.partner.rating_avg.toFixed(1)} ({job.partner.rating_count} jobs)</span>
+                  {distanceKm && (
+                    <>
+                      <span>•</span>
+                      <span className="inline-flex items-center gap-0.5 text-slate-600 font-medium">
+                        <Navigation className="w-3 h-3 text-brand-700" />
+                        {distanceKm} km away
+                      </span>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -165,6 +217,18 @@ export const JobTrackingPage: React.FC = () => {
             </Button>
           </div>
         )}
+      </div>
+
+      {/* Live Dispatch Progress Timeline */}
+      <div className="p-6 bg-white border border-slate-200 rounded-2xl shadow-sm space-y-4">
+        <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
+          Live Dispatch Progress
+        </h3>
+        <JobTimeline
+          status={job.status}
+          variant="full"
+          timestamps={extractTimestamps(job)}
+        />
       </div>
     </div>
   );

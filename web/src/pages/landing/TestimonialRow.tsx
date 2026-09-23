@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { MapPin, Search, CreditCard, ChevronRight } from 'lucide-react';
 
 const STEPS = [
@@ -10,18 +11,20 @@ const STEPS = [
     color: '#0F766E',
     colorLight: 'rgba(15, 118, 110, 0.1)',
     visual: (
-      <div className="hiw-visual__choices">
+      /* Illustration of the picker, not the picker itself. Rendered inert so
+         keyboard users aren't dropped into four no-op stops. */
+      <div className="hiw-visual__choices" aria-hidden="true">
         {[
           { emoji: '🔧', label: 'Puncture Repair', time: '~15 min' },
           { emoji: '🔋', label: 'Battery Jumpstart', time: '~10 min' },
           { emoji: '🚛', label: 'Towing / Flatbed', time: '~25 min' },
           { emoji: '⛽', label: 'Fuel Delivery', time: '~20 min' },
         ].map((s) => (
-          <button key={s.label} className="hiw-choice" type="button">
+          <div key={s.label} className="hiw-choice">
             <span className="hiw-choice__emoji">{s.emoji}</span>
             <span className="hiw-choice__label">{s.label}</span>
             <span className="hiw-choice__time">{s.time}</span>
-          </button>
+          </div>
         ))}
       </div>
     ),
@@ -118,9 +121,9 @@ export const TestimonialRow: React.FC = () => {
                 <div className="hiw-row__num" style={{ color: step.color }}>{step.num}</div>
                 <h3 className="hiw-row__title">{step.title}</h3>
                 <p className="hiw-row__desc">{step.desc}</p>
-                <a href="/owner/request" className="hiw-row__link" style={{ color: step.color }}>
+                <Link to="/owner/request" className="hiw-row__link" style={{ color: step.color }}>
                   Try it now <ChevronRight size={16} />
-                </a>
+                </Link>
               </div>
 
               {/* Center — Timeline connector */}

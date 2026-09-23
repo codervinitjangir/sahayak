@@ -5,6 +5,8 @@
 :root {
   --color-primary: #0F766E;
   --color-primary-hover: #115E59;
+  --color-accent: #F03F3F;
+  --color-accent-hover: #D93434;
   --color-danger: #B91C1C;
   --color-success: #15803D;
   --color-warning: #B45309;

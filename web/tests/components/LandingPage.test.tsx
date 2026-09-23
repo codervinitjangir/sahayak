@@ -46,6 +46,15 @@ describe('LandingPage Component', () => {
     expect(screen.getByText('PARTNER WITH US')).toBeInTheDocument();
     expect(screen.getByText('SAFETY & TRUST')).toBeInTheDocument();
 
+    // 5b. Customer Reviews Carousel
+    expect(screen.getByText(/Loved By/i)).toBeInTheDocument();
+    expect(screen.getByText(/The People/i)).toBeInTheDocument();
+    expect(screen.getByText(/We Serve/i)).toBeInTheDocument();
+    expect(screen.getByText(/4.7 from 5,925/i)).toBeInTheDocument();
+    expect(screen.getByText('Thanae')).toBeInTheDocument();
+    expect(screen.getByText('Manjeri Dharmarajan')).toBeInTheDocument();
+    expect(screen.getByText('Jatinder Singh')).toBeInTheDocument();
+
     // 6. Tiered Pricing Section
     expect(screen.getByText(/Simple plans\. Transparent rates\./i)).toBeInTheDocument();
     expect(screen.getByText('Monthly')).toBeInTheDocument();
@@ -53,10 +62,18 @@ describe('LandingPage Component', () => {
     expect(screen.getByText('Family')).toBeInTheDocument();
     expect(screen.getByText('Fleet')).toBeInTheDocument();
     expect(screen.getByText('Enterprise')).toBeInTheDocument();
+    expect(screen.getByText('No card required.')).toBeInTheDocument();
+    expect(screen.getByText('Everything in Pay Per Use, plus:')).toBeInTheDocument();
+    expect(screen.getByText('Everything in Family, plus:')).toBeInTheDocument();
+    expect(screen.getByText('Everything in Fleet, plus:')).toBeInTheDocument();
+    expect(screen.getByText(/Save up to ₹4,800\/yr/i)).toBeInTheDocument();
 
     // 7. Mint Wave Final CTA
-    expect(screen.getByText(/Stuck on the road\? We'll be there\./i)).toBeInTheDocument();
-    expect(screen.getByText(/Get the Sahayak App/i)).toBeInTheDocument();
+    expect(screen.getByText(/Download the app now!/i)).toBeInTheDocument();
+    expect(screen.getByText(/Experience seamless online ordering only on the Zomato app/i)).toBeInTheDocument();
+    expect(screen.getByText(/Google Play/i)).toBeInTheDocument();
+    expect(screen.getByText(/App Store/i)).toBeInTheDocument();
+    expect(screen.getByText(/Scan the QR code to download the app/i)).toBeInTheDocument();
 
     // 8. Editorial Footer
     expect(screen.getByText(/Keeping Bengaluru moving safely/i)).toBeInTheDocument();

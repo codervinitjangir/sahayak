@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Sun, Moon, Globe } from 'lucide-react';
 
 export const LandingFooter: React.FC = () => {
@@ -48,30 +49,30 @@ export const LandingFooter: React.FC = () => {
             <li><a href="#how-it-works">How It Works</a></li>
             <li><a href="#features">Dispatch Engine</a></li>
             <li><a href="#pricing">Fleet Pricing</a></li>
-            <li><a href="/owner">Owner Portal</a></li>
-            <li><a href="/owner/request">Request Help</a></li>
+            <li><Link to="/owner">Owner Portal</Link></li>
+            <li><Link to="/owner/request">Request Help</Link></li>
           </ul>
         </div>
 
         <div>
           <h4 className="landing-footer__col-title">Services</h4>
           <ul className="landing-footer__col-links">
-            <li><a href="/owner/request">Puncture Repair</a></li>
-            <li><a href="/owner/request">Battery Jumpstart</a></li>
-            <li><a href="/owner/request">Flatbed Towing</a></li>
-            <li><a href="/owner/request">Emergency Fuel</a></li>
-            <li><a href="/owner/request">Mechanical Triage</a></li>
+            <li><Link to="/owner/request">Puncture Repair</Link></li>
+            <li><Link to="/owner/request">Battery Jumpstart</Link></li>
+            <li><Link to="/owner/request">Flatbed Towing</Link></li>
+            <li><Link to="/owner/request">Emergency Fuel</Link></li>
+            <li><Link to="/owner/request">Mechanical Triage</Link></li>
           </ul>
         </div>
 
         <div>
           <h4 className="landing-footer__col-title">Partners</h4>
           <ul className="landing-footer__col-links">
-            <li><a href="/partner">Partner Portal</a></li>
-            <li><a href="/partner">Mechanic Signup</a></li>
-            <li><a href="/partner">Tow Operators</a></li>
-            <li><a href="/partner">Coverage Zones</a></li>
-            <li><a href="/partner">Verification FAQ</a></li>
+            <li><Link to="/partner">Partner Portal</Link></li>
+            <li><Link to="/partner">Mechanic Signup</Link></li>
+            <li><Link to="/partner">Tow Operators</Link></li>
+            <li><Link to="/partner">Coverage Zones</Link></li>
+            <li><Link to="/partner">Verification FAQ</Link></li>
           </ul>
         </div>
 
@@ -124,7 +125,8 @@ export const LandingFooter: React.FC = () => {
               type="button"
               className={`theme-switcher__btn ${theme === 'light' ? 'theme-switcher__btn--active' : ''}`}
               onClick={() => setTheme('light')}
-              title="Light theme"
+              aria-label="Light theme"
+              aria-pressed={theme === 'light'}
             >
               <Sun size={14} />
             </button>
@@ -132,7 +134,8 @@ export const LandingFooter: React.FC = () => {
               type="button"
               className={`theme-switcher__btn ${theme === 'dark' ? 'theme-switcher__btn--active' : ''}`}
               onClick={() => setTheme('dark')}
-              title="Dark theme"
+              aria-label="Dark theme"
+              aria-pressed={theme === 'dark'}
             >
               <Moon size={14} />
             </button>

@@ -5,6 +5,7 @@ import { Hero } from './Hero';
 import { CapabilityRow } from './CapabilityRow';
 import { TestimonialRow } from './TestimonialRow';
 import { FeatureBlocks } from './FeatureBlocks';
+import { ReviewsSection } from './ReviewsSection';
 import { PricingSection } from './PricingSection';
 import { FinalCta } from './FinalCta';
 import { LandingFooter } from './LandingFooter';
@@ -32,6 +33,7 @@ export const LandingPage: React.FC = () => {
         <CapabilityRow />
         <TestimonialRow />
         <FeatureBlocks />
+        <ReviewsSection />
         <PricingSection />
         <FinalCta />
       </main>

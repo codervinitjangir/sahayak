@@ -1,13 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, AlertCircle, Camera, CheckCircle2, ShieldAlert } from 'lucide-react';
 import { useVehicles } from '../../features/vehicles/hooks';
 import { useServices, useCreateJob } from '../../features/jobs/hooks';
+import { createIdempotencyKey } from '../../services/api';
+import { IS_DEMO_MODE } from '../../app/config';
 import { LocationPicker } from '../../components/LocationPicker';
 import { ServiceCard } from '../../components/ServiceCard';
 import { VehicleSelector } from '../../components/VehicleSelector';
 import { Button } from '../../components/ui/Button';
+import { AddVehicleModal } from '../../components/AddVehicleModal';
+import { getAuthToken, setAuthToken } from '../../services/authToken';
+import { usersService } from '../../services/users.service';
 import { LocationPoint, Service } from '../../types/jobs';
+import { Vehicle } from '../../types/vehicles';
 
 // Default seeded services per Sahayak specifications if API reference list is loading/empty
 const FALLBACK_SERVICES: Service[] = [
@@ -18,6 +24,24 @@ const FALLBACK_SERVICES: Service[] = [
   { id: 5, category_id: 3, code: 'wheel_lift_tow', name: 'Wheel-Lift Towing', requires_vehicle_equipment: true, estimated_price: 1200 },
   { id: 6, category_id: 1, code: 'fuel_delivery', name: 'Emergency Fuel (5L)', requires_vehicle_equipment: false, estimated_price: 300 },
 ];
+
+// Placeholder vehicle so the form is explorable without a backend. Its id is never
+// accepted at submit time — see `isRealVehicleId` below.
+const DEMO_VEHICLE_ID_PREFIX = 'demo-';
+
+const DEMO_VEHICLES: Vehicle[] = [
+  {
+    id: `${DEMO_VEHICLE_ID_PREFIX}veh-1`,
+    user_id: 'owner-1',
+    vehicle_type: 'four_wheeler',
+    make: 'Hyundai',
+    model: 'i20',
+    vehicle_number: 'KA-01-MJ-4521',
+    created_at: new Date().toISOString(),
+  },
+];
+
+const isRealVehicleId = (id: string) => Boolean(id) && !id.startsWith(DEMO_VEHICLE_ID_PREFIX);
 
 export const RequestHelpPage: React.FC = () => {
   const navigate = useNavigate();
@@ -30,21 +54,10 @@ export const RequestHelpPage: React.FC = () => {
   // Active services list
   const services = serverServices.length > 0 ? serverServices : FALLBACK_SERVICES;
 
-  // Fallback demo vehicles if none registered yet
+  // Fall back to a placeholder vehicle only in demo mode. In a real build an owner
+  // with no saved vehicles sees VehicleSelector's empty state instead.
   const vehicles =
-    serverVehicles.length > 0
-      ? serverVehicles
-      : [
-          {
-            id: 'demo-veh-1',
-            user_id: 'owner-1',
-            vehicle_type: 'four_wheeler' as const,
-            make: 'Hyundai',
-            model: 'i20',
-            vehicle_number: 'KA-01-MJ-4521',
-            created_at: new Date().toISOString(),
-          },
-        ];
+    serverVehicles.length > 0 ? serverVehicles : IS_DEMO_MODE ? DEMO_VEHICLES : [];
 
   // Emergency-first form state: Location is step 1
   const [pickupLocation, setPickupLocation] = useState<LocationPoint>({
@@ -54,21 +67,69 @@ export const RequestHelpPage: React.FC = () => {
   });
 
   const [selectedServiceId, setSelectedServiceId] = useState<number | null>(null);
+  const [serviceCategoryFilter, setServiceCategoryFilter] = useState<'all' | 'mechanic' | 'towing' | 'fuel'>('all');
   const [selectedVehicleId, setSelectedVehicleId] = useState<string>(vehicles[0]?.id || '');
   const [issueDescription, setIssueDescription] = useState('');
   const [photoUrls, setPhotoUrls] = useState<string[]>([]);
   const [formError, setFormError] = useState<string | null>(null);
+  const [isAddVehicleOpen, setIsAddVehicleOpen] = useState(false);
+
+  // Quick emergency auth modal state if user is unauthenticated
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authName, setAuthName] = useState('');
+  const [authPhone, setAuthPhone] = useState('');
+  const [authSubmitting, setAuthSubmitting] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+
+  // One idempotency key per request draft, deliberately NOT regenerated per tap.
+  // Retrying a submission that may already have reached the server must reuse the
+  // same key, otherwise the retry dispatches a second partner to the same breakdown.
+  const idempotencyKeyRef = useRef<string>(createIdempotencyKey());
 
   // Auto-select first vehicle when serverVehicles load or if unselected
   useEffect(() => {
     if (serverVehicles.length > 0) {
-      if (!selectedVehicleId || selectedVehicleId.startsWith('demo-') || !serverVehicles.some((v) => v.id === selectedVehicleId)) {
+      const selectionIsStale =
+        !selectedVehicleId ||
+        !isRealVehicleId(selectedVehicleId) ||
+        !serverVehicles.some((v) => v.id === selectedVehicleId);
+
+      if (selectionIsStale) {
         setSelectedVehicleId(serverVehicles[0].id);
       }
     } else if (!selectedVehicleId && vehicles.length > 0) {
       setSelectedVehicleId(vehicles[0].id);
     }
   }, [serverVehicles, vehicles, selectedVehicleId]);
+
+  const dispatchJob = async (serviceCode: string) => {
+    try {
+      const newJob = await createJobMutation.mutateAsync({
+        payload: {
+          vehicle_id: selectedVehicleId,
+          service_code: serviceCode,
+          pickup_lat: pickupLocation.lat,
+          pickup_lng: pickupLocation.lng,
+          pickup_address_text: pickupLocation.address,
+          issue_description: issueDescription || undefined,
+          issue_photo_urls: photoUrls.length > 0 ? photoUrls : undefined,
+          // Retained for backward compatibility
+          service_id: selectedServiceId ?? undefined,
+          pickup: pickupLocation,
+        },
+        idempotencyKey: idempotencyKeyRef.current,
+      });
+
+      // This draft is now committed; any later request is a genuinely new one.
+      idempotencyKeyRef.current = createIdempotencyKey();
+
+      // Redirect to live matching / tracking page
+      navigate(`/owner/jobs/${newJob.id}`);
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to dispatch request. Please try again.';
+      setFormError(errorMsg);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -85,31 +146,67 @@ export const RequestHelpPage: React.FC = () => {
       return;
     }
 
+    const selectedService = services.find((s) => s.id === selectedServiceId);
+    if (!selectedService) {
+      setFormError('Please select the roadside assistance service needed.');
+      return;
+    }
+
     if (!selectedVehicleId) {
       setFormError('Please select which vehicle requires assistance.');
       return;
     }
 
-    try {
-      // Generate client-side Idempotency-Key (UUID v4) as required by API specification
-      const idempotencyKey = crypto.randomUUID();
+    // A placeholder vehicle exists only to make the form explorable offline; the
+    // backend has no such record, so submitting it would fail validation there.
+    if (!isRealVehicleId(selectedVehicleId)) {
+      setFormError('Please add a saved vehicle before requesting assistance.');
+      return;
+    }
 
-      const newJob = await createJobMutation.mutateAsync({
-        payload: {
-          vehicle_id: selectedVehicleId,
-          service_id: selectedServiceId,
-          pickup: pickupLocation,
-          issue_description: issueDescription || undefined,
-          issue_photo_urls: photoUrls.length > 0 ? photoUrls : undefined,
-        },
-        idempotencyKey,
+    // Backend requires an auth token
+    const token = getAuthToken();
+    if (!token) {
+      if (IS_DEMO_MODE) {
+        setAuthToken('demo-token-owner-asha');
+      } else {
+        setShowAuthModal(true);
+        return;
+      }
+    }
+
+    await dispatchJob(selectedService.code);
+  };
+
+  const handleQuickAuthSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError(null);
+
+    const cleanName = authName.trim();
+    const cleanPhone = authPhone.replace(/\D/g, '');
+
+    if (!cleanName || cleanPhone.length !== 10) {
+      setAuthError('Please enter your full name and a valid 10-digit mobile number.');
+      return;
+    }
+
+    setAuthSubmitting(true);
+    try {
+      await usersService.createUser({
+        name: cleanName,
+        phone: `+91${cleanPhone}`,
+        role: 'owner',
       });
 
-      // Redirect to live matching / tracking page
-      navigate(`/owner/jobs/${newJob.id}`);
+      setShowAuthModal(false);
+      const selectedService = services.find((s) => s.id === selectedServiceId);
+      if (selectedService) {
+        await dispatchJob(selectedService.code);
+      }
     } catch (err: unknown) {
-      const errorMsg = err instanceof Error ? err.message : 'Failed to dispatch request. Please try again.';
-      setFormError(errorMsg);
+      setAuthError(err instanceof Error ? err.message : 'Failed to register emergency contact.');
+    } finally {
+      setAuthSubmitting(false);
     }
   };
 
@@ -186,6 +283,62 @@ export const RequestHelpPage: React.FC = () => {
             <span className="text-xs text-emergency-700 font-semibold uppercase tracking-wider">Required</span>
           </div>
 
+          {/* Quick Category Filter: Tow / Mechanic / All */}
+          <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl border border-slate-200 overflow-x-auto" role="tablist" aria-label="Filter service types">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={serviceCategoryFilter === 'all'}
+              onClick={() => setServiceCategoryFilter('all')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+                serviceCategoryFilter === 'all'
+                  ? 'bg-white text-brand-800 shadow-sm border border-slate-200/60'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              All Options ({services.length})
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={serviceCategoryFilter === 'mechanic'}
+              onClick={() => setServiceCategoryFilter('mechanic')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap flex items-center gap-1 ${
+                serviceCategoryFilter === 'mechanic'
+                  ? 'bg-white text-brand-800 shadow-sm border border-slate-200/60'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              🔧 Mechanic (On-Site)
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={serviceCategoryFilter === 'towing'}
+              onClick={() => setServiceCategoryFilter('towing')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap flex items-center gap-1 ${
+                serviceCategoryFilter === 'towing'
+                  ? 'bg-white text-brand-800 shadow-sm border border-slate-200/60'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              🚛 Tow Truck
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={serviceCategoryFilter === 'fuel'}
+              onClick={() => setServiceCategoryFilter('fuel')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap flex items-center gap-1 ${
+                serviceCategoryFilter === 'fuel'
+                  ? 'bg-white text-brand-800 shadow-sm border border-slate-200/60'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              ⛽ Emergency Fuel
+            </button>
+          </div>
+
           {isLoadingServices ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 animate-pulse">
               {[1, 2, 3, 4].map((i) => (
@@ -194,14 +347,25 @@ export const RequestHelpPage: React.FC = () => {
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" role="radiogroup" aria-label="Available services">
-              {services.map((service) => (
-                <ServiceCard
-                  key={service.id}
-                  service={service}
-                  isSelected={selectedServiceId === service.id}
-                  onSelect={(s) => setSelectedServiceId(s.id)}
-                />
-              ))}
+              {services
+                .filter((service) => {
+                  if (serviceCategoryFilter === 'all') return true;
+                  if (serviceCategoryFilter === 'towing')
+                    return service.requires_vehicle_equipment || service.code.includes('tow');
+                  if (serviceCategoryFilter === 'mechanic')
+                    return !service.requires_vehicle_equipment && service.code !== 'fuel_delivery';
+                  if (serviceCategoryFilter === 'fuel')
+                    return service.code === 'fuel_delivery';
+                  return true;
+                })
+                .map((service) => (
+                  <ServiceCard
+                    key={service.id}
+                    service={service}
+                    isSelected={selectedServiceId === service.id}
+                    onSelect={(s) => setSelectedServiceId(s.id)}
+                  />
+                ))}
             </div>
           )}
         </section>
@@ -224,6 +388,7 @@ export const RequestHelpPage: React.FC = () => {
             vehicles={vehicles}
             selectedVehicleId={selectedVehicleId}
             onSelectVehicle={(v) => setSelectedVehicleId(v.id)}
+            onAddNewVehicle={() => setIsAddVehicleOpen(true)}
             isLoading={isLoadingVehicles}
           />
         </section>
@@ -297,6 +462,104 @@ export const RequestHelpPage: React.FC = () => {
           </p>
         </div>
       </form>
+
+      {/* Add Vehicle Modal */}
+      <AddVehicleModal
+        isOpen={isAddVehicleOpen}
+        onClose={() => setIsAddVehicleOpen(false)}
+        onSuccess={(v) => setSelectedVehicleId(v.id)}
+      />
+
+      {/* Quick Emergency Contact Modal if unauthenticated */}
+      {showAuthModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="quick-auth-title"
+        >
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-md w-full overflow-hidden p-6 space-y-4 animate-scale-up">
+            <div>
+              <h2 id="quick-auth-title" className="text-lg font-bold text-slate-900">
+                Emergency Contact Details
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                The dispatched partner needs your contact number to coordinate arrival.
+              </p>
+            </div>
+
+            {authError && (
+              <div
+                role="alert"
+                className="p-3 bg-red-50 border border-red-200 rounded-xl flex items-start gap-2 text-red-800 text-xs"
+              >
+                <AlertCircle className="w-4 h-4 shrink-0 text-red-600 mt-0.5" />
+                <span>{authError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleQuickAuthSubmit} className="space-y-3">
+              <div>
+                <label htmlFor="qa-name" className="block text-xs font-semibold text-slate-700 mb-1">
+                  Full Name
+                </label>
+                <input
+                  id="qa-name"
+                  type="text"
+                  placeholder="e.g. Asha Sharma"
+                  value={authName}
+                  onChange={(e) => setAuthName(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 focus:border-brand-700 focus:ring-1 focus:ring-brand-700 outline-none"
+                  required
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label htmlFor="qa-phone" className="block text-xs font-semibold text-slate-700 mb-1">
+                  Mobile Number
+                </label>
+                <div className="flex rounded-lg border border-slate-300 overflow-hidden focus-within:border-brand-700 focus-within:ring-1 focus-within:ring-brand-700">
+                  <span className="inline-flex items-center px-2.5 bg-slate-50 border-r border-slate-200 text-xs font-semibold text-slate-600">
+                    +91
+                  </span>
+                  <input
+                    id="qa-phone"
+                    type="tel"
+                    inputMode="numeric"
+                    maxLength={10}
+                    placeholder="98765 43210"
+                    value={authPhone}
+                    onChange={(e) => setAuthPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                    className="flex-1 px-3 py-2 bg-white text-sm text-slate-900 outline-none"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowAuthModal(false)}
+                  disabled={authSubmitting}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="sm"
+                  isLoading={authSubmitting}
+                >
+                  Continue & Dispatch
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

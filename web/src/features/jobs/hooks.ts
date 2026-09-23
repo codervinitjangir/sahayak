@@ -18,12 +18,23 @@ export function useJob(jobId: string | undefined) {
     queryKey: ['jobs', jobId],
     queryFn: () => (jobId ? jobsService.getJob(jobId) : Promise.reject('No jobId provided')),
     enabled: Boolean(jobId),
+    // Polling cadence per .agents/skills/dispatch-ui: fastest while we are actively
+    // searching for a partner, slower once one is on the way, stopped once the job
+    // has reached a terminal state.
     refetchInterval: (query) => {
-      const status = query.state.data?.status;
-      if (status === 'matching' || status === 'assigned' || status === 'partner_en_route') {
-        return 4000; // Poll every 4s during active transitions
+      switch (query.state.data?.status) {
+        case 'requested':
+        case 'matching':
+          return 4000;
+        case 'assigned':
+        case 'partner_en_route':
+          return 7000;
+        case 'in_progress':
+          return 15000;
+        default:
+          // completed / cancelled / no_match_found — nothing further will change.
+          return false;
       }
-      return false;
     },
   });
 }

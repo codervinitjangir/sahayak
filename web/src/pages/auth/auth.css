@@ -1,0 +1,918 @@
+/* ==========================================================================
+   Sahayak Auth — "Dispatch Console"
+
+   Composition follows the Payoneer reference: one rounded shell floating on a
+   light ground, split into a dark editorial panel and a calm white form panel.
+   Palette and type stay Sahayak's own — warm paper, ink, teal, Fraunces.
+
+   STATIC BY DESIGN. There is no ambient, looping or entrance animation
+   anywhere in this file. The only transitions are short responses to direct
+   user input (hover, focus, pressing a control), which is feedback rather
+   than motion. Everything is scoped to .auth-root so nothing leaks out.
+   ========================================================================== */
+
+.auth-root {
+  /* Warm paper identity, shared with the landing page */
+  --auth-paper: #F6F1E6;
+  --auth-ink: #1B1712;
+  --auth-ink-soft: #5B5346;
+  --auth-ink-faint: #9A917F;
+  --auth-line: #E7E0D2;
+
+  /* Teal brand, shared with the app shell */
+  --auth-brand: #0F766E;
+  --auth-brand-deep: #115E59;
+  --auth-brand-lit: #14B8A6;
+  --auth-brand-soft: #F0FDFA;
+
+  --auth-sos: #B91C1C;
+  --auth-sos-soft: #FEF4F2;
+
+  --auth-font-display: 'Fraunces', Georgia, serif;
+  --auth-font-body: 'Inter', system-ui, -apple-system, sans-serif;
+
+  /* Fraunces is loaded at 400/500/600 only — asking for 700 gets a faux-bold. */
+  --auth-display-weight: 600;
+
+  /* A radius *scale*, not one value. Rounding every surface to a full pill is
+     what makes a form look templated: a 56px field at 999px is a lozenge, and
+     when the field, the button and the switcher are all lozenges there is no
+     hierarchy left to read. Large surfaces get a considered corner; only
+     genuinely small chips stay fully round. */
+  --auth-r-lg: 14px;   /* field, primary button */
+  --auth-r-md: 10px;   /* switcher, identity chip, error */
+  --auth-r-sm: 8px;    /* inline controls inside a larger surface */
+  --auth-pill: 999px;  /* small chips and the left-panel mock only */
+
+  height: 100vh;
+  height: 100dvh;
+  max-height: 100vh;
+  max-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  font-family: var(--auth-font-body);
+  color: var(--auth-ink);
+  background: linear-gradient(175deg, #FFFFFF 0%, #FBF8F1 40%, var(--auth-paper) 100%);
+  overflow: hidden;
+}
+
+@media (max-width: 1023px) {
+  .auth-root {
+    padding: 0;
+    align-items: stretch;
+    /* Phone: let the page grow and scroll. The desktop viewport lock above
+       would otherwise clip the form on a short screen with no way to reach
+       the clipped part. (The left panel is display:none at this width.) */
+    height: auto;
+    max-height: none;
+    overflow: visible;
+  }
+}
+
+/* ── The floating shell ─────────────────────────────────────────────────── */
+
+.auth-shell {
+  width: 100%;
+  max-width: 1160px;
+  display: grid;
+  grid-template-columns: 1fr;
+  border-radius: 30px;
+  overflow: hidden;
+  background: #FFFFFF;
+  box-shadow:
+    0 50px 100px -40px rgba(27, 23, 18, 0.4),
+    0 12px 32px -18px rgba(27, 23, 18, 0.2),
+    0 0 0 1px rgba(27, 23, 18, 0.05);
+}
+
+@media (min-width: 1024px) {
+  .auth-shell {
+    grid-template-columns: 1fr 1fr;
+    height: min(840px, calc(100vh - 48px));
+  }
+}
+
+@media (max-width: 1023px) {
+  .auth-shell {
+    border-radius: 0;
+    min-height: 100vh;
+    min-height: 100dvh;
+    box-shadow: none;
+    background: var(--auth-paper);
+  }
+}
+
+/* ==========================================================================
+   1. LEFT — editorial panel
+   ========================================================================== */
+
+.auth-panel {
+  display: none;
+  position: relative;
+  overflow: hidden;
+  padding: 40px 40px 0;
+  flex-direction: column;
+  align-items: center;
+  background: linear-gradient(168deg, #2A231C 0%, #1B1712 52%, #120F0C 100%);
+  color: #F6F1E6;
+}
+
+@media (min-width: 1024px) {
+  .auth-panel { display: flex; }
+}
+
+/* A single large, static ring — the reference's quiet circle, read here as a
+   dispatch radius rather than decoration. */
+.auth-panel__ring {
+  position: absolute;
+  top: 27%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 430px;
+  height: 430px;
+  border-radius: 50%;
+  border: 1px solid rgba(246, 241, 230, 0.09);
+  pointer-events: none;
+}
+
+.auth-panel__ring::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 64%;
+  height: 64%;
+  border-radius: 50%;
+  border: 1px solid rgba(246, 241, 230, 0.06);
+}
+
+.auth-panel__headline {
+  position: relative;
+  z-index: 2;
+  font-family: var(--auth-font-display);
+  font-weight: var(--auth-display-weight);
+  font-size: clamp(28px, 2.6vw, 38px);
+  line-height: 1.12;
+  letter-spacing: -0.025em;
+  text-align: center;
+  margin: clamp(36px, 7vh, 72px) 0 0;
+  max-width: 18ch;
+}
+
+.auth-panel__subhead {
+  position: relative;
+  z-index: 2;
+  font-family: var(--auth-font-body);
+  font-size: 13.5px;
+  font-weight: 450;
+  line-height: 1.45;
+  letter-spacing: 0.005em;
+  color: rgba(246, 241, 230, 0.65);
+  text-align: center;
+  margin: 16px 0 0;
+  max-width: 36ch;
+}
+
+.auth-panel__headline em {
+  font-style: italic;
+  color: var(--auth-brand-lit);
+}
+
+/* ── Static device mock, cropped by the panel edge like the reference ───── */
+
+.auth-mock {
+  position: relative;
+  z-index: 2;
+  margin-top: auto;
+  width: 262px;
+  border-radius: 30px 30px 0 0;
+  padding: 10px 10px 0;
+  background: #0C0A08;
+  box-shadow:
+    0 -22px 60px -24px rgba(0, 0, 0, 0.9),
+    0 0 0 1px rgba(246, 241, 230, 0.1);
+}
+
+.auth-mock__screen {
+  border-radius: 22px 22px 0 0;
+  background: var(--auth-paper);
+  padding: 16px 15px 22px;
+  color: var(--auth-ink);
+}
+
+.auth-mock__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  border-radius: var(--auth-pill);
+  background: var(--auth-brand-soft);
+  color: var(--auth-brand-deep);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+
+.auth-mock__dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--auth-brand-lit);
+}
+
+.auth-mock__eta {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  margin-top: 12px;
+  font-family: var(--auth-font-display);
+  font-weight: var(--auth-display-weight);
+  font-size: 34px;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+.auth-mock__eta span {
+  font-family: var(--auth-font-body);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--auth-ink-soft);
+}
+
+.auth-mock__label {
+  font-size: 11px;
+  color: var(--auth-ink-soft);
+  margin: 5px 0 14px;
+}
+
+.auth-mock__track {
+  height: 5px;
+  border-radius: var(--auth-pill);
+  background: #E7E0D2;
+  overflow: hidden;
+}
+
+.auth-mock__track i {
+  display: block;
+  width: 62%;
+  height: 100%;
+  border-radius: var(--auth-pill);
+  background: linear-gradient(90deg, var(--auth-brand-deep), var(--auth-brand-lit));
+}
+
+.auth-mock__partner {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 14px;
+  padding-top: 13px;
+  border-top: 1px solid #E7E0D2;
+}
+
+.auth-mock__avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--auth-ink);
+  color: var(--auth-paper);
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.auth-mock__name {
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.auth-mock__meta {
+  font-size: 10.5px;
+  color: var(--auth-ink-faint);
+}
+
+/* ==========================================================================
+   2. RIGHT — form panel
+   ========================================================================== */
+
+.auth-form-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 30px 30px 26px;
+  background: #FFFFFF;
+  /* Partner mode adds a row, and a short laptop leaves no slack. Scrolling
+     beats clipping: `hidden` here used to swallow the legal line at 720p. */
+  overflow-y: auto;
+}
+
+@media (min-width: 1024px) {
+  .auth-form-panel { padding: 34px 46px 30px; }
+}
+
+@media (max-width: 1023px) {
+  .auth-form-panel {
+    background: var(--auth-paper);
+    padding: 22px 20px 28px;
+  }
+}
+
+.auth-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-shrink: 0;
+}
+
+.auth-wordmark {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+  color: var(--auth-ink);
+}
+
+.auth-wordmark__text {
+  font-family: var(--auth-font-display);
+  font-weight: 600;
+  font-size: 23px;
+  letter-spacing: -0.022em;
+  line-height: 1.1;
+  color: var(--auth-ink);
+  transition: opacity 0.16s;
+}
+
+.auth-wordmark:hover .auth-wordmark__text {
+  opacity: 0.82;
+}
+
+.auth-toplink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--auth-ink-soft);
+  text-decoration: none;
+  padding: 8px 14px;
+  border-radius: var(--auth-pill);
+  border: 1px solid var(--auth-line);
+  background: #FFFFFF;
+  white-space: nowrap;
+  transition: border-color 0.16s, color 0.16s;
+}
+
+.auth-toplink:hover {
+  border-color: var(--auth-ink-faint);
+  color: var(--auth-ink);
+}
+
+/* The form sits optically centred in the remaining space */
+.auth-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  width: 100%;
+  max-width: 388px;
+  margin: 0 auto;
+  padding: 20px 0;
+}
+
+@media (max-width: 1023px) {
+  .auth-body { justify-content: flex-start; padding: 24px 0 0; }
+}
+
+/* ── Title ──────────────────────────────────────────────────────────────── */
+
+.auth-title {
+  font-family: var(--auth-font-display);
+  font-weight: var(--auth-display-weight);
+  font-size: 32px;
+  line-height: 1.15;
+  letter-spacing: -0.028em;
+  color: var(--auth-ink);
+  margin: 0 0 7px;
+  text-wrap: balance;
+}
+
+.auth-desc {
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--auth-ink-soft);
+  margin: 0 0 20px;
+  max-width: 36ch;
+  text-wrap: pretty;
+}
+
+/* ── Field label ────────────────────────────────────────────────────────────
+   Every serious sign-in form shows the label rather than relying on the
+   placeholder: once the user types, a placeholder-only field loses its name.
+
+   Sentence case, not micro-caps. Wide-tracked uppercase on every small piece
+   of text is a dashboard mannerism — Stripe, Linear and Vercel all label their
+   fields in plain sentence case, and it sits better against Fraunces. */
+
+.auth-label {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--auth-ink-soft);
+  margin: 0 0 7px 2px;
+}
+
+/* ── Role switcher ──────────────────────────────────────────────────────── */
+
+.auth-roles {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  padding: 3px;
+  border-radius: var(--auth-r-md);
+  background: #F4F1EA;
+  border: 1px solid #E6E0D3;
+  margin-bottom: 22px;
+}
+
+.auth-roles__thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: calc(50% - 3px);
+  height: calc(100% - 6px);
+  border-radius: calc(var(--auth-r-md) - 3px);
+  background: #FFFFFF;
+  /* A hairline plus one soft ply. A puffy drop shadow on a 38px control is the
+     difference between a real segmented control and a template's. */
+  box-shadow: 0 0 0 1px rgba(27, 23, 18, 0.07), 0 1px 2px rgba(27, 23, 18, 0.07);
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.auth-roles--partner .auth-roles__thumb {
+  transform: translateX(100%);
+}
+
+.auth-role {
+  position: relative;
+  z-index: 1;
+  min-height: 38px;
+  border: none;
+  background: transparent;
+  border-radius: calc(var(--auth-r-md) - 3px);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 550;
+  color: #6C6252;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  transition: color 0.16s;
+}
+
+.auth-role:hover { color: var(--auth-ink); }
+
+.auth-role--active {
+  color: var(--auth-ink);
+  font-weight: 650;
+}
+
+/* ── Phone field ────────────────────────────────────────────────────────── */
+
+.auth-field {
+  display: flex;
+  align-items: center;
+  height: 56px;
+  padding: 0 8px 0 6px;
+  background: #FFFFFF;
+  border: 1px solid #DDD3C1;
+  border-radius: var(--auth-r-lg);
+  box-shadow: 0 1px 2px rgba(27, 23, 18, 0.04);
+  transition: border-color 0.16s, box-shadow 0.16s;
+}
+
+.auth-field:hover {
+  border-color: #D2C4AE;
+}
+
+/* Two-layer ring: a tight brand hairline plus a soft halo. The hairline keeps
+   the edge crisp at any zoom, the halo carries the focus at a glance. */
+.auth-field:focus-within {
+  border-color: var(--auth-brand);
+  box-shadow: 0 0 0 1px var(--auth-brand), 0 0 0 4px rgba(15, 118, 110, 0.13);
+}
+
+.auth-field--invalid {
+  border-color: var(--auth-sos);
+  box-shadow: 0 0 0 1px var(--auth-sos), 0 0 0 4px rgba(185, 28, 28, 0.1);
+}
+
+/* Native select kept underneath so the mobile wheel picker still works */
+.auth-dial {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 42px;
+  padding: 0 10px 0 12px;
+  border-radius: var(--auth-r-sm);
+  color: var(--auth-ink);
+  font-size: 14.5px;
+  font-weight: 650;
+  flex-shrink: 0;
+  transition: background 0.16s;
+}
+
+.auth-dial:hover { background: #F7F4ED; }
+
+.auth-dial__select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  font-size: 16px; /* stops iOS zooming on focus */
+}
+
+.auth-dial__flag {
+  width: 20px;
+  height: 15px;
+  border-radius: 3px;
+  overflow: hidden;
+  display: block;
+  box-shadow: 0 0 0 1px rgba(27, 23, 18, 0.12);
+  flex-shrink: 0;
+}
+
+.auth-field__rule {
+  width: 1px;
+  height: 24px;
+  background: #E4DBC8;
+  flex-shrink: 0;
+  margin: 0 14px 0 4px;
+}
+
+.auth-field__input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  background: transparent;
+  font-family: inherit;
+  font-size: 16.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--auth-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.auth-field__input::placeholder {
+  color: #7A7264;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+/* Chrome paints autofilled inputs a pale yellow that ignores `background`.
+   The inset shadow is the only way to repaint it, and the text fill has to be
+   set separately or the digits stay Chrome's blue-black. */
+.auth-field__input:-webkit-autofill,
+.auth-field__input:-webkit-autofill:hover,
+.auth-field__input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px #FFFFFF inset !important;
+  -webkit-text-fill-color: var(--auth-ink) !important;
+  caret-color: var(--auth-ink);
+}
+
+/* ── Identity chip ──────────────────────────────────────────────────────── */
+
+.auth-identity {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 7px 6px 12px;
+  border-radius: var(--auth-r-md);
+  background: #F7F4ED;
+  border: 1px solid var(--auth-line);
+  width: fit-content;
+  max-width: 100%;
+  margin-bottom: 18px;
+}
+
+.auth-identity__num {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--auth-ink);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.auth-identity__change {
+  border: none;
+  background: #FFFFFF;
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 650;
+  color: var(--auth-brand);
+  cursor: pointer;
+  padding: 5px 11px;
+  border-radius: var(--auth-r-sm);
+  border: 1px solid var(--auth-line);
+  transition: border-color 0.16s;
+}
+
+.auth-identity__change:hover { border-color: var(--auth-brand); }
+
+/* ── OTP boxes ──────────────────────────────────────────────────────────── */
+
+/* Split 3 + 3, the way a code is read aloud, rather than one run of six. The
+   middle column stays empty — pushing the 4th box across it keeps all six the
+   same width without adding a spacer element to the DOM. */
+.auth-otp {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr) 14px repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.auth-otp__box:nth-of-type(4) { grid-column-start: 5; }
+
+.auth-otp__box {
+  width: 100%;
+  height: 56px;
+  text-align: center;
+  font-family: inherit;
+  font-size: 21px;
+  font-weight: 650;
+  color: var(--auth-ink);
+  background: #FFFFFF;
+  border: 1px solid #DDD3C1;
+  border-radius: var(--auth-r-lg);
+  outline: none;
+  font-variant-numeric: tabular-nums;
+  transition: border-color 0.16s, box-shadow 0.16s, background 0.16s;
+  -moz-appearance: textfield;
+}
+
+.auth-otp__box::-webkit-outer-spin-button,
+.auth-otp__box::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.auth-otp__box:hover { border-color: #D2C4AE; }
+
+.auth-otp__box:focus {
+  border-color: var(--auth-brand);
+  box-shadow: 0 0 0 1px var(--auth-brand), 0 0 0 4px rgba(15, 118, 110, 0.13);
+}
+
+/* Static "you are here" marker. A blinking caret would be motion; a resting
+   outline on the next empty box says the same thing and holds still. */
+.auth-otp__box--next:not(:focus) {
+  border-color: #C8BCA6;
+  background: #FCFAF6;
+}
+
+.auth-otp__box--filled {
+  border-color: rgba(15, 118, 110, 0.4);
+  background: var(--auth-brand-soft);
+}
+
+.auth-otp--error .auth-otp__box {
+  border-color: var(--auth-sos);
+  background: var(--auth-sos-soft);
+}
+
+/* ── Helper row ─────────────────────────────────────────────────────────── */
+
+.auth-helper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 16px;
+  min-height: 18px;
+}
+
+.auth-linkbtn {
+  border: none;
+  background: transparent;
+  padding: 0;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--auth-brand);
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.auth-linkbtn:hover { text-decoration: underline; }
+
+/* A counting-down resend should read as "not yet", not as a broken link. */
+.auth-linkbtn:disabled {
+  color: var(--auth-ink-soft);
+  cursor: default;
+  font-weight: 550;
+  text-decoration: none;
+  font-variant-numeric: tabular-nums;
+  background: #F7F4ED;
+  border: 1px solid var(--auth-line);
+  border-radius: var(--auth-pill);
+  padding: 4px 11px;
+  font-size: 11.5px;
+}
+
+/* ── Error ──────────────────────────────────────────────────────────────── */
+
+.auth-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  border-radius: var(--auth-r-md);
+  background: var(--auth-sos-soft);
+  border: 1px solid #FBD5D0;
+  color: #991B1B;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+/* ── Primary action ─────────────────────────────────────────────────────────
+   Flat brand fill. The inset hairline along the top edge is what separates an
+   expensive-looking button from a coloured rectangle: it reads as a lit edge
+   and survives at any size, unlike a gradient.
+
+   The shadow is neutral ink, not teal. A coloured glow under a primary button
+   is the single most recognisable "designed by a generator" move — no bank,
+   no payments company and no OS ships one. Weight comes from the fill. */
+
+.auth-submit {
+  position: relative;
+  width: 100%;
+  min-height: 54px;
+  border: none;
+  border-radius: var(--auth-r-lg);
+  background: var(--auth-brand);
+  color: #FFFFFF;
+  font-family: inherit;
+  font-size: 15.5px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 1px 2px rgba(27, 23, 18, 0.14);
+  transition: background 0.16s, box-shadow 0.16s;
+}
+
+/* Darken, don't lift. A full-width button that floats up on hover reads as a
+   card, not a control. */
+.auth-submit:hover:not(:disabled) {
+  background: var(--auth-brand-deep);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 2px 5px rgba(27, 23, 18, 0.16);
+}
+
+.auth-submit:active:not(:disabled) {
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.18);
+}
+
+.auth-submit:disabled {
+  background: #EFEAE0;
+  color: #A39C90;
+  box-shadow: inset 0 0 0 1px rgba(27, 23, 18, 0.05);
+  cursor: not-allowed;
+}
+
+.auth-submit--busy { cursor: progress; }
+
+/* ── Emergency shortcut (demoted to a plain text link) ──────────────────── */
+
+.auth-emergency-link {
+  margin-top: 14px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--auth-ink-soft);
+}
+
+.auth-emergency-link a {
+  color: #554C3E;
+  font-weight: 500;
+  text-decoration: none;
+  transition: color 0.15s;
+}
+
+.auth-emergency-link a:hover {
+  color: var(--auth-brand);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* ── Trust line (plain text, no icon) ───────────────────────────────────── */
+
+.auth-trust-line {
+  font-size: 12.5px;
+  font-weight: 450;
+  color: #736959;
+  margin: 10px 0 20px;
+  padding-left: 2px;
+  line-height: 1.45;
+}
+
+/* ── Footer strip ───────────────────────────────────────────────────────── */
+
+.auth-foot {
+  flex-shrink: 0;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--auth-line);
+  width: 100%;
+  max-width: 388px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.auth-legal {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--auth-ink-soft);
+  margin: 0;
+}
+
+.auth-legal a {
+  color: var(--auth-ink);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.auth-partner-cta {
+  margin-top: 12px;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--auth-ink-soft);
+}
+.auth-partner-cta a {
+  color: var(--auth-brand);
+  font-weight: 650;
+  text-decoration: none;
+  margin-left: 4px;
+}
+
+.auth-partner-cta a:hover { text-decoration: underline; }
+
+/* ── Focus visibility ──────────────────────────────────────────────────── */
+
+.auth-root :focus-visible {
+  outline: 2px solid var(--auth-brand);
+  outline-offset: 2px;
+}
+
+.auth-root .auth-field__input:focus-visible,
+.auth-root .auth-otp__box:focus-visible {
+  outline: none;
+}
+
+/* Default blue selection clashes with warm paper; brand it. */
+.auth-form-panel ::selection {
+  background: rgba(15, 118, 110, 0.18);
+  color: var(--auth-ink);
+}
+
+/* ── Small screens ─────────────────────────────────────────────────────── */
+
+@media (max-width: 400px) {
+  .auth-otp {
+    grid-template-columns: repeat(3, 1fr) 8px repeat(3, 1fr);
+    gap: 6px;
+  }
+  .auth-otp__box { height: 50px; font-size: 18px; border-radius: 12px; }
+  .auth-title { font-size: 26px; }
+}
+
+/* Honour the OS setting even though nothing here loops */
+@media (prefers-reduced-motion: reduce) {
+  .auth-root *,
+  .auth-root *::before,
+  .auth-root *::after {
+    transition-duration: 0.01ms !important;
+    animation: none !important;
+  }
+}

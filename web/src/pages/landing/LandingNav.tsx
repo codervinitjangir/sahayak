@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 
 interface NavItem {
   label: string;
@@ -12,6 +13,10 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Pricing', href: '#pricing' },
   { label: 'Track Job', href: '/owner' },
 ];
+
+// NAV_ITEMS mixes in-page anchors with app routes. Anchors must stay raw <a> so
+// the browser handles the scroll; routes go through Link so they don't full-reload.
+const isAnchor = (href: string) => href.startsWith('#');
 
 export const LandingNav: React.FC = () => {
   const [scrolled, setScrolled] = useState(false);
@@ -39,18 +44,22 @@ export const LandingNav: React.FC = () => {
       <ul className="landing-nav__links">
         {NAV_ITEMS.map((item) => (
           <li key={item.label}>
-            <a href={item.href}>{item.label}</a>
+            {isAnchor(item.href) ? (
+              <a href={item.href}>{item.label}</a>
+            ) : (
+              <Link to={item.href}>{item.label}</Link>
+            )}
           </li>
         ))}
       </ul>
 
       <div className="landing-nav__right">
-        <a href="/owner" className="landing-nav__login">
+        <Link to="/login" className="landing-nav__login">
           Log in
-        </a>
-        <a href="/owner/request" className="landing-nav__cta">
+        </Link>
+        <Link to="/owner/request" className="landing-nav__cta">
           Get Roadside Help
-        </a>
+        </Link>
       </div>
     </nav>
   );

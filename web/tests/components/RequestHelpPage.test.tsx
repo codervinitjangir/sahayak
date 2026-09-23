@@ -127,10 +127,101 @@ describe('RequestHelpPage Component', () => {
     });
 
     const [calledPayload, calledIdempotencyKey] = vi.mocked(jobsService.createJob).mock.calls[0];
-    expect(calledPayload.service_id).toBe(1);
+    expect(calledPayload.service_code).toBe('flat_tyre');
+    expect(calledPayload.pickup_lat).toBe(12.9716);
+    expect(calledPayload.pickup_lng).toBe(77.5946);
+    expect((calledPayload as unknown as Record<string, unknown>).user_id).toBeUndefined();
     expect(calledPayload.vehicle_id).toBe('veh-123');
     expect(calledPayload.issue_description).toBe('Punctured by a nail on 100ft road');
     expect(calledIdempotencyKey).toBeTruthy();
     expect(typeof calledIdempotencyKey).toBe('string');
+  });
+
+  it('reuses the same Idempotency-Key when a failed submit is retried', async () => {
+    // The whole point of the header: a retry of a request that may already have
+    // reached the server must not dispatch a second partner to the same breakdown.
+    vi.mocked(jobsService.createJob).mockRejectedValue(new Error('Network unreachable'));
+
+    renderWithProviders(<RequestHelpPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Flat-Tyre Support')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByText('Flat-Tyre Support'));
+
+    const dispatchBtn = screen.getByRole('button', { name: /Dispatch Verified Partner/i });
+
+    fireEvent.click(dispatchBtn);
+    await waitFor(() => {
+      expect(jobsService.createJob).toHaveBeenCalledTimes(1);
+    });
+
+    fireEvent.click(dispatchBtn);
+    await waitFor(() => {
+      expect(jobsService.createJob).toHaveBeenCalledTimes(2);
+    });
+
+    const firstKey = vi.mocked(jobsService.createJob).mock.calls[0][1];
+    const secondKey = vi.mocked(jobsService.createJob).mock.calls[1][1];
+    expect(firstKey).toBeTruthy();
+    expect(secondKey).toBe(firstKey);
+  });
+
+  it('issues a fresh Idempotency-Key once a request has actually been created', async () => {
+    vi.mocked(jobsService.createJob)
+      .mockRejectedValueOnce(new Error('Network unreachable'))
+      .mockResolvedValue({
+        id: 'job-created-999',
+        user_id: 'usr-1',
+        vehicle_id: 'veh-123',
+        vehicle_number: 'KA-01-MJ-4521',
+        service_id: 1,
+        status: 'matching',
+        pickup_location: { lat: 12.9716, lng: 77.5946, address: 'Bengaluru Central, Karnataka' },
+        requested_at: '2026-09-15T11:00:00Z',
+      });
+
+    renderWithProviders(<RequestHelpPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Flat-Tyre Support')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByText('Flat-Tyre Support'));
+
+    const dispatchBtn = screen.getByRole('button', { name: /Dispatch Verified Partner/i });
+
+    // Attempt 1 fails, attempt 2 succeeds — both are the same logical request.
+    fireEvent.click(dispatchBtn);
+    await waitFor(() => expect(jobsService.createJob).toHaveBeenCalledTimes(1));
+    fireEvent.click(dispatchBtn);
+    await waitFor(() => expect(jobsService.createJob).toHaveBeenCalledTimes(2));
+
+    // Attempt 3 is a genuinely new request and must not be deduped against it.
+    fireEvent.click(dispatchBtn);
+    await waitFor(() => expect(jobsService.createJob).toHaveBeenCalledTimes(3));
+
+    const calls = vi.mocked(jobsService.createJob).mock.calls;
+    expect(calls[1][1]).toBe(calls[0][1]);
+    expect(calls[2][1]).not.toBe(calls[1][1]);
+  });
+
+  it('never submits the offline placeholder vehicle id', async () => {
+    // With no saved vehicles the form still shows a demo vehicle so it is explorable,
+    // but that id does not exist server-side and must be blocked before dispatch.
+    vi.mocked(vehiclesService.listVehicles).mockResolvedValue([]);
+
+    renderWithProviders(<RequestHelpPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Flat-Tyre Support')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByText('Flat-Tyre Support'));
+
+    fireEvent.click(screen.getByRole('button', { name: /Dispatch Verified Partner/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Please add a saved vehicle before requesting assistance/i)).toBeInTheDocument();
+    });
+    expect(jobsService.createJob).not.toHaveBeenCalled();
   });
 });
