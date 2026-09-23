@@ -42,3 +42,4 @@ for f in db/migrations/*.sql; do psql "$DATABASE_URL" -f "$f"; done
 |------|---------|--------------|
 | `001_auth_user_id.sql` | 2026-09-17 | Links `users` and `partners` rows to Supabase Auth accounts. Written down retroactively on 2026-09-18 — the columns were applied directly to the live database during the auth task and only ever existed in two code comments. |
 | `002_dispatch_audit_columns.sql` | 2026-09-18 | Makes a dispatch decision auditable: the individual weighted score terms, and whether a naive nearest-partner search would have picked the same partner. |
+| `003_assignment_cancelled_status.sql` | 2026-09-20 | Adds `'cancelled'` to the `job_assignments.status` CHECK. Job lifecycle transitions close out the accepted assignment when a job ends, and a cancelled job had no truthful word for it — `'rejected'` would have charged the partner's acceptance rate for the customer's decision. See ADR-012. |

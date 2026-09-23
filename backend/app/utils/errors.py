@@ -42,19 +42,61 @@ class ErrorCode:
     # permitted. A partner touching another partner's profile, or a user calling
     # a partner-only route.
     FORBIDDEN = "FORBIDDEN"
-    # Valid Supabase token, but its `sub` matches no row in users or partners.
-    # Separate from both of the above because it is the one auth failure with a
-    # specific client remedy: call link-auth. 403 rather than 401 — the token is
-    # genuine, there is simply no profile behind it yet.
+    # Valid Supabase token whose `sub` matches no row — but an *unlinked profile
+    # for this person already exists*, found by the token's phone claim. The
+    # remedy is link-auth, not signup. 403 rather than 401 — the token is
+    # genuine, it simply is not bound to the profile yet.
     IDENTITY_NOT_LINKED = "IDENTITY_NOT_LINKED"
+    # Valid Supabase token, no local row, and no unlinked profile to bind to:
+    # the caller passed OTP but never completed signup. Split out from
+    # IDENTITY_NOT_LINKED because the two have *different client remedies* and a
+    # client cannot guess which one applies — this one means "show the signup
+    # screen", the other means "call link-auth". Both are 403 and neither is
+    # 401, which matters more than it looks: a client that reads a 401 sends the
+    # user back to OTP entry, and since the token is already valid that loop has
+    # no exit. See ADR-011.
+    USER_NOT_REGISTERED = "USER_NOT_REGISTERED"
     # The target row already points at a different Supabase account. Refusing is
     # what stops a second account from claiming a partner profile that is
     # already in use.
     AUTH_ALREADY_LINKED = "AUTH_ALREADY_LINKED"
 
-    # Jobs
+    # Vehicles
     VEHICLE_NOT_FOUND = "VEHICLE_NOT_FOUND"
+    # The registration number is empty, over-long, or contains something other
+    # than letters and digits once spaces and hyphens are stripped. Its own code
+    # rather than a bare 400 because the client's remedy is specific and local —
+    # re-prompt for this one field — and because it must not be confused with a
+    # rejection of the *vehicle*. There is deliberately no VEHICLE_ALREADY_EXISTS
+    # beside it: registration numbers are not unique in this system, by choice.
+    # See ADR-014.
+    INVALID_VEHICLE_NUMBER = "INVALID_VEHICLE_NUMBER"
+
+    # Jobs
     JOB_NOT_FOUND = "JOB_NOT_FOUND"
+    # The job is not in a state from which the requested status is reachable —
+    # a skipped step ('assigned' straight to 'completed'), or a job that has
+    # already finished. 409 rather than 400: the body is perfectly valid, it is
+    # the *current state of the resource* that makes it impossible, and the
+    # client's remedy is to re-read the job rather than to fix the request.
+    INVALID_STATUS_TRANSITION = "INVALID_STATUS_TRANSITION"
+    # Completing a job without saying what it cost. Its own code rather than a
+    # generic validation error because the field is only required for one
+    # target status, which a schema-level "required" cannot express without
+    # making every other transition carry a price.
+    PRICE_FINAL_REQUIRED = "PRICE_FINAL_REQUIRED"
+    # A field was sent that does not belong to the requested transition — a
+    # price on an 'in_progress' move, a cancellation reason on a completion.
+    # Refused rather than ignored: silently dropping it is how a price goes
+    # missing with a 200 and nothing in the log.
+    FIELD_NOT_APPLICABLE = "FIELD_NOT_APPLICABLE"
+    # The job has already finished — 'completed' or 'cancelled' — so there is
+    # nothing left to cancel. Distinct from INVALID_STATUS_TRANSITION, which
+    # answers "you cannot get *there* from here" and belongs to a caller who
+    # named a target status. An owner cancelling names no target, so the only
+    # thing that can be wrong is the job being over already, and the client's
+    # remedy is specific: stop offering a cancel button for this job.
+    JOB_ALREADY_TERMINAL = "JOB_ALREADY_TERMINAL"
 
     # Dispatch
     #
@@ -76,6 +118,13 @@ class ErrorCode:
 
     # Users
     USER_NOT_FOUND = "USER_NOT_FOUND"
+    # Phone (or email) already belongs to a registered vehicle owner. Mirrors
+    # PARTNER_ALREADY_EXISTS rather than reusing it, so a client that talks to
+    # both signup paths does not have to disambiguate by endpoint.
+    USER_ALREADY_EXISTS = "USER_ALREADY_EXISTS"
+    # The number being registered is not the number the caller's token proves
+    # they control. See register_user in app/services/user_service.py.
+    PHONE_MISMATCH = "PHONE_MISMATCH"
 
 
 # Codes for HTTPExceptions raised by FastAPI itself (unknown route, unsupported

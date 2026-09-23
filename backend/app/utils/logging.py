@@ -42,6 +42,11 @@ _REDACTED_KEYS = frozenset(
         "longitude",
         "lat",
         "lng",
+        # A registration number identifies one specific car, and joined to the
+        # owner row two columns away, one specific person. It is never passed to
+        # log_event by our own code; this entry is the backstop for the line
+        # somebody adds in a hurry while debugging a dispatch problem.
+        "vehicle_number",
     }
 )
 

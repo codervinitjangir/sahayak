@@ -8,6 +8,7 @@ from app.api.job_assignments import router as job_assignments_router
 from app.api.jobs import router as jobs_router
 from app.api.partners import router as partners_router
 from app.api.users import router as users_router
+from app.api.vehicles import router as vehicles_router
 from app.config.redis_client import close_redis
 from app.middlewares.error_handlers import register_error_handlers
 from app.middlewares.request_id import RequestIdMiddleware
@@ -64,6 +65,8 @@ app.include_router(partners_router)
 # Include the job assignments router (a partner accepting or rejecting an offer)
 app.include_router(job_assignments_router)
 
-# Include the users router (auth link only — see the registration gap noted in
-# app/api/users.py)
+# Include the users router (owner registration and the auth link)
 app.include_router(users_router)
+
+# Include the vehicles router (an owner registering and listing their vehicles)
+app.include_router(vehicles_router)

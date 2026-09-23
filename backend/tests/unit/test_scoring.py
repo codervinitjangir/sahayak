@@ -18,6 +18,8 @@ import pytest
 
 from app.utils.scoring import (
     MAX_RADIUS_M,
+    PRIOR_MEAN,
+    PRIOR_WEIGHT,
     UNRATED_PARTNER_RATING_SCORE,
     WEIGHTS,
     Candidate,
@@ -141,34 +143,96 @@ class TestSkillScore:
 
 
 class TestRatingScore:
-    def test_five_stars_is_one(self):
-        assert rating_score(5.0, 20) == 1.0
+    def test_a_well_reviewed_five_star_partner_approaches_but_never_reaches_one(self):
+        """Smoothing is asymptotic, and that is the point.
 
-    def test_normalises_to_the_five_point_scale(self):
-        assert rating_score(4.5, 10) == pytest.approx(0.9)
+        A perfect score would mean "no further evidence could change our mind",
+        which is never true of a rating. What must hold is that more evidence
+        moves it closer.
+        """
+        assert 0.9 < rating_score(5.0, 50) < 1.0
 
-    def test_unrated_partner_gets_the_neutral_default(self):
+    def test_more_reviews_move_the_score_toward_the_observed_average(self):
+        """The property the whole prior exists to produce.
+
+        One five-star review is weak evidence and scores near the prior; fifty
+        is strong evidence and scores near the truth. Without this, a partner
+        with a single review outranks one who earned 4.7 over a year — the
+        specific failure that made the naive rating_avg / 5 unusable.
+        """
+        ladder = [rating_score(5.0, n) for n in (1, 5, 20, 100)]
+        assert ladder == sorted(ladder)
+        assert ladder[0] < 0.8, "one review should not look like a proven partner"
+        assert ladder[-1] > 0.95, "a hundred reviews should count as proven"
+
+    def test_one_bad_review_does_not_bury_a_new_partner(self):
+        """The same protection running the other way.
+
+        A partner nobody dispatches never earns a second rating, so a single
+        one-star review must not be able to end their time on the platform
+        before it starts. They should score below the prior — it *is* evidence —
+        but nowhere near the floor.
+        """
+        after_one_bad = rating_score(1.0, 1)
+        assert after_one_bad < UNRATED_PARTNER_RATING_SCORE
+        assert after_one_bad > 0.5
+
+    def test_unrated_partner_lands_exactly_on_the_prior(self):
         """rating_avg is 0.0 by column default for a partner nobody has rated.
 
         Reading that as a score would treat "nobody has rated them" and
-        "everybody rated them one star" as the same fact.
+        "everybody rated them one star" as the same fact. The prior keeps them
+        apart with no special case — this is the same formula, with zero
+        observations in it.
         """
-        assert rating_score(0.0, 0) == UNRATED_PARTNER_RATING_SCORE
+        assert rating_score(0.0, 0) == pytest.approx(UNRATED_PARTNER_RATING_SCORE)
+        assert UNRATED_PARTNER_RATING_SCORE == pytest.approx(PRIOR_MEAN / 5.0)
 
-    def test_null_rating_gets_the_neutral_default(self):
-        assert rating_score(None, 5) == UNRATED_PARTNER_RATING_SCORE
+    def test_null_rating_is_no_evidence_not_zero_stars(self):
+        """A row with reviews but no average is inconsistent, not damning.
 
-    def test_neutral_default_sits_between_good_and_bad(self):
-        """The reason the default is 0.6 and not 0.0 or 1.0.
-
-        A new joiner must stay reachable — a partner who is never dispatched can
-        never earn a rating — while a proven good partner still outranks them.
+        Scoring it as zero stars would punish a partner for a data fault, so it
+        falls back to the prior exactly as an unrated partner does.
         """
-        assert rating_score(1.0, 3) < UNRATED_PARTNER_RATING_SCORE < rating_score(4.5, 10)
+        assert rating_score(None, 5) == pytest.approx(UNRATED_PARTNER_RATING_SCORE)
 
-    def test_out_of_range_rating_is_clamped(self):
-        assert rating_score(7.0, 3) == 1.0
-        assert rating_score(-1.0, 3) == 0.0
+    def test_prior_sits_between_good_and_bad(self):
+        """Why the prior is 3.5 and not 0 or 5.
+
+        A new joiner must stay reachable while a proven good partner still
+        outranks them, and a proven bad one still loses to them.
+        """
+        assert (
+            rating_score(1.0, 12)
+            < UNRATED_PARTNER_RATING_SCORE
+            < rating_score(4.5, 12)
+        )
+
+    def test_out_of_range_rating_is_clamped_to_the_scale(self):
+        """Clamped before smoothing, so a corrupt row cannot push the posterior
+        outside [0, 1] — asserted against the in-range equivalent rather than a
+        literal, since the literal changes whenever the prior is re-tuned."""
+        assert rating_score(7.0, 3) == pytest.approx(rating_score(5.0, 3))
+        assert rating_score(-1.0, 3) == pytest.approx(rating_score(0.0, 3))
+
+    def test_the_prior_is_worth_exactly_prior_weight_reviews(self):
+        """PRIOR_WEIGHT is a count of imaginary reviews, not a fudge factor.
+
+        A partner with exactly PRIOR_WEIGHT real reviews is judged half on their
+        own evidence and half on the prior, so their score lands exactly midway
+        between the two. That is what makes the constant arguable — "how many
+        reviews before we believe you?" is a question with an answer — rather
+        than a number somebody nudged until the ordering looked right.
+        """
+        observed, count = 5.0, int(PRIOR_WEIGHT)
+        midpoint = ((observed + PRIOR_MEAN) / 2) / 5.0
+        assert rating_score(observed, count) == pytest.approx(midpoint)
+
+    def test_stays_in_the_unit_interval_across_the_whole_input_space(self):
+        for avg in (0.0, 1.0, 2.5, 4.9, 5.0):
+            for count in (0, 1, 3, 25, 400):
+                value = rating_score(avg, count)
+                assert 0.0 <= value <= 1.0, f"rating_score({avg}, {count}) left [0, 1]"
 
 
 class TestScore:
@@ -176,11 +240,32 @@ class TestScore:
         total, _ = score(make_candidate())
         assert 0.0 <= total <= 1.0
 
-    def test_best_possible_candidate_scores_one(self):
+    def test_the_best_realistic_candidate_scores_near_but_below_one(self):
+        """1.0 is unreachable, on purpose.
+
+        Three components can max out — standing on the pickup point, idle, exact
+        skill match — but rating_score is smoothed toward the prior and only
+        approaches its ceiling as reviews accumulate. A total of exactly 1.0
+        would mean no further evidence could change the ranking, which is never
+        true of a partner. What matters is that the ideal candidate is close to
+        the top and still below it.
+        """
         total, _ = score(
-            make_candidate(distance_m=0.0, active_job_count=0, rating_avg=5.0, rating_count=9)
+            make_candidate(distance_m=0.0, active_job_count=0, rating_avg=5.0, rating_count=200)
         )
-        assert total == pytest.approx(1.0)
+        assert 0.97 < total < 1.0
+
+    def test_no_input_can_push_the_total_outside_the_unit_interval(self):
+        """The invariant that makes two stored scores comparable at all."""
+        extremes = [
+            make_candidate(distance_m=0.0, active_job_count=0, rating_avg=5.0, rating_count=999),
+            make_candidate(distance_m=MAX_RADIUS_M * 3, active_job_count=99,
+                           rating_avg=0.0, rating_count=999),
+            make_candidate(distance_m=-100.0, active_job_count=-5, rating_avg=None, rating_count=0),
+        ]
+        for candidate in extremes:
+            total, _ = score(candidate)
+            assert 0.0 <= total <= 1.0
 
     def test_every_component_is_in_unit_interval(self):
         _, components = score(
@@ -223,7 +308,7 @@ class TestRank:
         assert [c.partner_id for _, _, c in ranked] == ["b", "a"]
 
     def test_all_else_equal_the_idle_partner_wins(self):
-        busy = make_candidate(partner_id="a", active_job_count=3)
+        busy = make_candidate(partner_id="a", active_job_count=1)
         idle = make_candidate(partner_id="b", active_job_count=0)
         ranked = rank([busy, idle])
         assert ranked[0][2].partner_id == "b"
@@ -241,12 +326,18 @@ class TestRank:
         the divergence metric will correctly report zero.
 
         The numbers are chosen to make the margin real rather than marginal: the
-        near partner is 1 km away but juggling three jobs and rated 1.5/5; the
-        far partner is 4 km away, idle and rated 4.9/5. Distance alone picks the
-        first; any sane weighting picks the second.
+        near partner is 1 km away but already on a job and rated 1.5/5; the far
+        partner is 4 km away, idle and rated 4.9/5, both with enough reviews to
+        outweigh the prior. Distance alone picks the first; any sane weighting
+        picks the second.
+
+        active_job_count stays at 1 deliberately — a partner on 3 jobs would be
+        removed by MAX_CONCURRENT_JOBS before scoring ever saw them, so testing
+        the weighting against a candidate who could not exist would prove less
+        than it appears to.
         """
         near_bad = make_candidate(
-            partner_id="near", distance_m=1_000.0, active_job_count=3,
+            partner_id="near", distance_m=1_000.0, active_job_count=1,
             rating_avg=1.5, rating_count=12,
         )
         far_good = make_candidate(
@@ -272,7 +363,7 @@ class TestRank:
 
     def test_scores_are_non_increasing_down_the_ranking(self):
         candidates = [
-            make_candidate(partner_id="a", distance_m=8_000.0, active_job_count=2),
+            make_candidate(partner_id="a", distance_m=8_000.0, active_job_count=1),
             make_candidate(partner_id="b", distance_m=200.0),
             make_candidate(partner_id="c", distance_m=4_000.0, rating_avg=3.0),
         ]

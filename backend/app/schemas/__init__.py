@@ -4,7 +4,10 @@ from app.schemas.common import (
 from app.schemas.user import (
     UserBase, UserCreate, UserUpdate, UserResponse, UserAuthLinkResponse
 )
-from app.schemas.vehicle import VehicleBase, VehicleCreate, VehicleUpdate, VehicleResponse
+from app.schemas.vehicle import (
+    VehicleBase, VehicleCreate, VehicleUpdate, VehicleResponse,
+    VehicleCreateRequest, VehicleItem
+)
 from app.schemas.service import (
     ServiceCategoryBase, ServiceCategoryCreate, ServiceCategoryResponse,
     ServiceBase, ServiceCreate, ServiceResponse
@@ -34,6 +37,7 @@ __all__ = [
     "ApiResponse", "Meta", "ErrorDetail", "ErrorResponse", "HealthResponse", "envelope",
     "UserBase", "UserCreate", "UserUpdate", "UserResponse", "UserAuthLinkResponse",
     "VehicleBase", "VehicleCreate", "VehicleUpdate", "VehicleResponse",
+    "VehicleCreateRequest", "VehicleItem",
     "ServiceCategoryBase", "ServiceCategoryCreate", "ServiceCategoryResponse",
     "ServiceBase", "ServiceCreate", "ServiceResponse",
     "AdminBase", "AdminCreate", "AdminResponse",

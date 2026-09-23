@@ -24,23 +24,50 @@ from app.models.service import Service
 
 # An assignment the partner has taken on. Note this is NOT the spec's literal
 # ('accepted', 'in_progress'): job_assignments.status has a CHECK constraint
-# allowing only ('offered','accepted','rejected','timed_out','completed'), so
-# 'in_progress' can never appear in that column — it is a *job* status. Filtering
-# on it would have been a silent no-op that read as if it did something.
+# allowing only ('offered','accepted','rejected','timed_out','completed',
+# 'cancelled'), so 'in_progress' can never appear in that column — it is a *job*
+# status. Filtering on it would have been a silent no-op that read as if it did
+# something.
 #
 # The intent behind it is served by pairing this with ACTIVE_JOB_STATUSES below.
 ACTIVE_ASSIGNMENT_STATUSES: tuple[str, ...] = ("accepted",)
 
-# ...and the job it belongs to has not finished. Joining through to the job is
-# what makes the count correct today: nothing in the API yet moves an assignment
-# from 'accepted' to 'completed', so an assignment-only count would treat every
-# job a partner has ever finished as still occupying them, and their load_score
-# would decay permanently toward zero.
+# ...and the job it belongs to has not finished.
+#
+# Both halves now move: POST /jobs/{id}/status closes the assignment out to
+# 'completed' or 'cancelled' when the job reaches a terminal state. The join is
+# kept anyway, and it is not redundant — it is what makes the count correct
+# when the two sides disagree. An assignment left at 'accepted' by a failed or
+# partial write would otherwise occupy its partner forever, and the job status
+# is the side that a human reading the database would trust.
+#
+# Historical note, because it explains the join's existence: before that
+# endpoint there was no way to move an assignment off 'accepted' at all, so an
+# assignment-only count would have treated every job a partner had ever
+# finished as still occupying them, decaying their load_score permanently
+# toward zero. See ADR-012.
 ACTIVE_JOB_STATUSES: tuple[str, ...] = ("assigned", "partner_en_route", "in_progress")
 
 # Equipment is only trusted once someone has checked it. A self-declared flatbed
 # is a claim, not a flatbed.
 VERIFIED = "verified"
+
+# How many active jobs a partner may hold before dispatch stops offering them
+# more.
+#
+# 2, and this is a filter rather than a score for a physical reason: one mechanic
+# with one van can be in one place. The second job is defensible — it is the one
+# they drive to next, and holding it stops the queue stalling while they finish —
+# the third is a promise nobody can keep, and the customer waiting on it has no
+# way to know they are third in line.
+#
+# load_score already prefers the idle partner, but a preference is not a limit:
+# with the weights as they stand, a partner juggling four jobs 200 m away still
+# outscores an idle one 6 km out. Without this ceiling the busiest partner in a
+# dense area becomes the default answer for everything near them — which is
+# exactly what a demo with more than a handful of test partners would surface,
+# and exactly the kind of thing that looks like the algorithm "not working".
+MAX_CONCURRENT_JOBS: int = 2
 
 
 async def get_service_by_id(db: AsyncSession, service_id: int) -> Optional[Service]:
@@ -113,18 +140,28 @@ async def get_eligible_partners(
         behind it), so matching a service to a specific type would be matching on
         a string somebody typed. That is a real gap and is left visible rather
         than papered over with a guess at the type names.
+      * fewer than ``MAX_CONCURRENT_JOBS`` active jobs — a partner at capacity is
+        not a worse choice, they are not a choice. See the constant for why this
+        is a filter and not left to load_score.
 
     Returns rows of (id, name, rating_avg, rating_count, active_job_count).
     active_job_count is COUNTed here and stored nowhere — the same derived-data
     rule the rest of the codebase follows. A stored counter would need every
     accept, reject, completion and cancellation to remember to update it, and the
     first one that forgot would make a partner permanently over- or under-loaded
-    with nothing to indicate why.
+    with nothing to indicate why. It is returned as well as filtered on because
+    the score needs the number, not just the verdict.
     """
     ids = list(partner_ids)
     if not ids:
         return []
 
+    # Built once and used twice — once projected, once filtered on. Postgres
+    # will evaluate it per candidate row in both places, which is affordable
+    # precisely because ``ids`` is already bounded by the radius search. The
+    # alternative (a derived table, or repeating the count in a HAVING) buys
+    # nothing here and puts the eligibility rule further from the filters it
+    # belongs with.
     active_job_count = (
         select(func.count(JobAssignment.id))
         .select_from(JobAssignment)
@@ -136,7 +173,6 @@ async def get_eligible_partners(
         )
         .correlate(Partner)
         .scalar_subquery()
-        .label("active_job_count")
     )
 
     offers_this_service = exists().where(
@@ -152,13 +188,14 @@ async def get_eligible_partners(
             Partner.name,
             Partner.rating_avg,
             Partner.rating_count,
-            active_job_count,
+            active_job_count.label("active_job_count"),
         )
         .where(
             Partner.id.in_(ids),
             Partner.is_available.is_(True),
             Partner.verification_status == VERIFIED,
             offers_this_service,
+            active_job_count < MAX_CONCURRENT_JOBS,
         )
     )
 
