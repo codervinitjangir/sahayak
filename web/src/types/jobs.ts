@@ -59,17 +59,31 @@ export interface JobAssignment {
   was_baseline_choice?: boolean;
 }
 
+export interface JobTimelineEvent {
+  status: JobStatus;
+  timestamp?: string;
+  created_at?: string;
+  note?: string;
+  title?: string;
+  description?: string;
+}
+
 export interface Job {
   id: string;
-  user_id: string;
+  user_id?: string;
   vehicle_id: string;
-  vehicle_number: string;
-  service_id: number;
+  vehicle_number?: string;
+  service_id?: number;
+  service_code?: string;
   service?: Service;
   status: JobStatus;
-  pickup_location: LocationPoint;
+  pickup_location?: LocationPoint;
+  pickup_lat?: number;
+  pickup_lng?: number;
   pickup_address_text?: string;
   drop_location?: LocationPoint;
+  drop_lat?: number;
+  drop_lng?: number;
   issue_description?: string;
   issue_photo_urls?: string[];
   price_estimate?: number;
@@ -79,6 +93,7 @@ export interface Job {
   cancelled_at?: string;
   cancellation_reason?: string;
   current_assignment?: JobAssignment;
+  timeline?: JobTimelineEvent[] | Partial<Record<JobStatus, string>>;
   partner?: {
     id: string;
     name: string;
@@ -89,10 +104,19 @@ export interface Job {
 }
 
 export interface CreateJobPayload {
-  vehicle_id: string;
-  service_id: number;
-  pickup: LocationPoint;
-  drop_location?: LocationPoint;
+  service_code: string;
+  pickup_lat: number;
+  pickup_lng: number;
+  vehicle_id?: string;
+  pickup_address_text?: string;
+  drop_lat?: number;
+  drop_lng?: number;
   issue_description?: string;
   issue_photo_urls?: string[];
+  /** @deprecated Kept for backward compatibility */
+  service_id?: number;
+  /** @deprecated Kept for backward compatibility */
+  pickup?: LocationPoint;
+  /** @deprecated Kept for backward compatibility */
+  drop_location?: LocationPoint;
 }

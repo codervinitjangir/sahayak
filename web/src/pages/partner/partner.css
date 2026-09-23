@@ -1,0 +1,1280 @@
+/* ==========================================================================
+   Partner Pages — App-shell styling
+   Uses existing Tailwind brand tokens; this file covers only patterns
+   that don't map cleanly to utility classes.
+   ========================================================================== */
+
+/* ── Step Indicator ─────────────────────────────────────────────────────── */
+
+.step-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  padding: 24px 16px 8px;
+}
+
+.step-indicator__dot {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.25s ease;
+}
+
+.step-indicator__dot--active {
+  background: #0F766E;
+  color: #fff;
+  box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.15);
+}
+
+.step-indicator__dot--done {
+  background: #0F766E;
+  color: #fff;
+}
+
+.step-indicator__dot--upcoming {
+  background: #F1F5F9;
+  color: #94A3B8;
+  border: 2px solid #E2E8F0;
+}
+
+.step-indicator__line {
+  width: 40px;
+  height: 2px;
+  background: #E2E8F0;
+  flex-shrink: 0;
+  transition: background 0.25s ease;
+}
+
+.step-indicator__line--done {
+  background: #0F766E;
+}
+
+/* ── OTP Input ──────────────────────────────────────────────────────────── */
+
+.otp-input-group {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
+.otp-input-group__digit {
+  width: 48px;
+  height: 56px;
+  text-align: center;
+  font-size: 22px;
+  font-weight: 600;
+  font-family: 'Inter', system-ui, sans-serif;
+  border: 2px solid #E2E8F0;
+  border-radius: 12px;
+  background: #fff;
+  color: #1E293B;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  caret-color: #0F766E;
+}
+
+.otp-input-group__digit:focus {
+  border-color: #0F766E;
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
+}
+
+.otp-input-group__digit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── File Upload Card ───────────────────────────────────────────────────── */
+
+.file-upload-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border: 2px solid #E2E8F0;
+  border-radius: 12px;
+  background: #fff;
+  transition: border-color 0.2s;
+}
+
+.file-upload-card:hover:not(.file-upload-card--disabled) {
+  border-color: #CBD5E1;
+}
+
+.file-upload-card--has-file {
+  border-color: #99F6E4;
+  background: #F0FDFA;
+}
+
+.file-upload-card--disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.file-upload-card__info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.file-upload-card__icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: #F1F5F9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.file-upload-card--has-file .file-upload-card__icon {
+  background: #CCFBF1;
+}
+
+.file-upload-card__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.file-upload-card__label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1E293B;
+}
+
+.file-upload-card__filename {
+  font-size: 12px;
+  color: #64748B;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 180px;
+}
+
+.file-upload-card__actions {
+  flex-shrink: 0;
+  margin-left: 12px;
+}
+
+.file-upload-card__pick {
+  font-size: 13px;
+  font-weight: 600;
+  color: #0F766E;
+  background: none;
+  border: 1.5px solid #0F766E;
+  border-radius: 8px;
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+
+.file-upload-card__pick:hover {
+  background: #F0FDFA;
+}
+
+.file-upload-card__remove {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: none;
+  background: #FEF2F2;
+  color: #B91C1C;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.file-upload-card__remove:hover {
+  background: #FEE2E2;
+}
+
+/* ── Partner Signup Page ────────────────────────────────────────────────── */
+
+.partner-signup {
+  min-height: 100vh;
+  background: #F8FAFC;
+  display: flex;
+  flex-direction: column;
+}
+
+.partner-signup__header {
+  padding: 16px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #fff;
+  border-bottom: 1px solid #E2E8F0;
+}
+
+.partner-signup__back {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  border: 1.5px solid #E2E8F0;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #475569;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.partner-signup__back:hover {
+  border-color: #94A3B8;
+  color: #1E293B;
+  background: #F8FAFC;
+}
+
+.partner-signup__content {
+  flex: 1;
+  max-width: 1140px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 32px 24px 60px;
+}
+
+.partner-signup__title {
+  font-size: 24px;
+  font-weight: 800;
+  color: #0F172A;
+  margin: 0 0 6px;
+  line-height: 1.3;
+  letter-spacing: -0.02em;
+}
+
+.partner-signup__subtitle {
+  font-size: 14px;
+  color: #64748B;
+  margin: 0 0 24px;
+  line-height: 1.5;
+}
+
+.partner-signup__footer {
+  padding: 24px 0 0;
+  border-top: 1px solid #E2E8F0;
+  margin-top: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+/* ── Category Cards ─────────────────────────────────────────────────────── */
+
+/* ── Category Cards ─────────────────────────────────────────────────────── */
+
+.category-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.category-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 18px;
+  border: 1.5px solid #E2E8F0;
+  border-radius: 16px;
+  background: #fff;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+  min-height: 150px;
+}
+
+.category-card:hover {
+  border-color: #CBD5E1;
+}
+
+/* Single selection indicator only — no card border-color, background-tint, or icon-fill changes */
+.category-card--selected {
+  border-color: #E2E8F0;
+  background: #fff;
+  box-shadow: none;
+}
+
+.category-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.category-card__radio {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid #CBD5E1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: #fff;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+
+.category-card--selected .category-card__radio {
+  border-color: #0F766E;
+  background: #0F766E;
+}
+
+.category-card__icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: #F8FAFC;
+  color: #475569;
+  border: 1px solid #E2E8F0;
+}
+
+.category-card--selected .category-card__icon {
+  background: #F8FAFC;
+  color: #475569;
+}
+
+.category-card__text {
+  flex: 1;
+  min-width: 0;
+}
+
+.category-card__label {
+  font-size: 15px;
+  font-weight: 700;
+  color: #1E293B;
+  display: block;
+}
+
+.category-card__desc {
+  font-size: 12px;
+  color: #64748B;
+  display: block;
+  margin-top: 3px;
+  line-height: 1.4;
+}
+
+/* ── Service Checkbox Cards ─────────────────────────────────────────────── */
+
+.service-checks {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.service-check {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1.5px solid #E2E8F0;
+  border-radius: 12px;
+  background: #fff;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.service-check:hover {
+  border-color: #CBD5E1;
+}
+
+/* Single selection indicator only — no row border-color or background tint changes */
+.service-check--selected {
+  border-color: #E2E8F0;
+  background: #fff;
+}
+
+.service-check__box {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  border: 2px solid #CBD5E1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: #fff;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+
+.service-check--selected .service-check__box {
+  border-color: #0F766E;
+  background: #0F766E;
+  color: #fff;
+}
+
+.service-check__label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1E293B;
+}
+
+/* ── Success Screen ─────────────────────────────────────────────────────── */
+
+.signup-success {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  text-align: center;
+  padding: 40px 20px;
+}
+
+.signup-success__icon {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: #DCFCE7;
+  color: #15803D;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 20px;
+  animation: success-pop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes success-pop {
+  0% { transform: scale(0.5); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.signup-success__title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #1E293B;
+  margin: 0 0 8px;
+}
+
+.signup-success__subtitle {
+  font-size: 14px;
+  color: #64748B;
+  margin: 0;
+}
+
+/* ── Verification Status Page ───────────────────────────────────────────── */
+
+/*
+ * The old rules here were left over from a slate-palette draft (#1E293B,
+ * #E2E8F0, #F1F5F9) and gave every single verification item its own white box
+ * with a border and a 12px radius. Nine items meant nine boxes inside two
+ * bordered sections inside a bordered page — three levels of frame for one
+ * line of text each. The list is hairline-separated rows now, so all of that
+ * is gone; what remains is the part that genuinely needs CSS.
+ */
+
+/* Progress ring. A conic sweep is one element and one repaint — no SVG arc
+   maths, and it inherits the console teal directly. */
+.verification-ring {
+  width: 64px;
+  height: 64px;
+  border-radius: 9999px;
+  flex-shrink: 0;
+  background: conic-gradient(#0F766E var(--ring-sweep, 0deg), #E7E0D2 0deg);
+}
+
+.verification-ring__inner {
+  position: absolute;
+  inset: 6px;
+  border-radius: 9999px;
+  background: #FFFFFF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* The status rail tracks the canvas scroll rather than running off the top of
+   it. .partner-main-canvas is the scroll container, so sticky resolves there. */
+@media (min-width: 1024px) {
+  .verification-rail {
+    position: sticky;
+    top: 0;
+  }
+}
+
+/* ── Preferences Page ───────────────────────────────────────────────────── */
+
+.preferences-page {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 20px 16px 40px;
+}
+
+@media (min-width: 640px) {
+  .preferences-page {
+    padding: 20px 24px 40px;
+  }
+}
+
+.preferences-page__title {
+  font-size: 22px;
+  font-weight: 800;
+  color: #0F172A;
+  margin: 0;
+  letter-spacing: -0.02em;
+}
+
+/* Stepped Page-by-Page Container */
+.pref-step-card {
+  border: 1px solid #E2E8F0;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  overflow: hidden;
+}
+
+/* Stepper tab bar */
+.pref-stepper {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid #E2E8F0;
+  background: #F8FAFC;
+  padding: 8px;
+  gap: 6px;
+}
+
+.pref-step-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: #64748B;
+  transition: all 0.15s ease;
+  min-width: 0;
+}
+
+.pref-step-tab:hover:not(.pref-step-tab--active) {
+  background: #F1F5F9;
+  color: #1E293B;
+}
+
+.pref-step-tab--active {
+  background: #fff;
+  color: #0F766E;
+  border-color: #E2E8F0;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.pref-step-tab__num {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  background: #E2E8F0;
+  color: #475569;
+  flex-shrink: 0;
+}
+
+.pref-step-tab--active .pref-step-tab__num {
+  background: #0F766E;
+  color: #fff;
+}
+
+.pref-step-tab__label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pref-step-tab__badge {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .pref-step-tab__badge {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 500;
+    color: #64748B;
+    background: #F1F5F9;
+    padding: 1px 6px;
+    border-radius: 8px;
+    margin-left: 2px;
+  }
+}
+
+.pref-step-content {
+  padding: 20px 18px 24px;
+}
+
+@media (min-width: 640px) {
+  .pref-step-content {
+    padding: 24px 24px 28px;
+  }
+}
+
+.pref-page-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-top: 1px solid #E2E8F0;
+  background: #F8FAFC;
+}
+
+@media (min-width: 640px) {
+  .pref-page-footer {
+    padding: 16px 24px;
+  }
+}
+
+.pref-section__header:hover {
+  background: #F8FAFC;
+}
+
+.pref-section__header:focus-visible {
+  outline: 2px solid #0F766E;
+  outline-offset: -2px;
+}
+
+.pref-section__header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.pref-section__header-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: #F0FDFA;
+  color: #0F766E;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.pref-section__header-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0F172A;
+}
+
+.pref-section__header-badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: #475569;
+  background: #F1F5F9;
+  border: 1px solid #E2E8F0;
+  padding: 1.5px 7px;
+  border-radius: 10px;
+  margin-left: 6px;
+  white-space: nowrap;
+}
+
+.pref-section__chevron {
+  color: #94A3B8;
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  flex-shrink: 0;
+}
+
+.pref-section__chevron--open {
+  transform: rotate(180deg);
+}
+
+.pref-section__body {
+  padding: 2px 16px 16px;
+  border-top: 1px solid #F1F5F9;
+}
+
+/* Master availability card */
+.master-availability-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1.5px solid #E2E8F0;
+  background: #F8FAFC;
+  margin-bottom: 10px;
+  transition: all 0.2s ease;
+}
+
+.master-availability-card--active {
+  background: #F0FDFA;
+  border-color: #99F6E4;
+}
+
+/* Service toggle row */
+.service-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid #F1F5F9;
+}
+
+.service-toggle-row:last-child {
+  border-bottom: none;
+}
+
+.service-toggle-row--locked {
+  opacity: 0.72;
+}
+
+/* Toggle switch */
+.toggle-switch {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  background: #CBD5E1;
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+  transition: background 0.2s;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.toggle-switch:focus-visible {
+  outline: 2px solid #0F766E;
+  outline-offset: 2px;
+}
+
+/* Teal, not the accent red. "On" is the desired state on every switch in this
+   console — a red ON in a teal console reads as an error, not as enabled. */
+.toggle-switch--active {
+  background: #0F766E;
+}
+
+.toggle-switch:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.toggle-switch__thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  transition: transform 0.2s;
+}
+
+.toggle-switch--active .toggle-switch__thumb {
+  transform: translateX(20px);
+}
+
+/* Equipment card in preferences */
+.equipment-card-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border: 1px solid #E2E8F0;
+  border-radius: 12px;
+  background: #fff;
+  margin-bottom: 10px;
+  transition: border-color 0.15s;
+  position: relative;
+}
+
+.equipment-card-item:hover {
+  border-color: #CBD5E1;
+}
+
+/* Kebab menu popover */
+.kebab-menu {
+  position: relative;
+}
+
+.kebab-menu__trigger {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: #64748B;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.kebab-menu__trigger:hover {
+  background: #F1F5F9;
+  color: #1E293B;
+}
+
+.kebab-menu__trigger:focus-visible {
+  outline: 2px solid #0F766E;
+  outline-offset: 1px;
+}
+
+.kebab-menu__dropdown {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  margin-top: 4px;
+  width: 160px;
+  background: #fff;
+  border: 1px solid #E2E8F0;
+  border-radius: 10px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+  padding: 4px;
+  z-index: 30;
+}
+
+.kebab-menu__item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s;
+}
+
+.kebab-menu__item--danger {
+  color: #DC2626;
+}
+
+.kebab-menu__item--danger:hover {
+  background: #FEF2F2;
+}
+
+/* Bento Grid in Section C */
+.bento-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+@media (min-width: 640px) {
+  .bento-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+  }
+}
+
+.bento-stat-card {
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: 14px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 102px;
+  height: 102px;
+  box-sizing: border-box;
+}
+
+.bento-stat-card__label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748B;
+}
+
+.bento-stat-card__value {
+  font-size: 20px;
+  font-weight: 800;
+  color: #0F172A;
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.bento-stat-card__sub {
+  font-size: 12px;
+  font-weight: 500;
+  color: #64748B;
+}
+
+.bento-dispatch-card {
+  grid-column: 1 / -1;
+  border: 1.5px solid #E2E8F0;
+  border-radius: 14px;
+  padding: 18px 20px;
+  background: #fff;
+  transition: all 0.2s ease;
+}
+
+.bento-dispatch-card--ready {
+  background: #F0FDF4;
+  border-color: #86EFAC;
+}
+
+.bento-dispatch-card--limited {
+  background: #FFFBEB;
+  border-color: #FCD34D;
+}
+
+.bento-dispatch-card--inactive {
+  background: #F8FAFC;
+  border-color: #E2E8F0;
+}
+
+
+/* ── Utility ────────────────────────────────────────────────────────────── */
+
+.partner-input {
+  width: 100%;
+  padding: 12px 14px;
+  border: 2px solid #E2E8F0;
+  border-radius: 12px;
+  font-size: 15px;
+  font-family: 'Inter', system-ui, sans-serif;
+  color: #1E293B;
+  background: #fff;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.partner-input:focus {
+  border-color: #0F766E;
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
+}
+
+.partner-input::placeholder {
+  color: #94A3B8;
+}
+
+/* Phone input group */
+.phone-input-group {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+}
+
+.phone-input-group__prefix {
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  background: #F1F5F9;
+  border: 2px solid #E2E8F0;
+  border-right: none;
+  border-radius: 12px 0 0 12px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.phone-input-group .partner-input {
+  border-radius: 0 12px 12px 0;
+}
+
+/* Resend OTP timer */
+.otp-resend {
+  text-align: center;
+  margin-top: 16px;
+  font-size: 13px;
+  color: #64748B;
+}
+
+.otp-resend__link {
+  color: #0F766E;
+  font-weight: 600;
+  cursor: pointer;
+  background: none;
+  border: none;
+  font-size: 13px;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.otp-resend__link:hover {
+  color: #115E59;
+}
+
+.otp-resend__link:disabled {
+  color: #94A3B8;
+  cursor: not-allowed;
+  text-decoration: none;
+}
+
+/* ── Indian Commercial HSRP License Plate Preview ───────────────────────── */
+
+.hsrp-plate {
+  position: relative;
+  background: #FFE000;
+  background: linear-gradient(180deg, #FFE600 0%, #F5C500 100%);
+  border: 2px solid #181818;
+  border-radius: 8px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), 0 2px 4px rgba(0, 0, 0, 0.06);
+}
+
+.hsrp-plate__ind {
+  background: #002B7F;
+  color: #ffffff;
+  border-radius: 4px;
+  padding: 3px 5px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.hsrp-plate__number {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: #111827;
+}
+
+/* ── Map-Centric Bento Dashboard Styles ─────────────────────────────────── */
+
+.live-zone-map {
+  position: relative;
+  overflow: hidden;
+  min-height: 340px;
+  aspect-ratio: 4 / 3;
+}
+
+@media (min-width: 1024px) {
+  .live-zone-map {
+    min-height: 480px;
+    aspect-ratio: auto;
+  }
+}
+
+.mock-map__svg {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.mock-map__svg--muted {
+  filter: grayscale(0.7) opacity(0.5);
+  transition: filter 0.3s ease, opacity 0.3s ease;
+}
+
+.mock-map__pin--pulse {
+  animation: map-pin-pulse 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+@keyframes map-pin-pulse {
+  0% {
+    r: 8px;
+    opacity: 0.8;
+  }
+  50% {
+    r: 20px;
+    opacity: 0.3;
+  }
+  100% {
+    r: 32px;
+    opacity: 0;
+  }
+}
+
+.service-scroll {
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.service-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.service-scroll > * {
+  scroll-snap-align: start;
+  flex-shrink: 0;
+}
+
+/* ── Warm Paper Stationery Visual Fidelity Styles ────────────────────────── */
+
+.bento-card {
+  border-radius: 18px;
+  background-color: #FFFFFF;
+  border: 1px solid #E7E0D2;
+  box-shadow: 0 4px 20px -4px rgba(27, 23, 18, 0.06);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.bento-card:hover {
+  border-color: #D4CAAF;
+  box-shadow: 0 8px 24px -4px rgba(27, 23, 18, 0.1);
+}
+
+/* Map glass floating panels */
+.glass-panel {
+  background: rgba(251, 248, 241, 0.94);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(231, 224, 210, 0.85);
+  box-shadow: 0 10px 25px -5px rgba(27, 23, 18, 0.08), 0 8px 10px -6px rgba(27, 23, 18, 0.04);
+}
+
+.glass-dock {
+  background: rgba(251, 248, 241, 0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(231, 224, 210, 0.9);
+  box-shadow: 0 12px 30px -4px rgba(27, 23, 18, 0.12);
+}
+
+/* Fanned out portrait cards */
+.fanned-stack {
+  position: relative;
+  height: 140px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.fanned-card {
+  position: absolute;
+  width: 105px;
+  height: 125px;
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: 0 8px 20px -4px rgba(27, 23, 18, 0.15);
+  border: 2px solid #E7E0D2;
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.fanned-card--left {
+  transform: translateX(-42px) rotate(-8deg) scale(0.9);
+  z-index: 10;
+}
+
+.fanned-card--right {
+  transform: translateX(42px) rotate(8deg) scale(0.9);
+  z-index: 10;
+}
+
+.fanned-card--center {
+  transform: translateX(0) rotate(0deg) scale(1.02);
+  z-index: 20;
+  box-shadow: 0 12px 28px -4px rgba(27, 23, 18, 0.22);
+}
+
+.fanned-stack:hover .fanned-card--left {
+  transform: translateX(-52px) rotate(-12deg) scale(0.92);
+}
+
+.fanned-stack:hover .fanned-card--right {
+  transform: translateX(52px) rotate(12deg) scale(0.92);
+}
+
+.fanned-stack:hover .fanned-card--center {
+  transform: translateX(0) scale(1.05);
+}
+
+/* ── Warm Paper Stationery Left Sidebar & Shell ───────────────────────────── */
+
+/* The shell is exactly one viewport tall and never scrolls itself. That is
+   what pins the sidebar: with `min-height` the document grew past the screen
+   and the window scrolled, taking the sidebar along with it. */
+.partner-shell {
+  height: 100vh;
+  background-color: #F6F1E6;
+  display: flex;
+  overflow: hidden;
+}
+
+.partner-sidebar {
+  width: 256px;
+  background-color: #FBF8F1;
+  color: #1B1712;
+  border-right: 1px solid #E7E0D2;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 24px 18px;
+  flex-shrink: 0;
+  user-select: none;
+  height: 100%;
+  /* Fixed in place. `auto` rather than `hidden` only so a short laptop screen
+     can still reach the footer — it is its own scroll region either way, so
+     scrolling the canvas never moves it. */
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.partner-sidebar::-webkit-scrollbar {
+  display: none;
+}
+
+/* The one scroll region on the page. */
+.partner-main-canvas {
+  flex: 1;
+  background-color: #F6F1E6;
+  padding: 24px 32px;
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+@media (max-width: 1024px) {
+  /* Stacked, the sidebar is a top bar — pinning it here would eat the screen,
+     so the document goes back to scrolling as one piece. */
+  .partner-shell {
+    flex-direction: column;
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
+  }
+  .partner-sidebar {
+    width: 100%;
+    padding: 16px 20px;
+    border-right: none;
+    border-bottom: 1px solid #E7E0D2;
+    height: auto;
+    overflow-y: visible;
+  }
+  .partner-main-canvas {
+    padding: 16px;
+    height: auto;
+    overflow-y: visible;
+  }
+}
+
+.citisum-active-pill {
+  background-color: #0F766E;
+  color: #FFFFFF;
+  font-weight: 600;
+  border-radius: 12px;
+  box-shadow: 0 4px 14px rgba(15, 118, 110, 0.25);
+}
+
+
+
+

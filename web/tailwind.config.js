@@ -24,6 +24,14 @@ export default {
           700: '#B91C1C', // Danger token
           800: '#991B1B',
         },
+        // Partner-console accent — the de-facto choice across 40+ usages in
+        // PartnerDashboard, Preferences, OfferTimer focus rings, and toggles.
+        // Registered here so every partner page references one token instead
+        // of hardcoding the hex. brand-700/teal remains the owner-facing primary.
+        accent: {
+          DEFAULT: '#F03F3F',
+          hover: '#D93434',
+        },
         status: {
           success: '#15803D',
           warning: '#B45309',
@@ -35,6 +43,19 @@ export default {
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+      },
+      // `shadow-xs` / `shadow-2xs` are Tailwind v4 names and do not exist in
+      // v3, so every one of the ~30 already written across App, Preferences,
+      // VerificationStatus and PartnerSignup was silently doing nothing and
+      // those panels rendered dead flat. These are the v4 values, which is
+      // what the markup was written against.
+      boxShadow: {
+        '2xs': '0 1px rgb(0 0 0 / 0.05)',
+        xs: '0 1px 2px 0 rgb(0 0 0 / 0.05)',
+      },
+      // Same story: `backdrop-blur-xs` is a v4 name (3 uses).
+      backdropBlur: {
+        xs: '4px',
       },
     },
   },

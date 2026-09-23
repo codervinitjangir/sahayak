@@ -42,7 +42,11 @@ export const LocationPicker: React.FC<LocationPickerProps> = ({
         onChange({
           lat: Number(latitude.toFixed(6)),
           lng: Number(longitude.toFixed(6)),
-          address: location?.address || `Live GPS Point (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`,
+          // Always replace the address. Keeping the previous one would leave a label
+          // pointing somewhere else entirely while the coordinates say otherwise —
+          // on an emergency dispatch screen that mismatch is actively misleading.
+          // There is no reverse geocoding yet, so a coordinate label is the honest value.
+          address: `Live GPS Point (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`,
         });
       },
       (error) => {

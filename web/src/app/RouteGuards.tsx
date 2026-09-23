@@ -7,6 +7,14 @@ interface RequireRoleProps {
   children?: React.ReactNode;
 }
 
+/**
+ * UX routing only — NOT a security boundary.
+ *
+ * The role this reads is client-side state the user can set from the navbar
+ * switcher (and edit in localStorage). It decides which screen makes sense to
+ * show, nothing more. Every authorization decision must be enforced server-side
+ * on the request itself; assume any route here is reachable by any user.
+ */
 export const RequireRole: React.FC<RequireRoleProps> = ({ allowedRoles, children }) => {
   const { role } = useAuth();
 

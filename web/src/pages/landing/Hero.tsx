@@ -1,15 +1,10 @@
 import React from 'react';
-import {
-  RoadStrip,
-  RoadsideScene,
-  heroCollageKeyframes,
-} from './HeroCollageEnhancements';
+import { Link } from 'react-router-dom';
+import { RoadStrip, RoadsideScene } from './HeroCollageEnhancements';
 
 export const Hero: React.FC = () => {
   return (
     <section className="hero" id="top">
-      {heroCollageKeyframes && <style>{heroCollageKeyframes}</style>}
-
       {/* Collage Art Background */}
       <div className="hero__collage">
         {/* Dark road with dashed lane markings */}
@@ -33,9 +28,9 @@ export const Hero: React.FC = () => {
           transparent pricing, no hidden charges.
         </p>
 
-        <a href="/owner/request" className="hero__cta">
+        <Link to="/owner/request" className="hero__cta">
           Book Roadside Help
-        </a>
+        </Link>
       </div>
     </section>
   );

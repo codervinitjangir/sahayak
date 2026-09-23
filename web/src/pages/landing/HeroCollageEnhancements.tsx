@@ -1,8 +1,5 @@
 import React from 'react';
 
-/* No animations — illustrations are static */
-export const heroCollageKeyframes = '';
-
 /* ══════════════════════════════════════════════════════════════
    1. Cohesive Car-and-Mechanic Illustration (along bottom road)
    - Natural, believable vehicle & human proportions
