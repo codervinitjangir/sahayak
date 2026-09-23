@@ -22,6 +22,16 @@ Two rules this module holds to, because both are load-bearing elsewhere:
   * **Every job status change writes a job_status_history row in the same
     transaction.** A status that moved without a timeline entry is a job whose
     history lies, and the timeline is what the evaluation report reads.
+
+And one about concurrency, added 2026-09-23 (ADR-015): **anything that decides
+whether a job may still be matched reads it through
+job_repository.get_job_by_id_for_update()**, so the decision and the write it
+authorises sit inside one row lock. That is respond_to_assignment() and
+_offer_next(). dispatch_job() is deliberately excluded — it is the only path
+that reaches Redis *between* reading the job and writing it, and a row lock held
+across a call to another service turns one slow dependency into a queue of
+blocked writers. It is also the one path with nothing to lose: it requires
+'requested', a status no other endpoint can leave a job in.
 """
 import logging
 import time
@@ -64,16 +74,21 @@ FIRST_ASSIGNMENT_RANK = 1
 
 # How old a reported position may be before it is worth noticing.
 #
-# Not enforced. A partner whose phone last reported 20 minutes ago is currently
-# still dispatched, and an event is logged instead of filtering them out, for
-# two reasons: nothing pushes locations on a timer yet (there is no partner
-# client — see the handoff doc), so a hard cutoff would empty every candidate
-# set the moment the pilot started; and "stop offering work to a partner because
-# their signal dropped" is a product decision about someone's earnings, not a
-# detail to slip in under a matching change. The timestamp is recorded and the
-# staleness is observable — turning that into a filter is a one-line change made
-# deliberately, by someone who has decided to make it.
-STALE_LOCATION_AFTER_S = 300
+# **Measured and logged, deliberately not enforced.** A partner whose phone last
+# reported 20 minutes ago is still dispatched today, and an event is emitted
+# instead of filtering them out, for two reasons: nothing pushes locations on a
+# timer yet (there is no partner client — see the handoff doc), so a hard cutoff
+# would empty every candidate set the moment the pilot started; and "stop
+# offering work to a partner because their signal dropped" is a product decision
+# about someone's earnings, not a detail to slip in under a matching change.
+#
+# Revisit when the partner client actually pings periodically: at that point a
+# stale position means the app is closed or the signal is gone, which is real
+# information, and enforcing this becomes a one-line change — made deliberately,
+# by someone who has decided to make it. Until then the timestamp is recorded and
+# the staleness is observable, which is the part that cannot be added
+# retroactively.
+MAX_LOCATION_AGE_S = 300
 
 
 @dataclass(frozen=True)
@@ -209,7 +224,7 @@ async def find_candidates(
 async def _log_stale_locations(client, partner_ids: Sequence, job_id: uuid.UUID) -> None:
     """Note any candidate whose reported position is older than the threshold.
 
-    Observation only — see STALE_LOCATION_AFTER_S for why this does not filter.
+    Observation only — see MAX_LOCATION_AGE_S for why this does not filter.
     Failures here are swallowed: a dispatch must not fall over because a
     diagnostic lookup did.
     """
@@ -229,14 +244,14 @@ async def _log_stale_locations(client, partner_ids: Sequence, job_id: uuid.UUID)
                 age = now - float(value)
             except (TypeError, ValueError):
                 age = None
-        if age is None or age > STALE_LOCATION_AFTER_S:
+        if age is None or age > MAX_LOCATION_AGE_S:
             log_event(
                 "dispatch_stale_partner_location",
                 level=logging.WARNING,
                 job_id=str(job_id),
                 partner_id=str(partner_id),
                 location_age_s=round(age, 1) if age is not None else None,
-                threshold_s=STALE_LOCATION_AFTER_S,
+                threshold_s=MAX_LOCATION_AGE_S,
                 enforced=False,
                 outcome="noted",
             )
@@ -403,11 +418,26 @@ async def respond_to_assignment(
     is *a* partner; this establishes that they are *this* partner. Without it any
     mechanic holding a valid token could accept work offered to a competitor.
 
+    The job is read with ``SELECT … FOR UPDATE`` and its status is checked
+    *after* that lock is held, not before. See ADR-015: the assignment guard
+    below closes the sequential cancel-then-accept case, because owner
+    cancellation closes every 'offered' row it finds, but it cannot close the
+    racing one — an owner cancelling at the same moment as a partner accepts
+    had both transactions read a live job, both pass their checks, and the
+    later commit win, resurrecting a cancelled job as 'assigned' and
+    re-committing a mechanic to work the customer had explicitly called off.
+    Locking the job row here puts the two transactions in a queue: one
+    completes, the other re-reads the row it was blocked on and answers
+    truthfully.
+
     Raises:
         NotFoundError (404): no assignment with this id.
         ForbiddenError (403): the offer belongs to a different partner.
         ConflictError (409) ASSIGNMENT_ALREADY_ANSWERED: already accepted,
             rejected or timed out. Usually a double tap on a slow connection.
+            Also raised when the *job* has moved off 'matching' underneath a
+            still-'offered' row — the same code deliberately, so a client
+            cannot tell the racing case from the sequential one.
         InternalError (500): the write failed; the transaction is rolled back.
     """
     started = time.perf_counter()
@@ -435,9 +465,45 @@ async def respond_to_assignment(
             f"This offer has already been answered (status: {assignment.status})",
         )
 
-    job = await job_repository.get_job_by_id(db, assignment.job_id)
+    # Locking, not the polled read — and taken before the status check below,
+    # which is the whole point (ADR-015). The lock is held until this
+    # transaction ends, so it covers the decision *and* the write in _accept /
+    # _reject, rather than just the write. It is taken for both branches: a
+    # rejection also writes the job's history and can re-dispatch, so it has
+    # the same interest in the job not vanishing mid-flight.
+    job = await job_repository.get_job_by_id_for_update(db, assignment.job_id)
     if job is None:
         raise NotFoundError(ErrorCode.JOB_NOT_FOUND, "Job not found")
+
+    # 'matching' is the only status an answerable offer can coexist with:
+    # dispatch_job() requires 'requested', commits the move to 'matching', and
+    # only then creates the offer; the job stays 'matching' through an entire
+    # rejection chain. So anything else here means the job moved underneath a
+    # live offer — in practice an owner cancellation that committed first.
+    #
+    # ASSIGNMENT_ALREADY_ANSWERED rather than JOB_ALREADY_TERMINAL, and that is
+    # a deliberate choice: whichever path moved the job also closed this
+    # assignment, so by the time the client re-reads its offer list the row
+    # will not say 'offered' either. Returning a different code purely because
+    # our SELECT landed a few milliseconds before their UPDATE would make the
+    # client's handling depend on timing. It is also honest — the offer has
+    # been answered, by the job going away.
+    if job.status != STATUS_MATCHING:
+        log_event(
+            "offer_answer_raced",
+            level=logging.WARNING,
+            assignment_id=str(assignment.id),
+            job_id=str(job.id),
+            partner_id=str(partner_id),
+            job_status=job.status,
+            attempted_action=action,
+            outcome="failure",
+            duration_ms=round((time.perf_counter() - started) * 1000, 2),
+        )
+        raise ConflictError(
+            ErrorCode.ASSIGNMENT_ALREADY_ANSWERED,
+            f"This job is no longer being matched (status: {job.status})",
+        )
 
     if action == "accept":
         return await _accept(db, assignment, job, started)
@@ -539,10 +605,42 @@ async def _offer_next(db: AsyncSession, job: Job) -> Optional[JobAssignment]:
     job with no candidates at all reaches. A driver whose job was declined by
     every nearby mechanic and a driver for whom none were nearby are in the same
     position and need the same answer.
+
+    Also returns None *without* writing anything if the job stopped being
+    'matching' while the candidate search was running — see the lock comment
+    below.
     """
     already_offered = await dispatch_repository.get_offered_partner_ids(db, job.id)
     candidates = await find_candidates(db, job, exclude_partner_ids=already_offered)
     scored = score_candidates(candidates, job)
+
+    # Lock here, and not at the top of this function: the candidate search above
+    # makes a Redis round trip, and holding a Postgres row lock across a network
+    # call to another service is how one slow dependency becomes a queue of
+    # blocked writers. The same reasoning is why dispatch_job() takes no lock at
+    # all. Locking *after* the search and immediately before the writes costs a
+    # possibly-wasted search and keeps the lock window to two statements.
+    #
+    # The re-read is needed because _reject() committed — and so released the
+    # lock taken in respond_to_assignment() — before calling us, deliberately,
+    # so that a failing search cannot lose the partner's recorded "no". That
+    # commit opens the same window ADR-015 is about: an owner cancelling in it
+    # would otherwise get a fresh 'offered' row against a cancelled job, or
+    # 'no_match_found' written over 'cancelled'. Abandoning the re-dispatch is
+    # the right answer rather than an error: the rejection itself is already
+    # committed and correct, there is simply no longer a job to re-offer.
+    job = await job_repository.get_job_by_id_for_update(db, job.id)
+    if job is None or job.status != STATUS_MATCHING:
+        log_event(
+            "matching_abandoned",
+            level=logging.WARNING,
+            job_id=str(job.id) if job is not None else None,
+            job_status=job.status if job is not None else "missing",
+            reason="job_left_matching_during_candidate_search",
+            candidate_count=len(scored),
+            outcome="success",
+        )
+        return None
 
     if not scored:
         await _transition(

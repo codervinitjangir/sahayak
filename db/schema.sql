@@ -165,7 +165,7 @@ CREATE TABLE IF NOT EXISTS job_assignments (
     job_id                  UUID REFERENCES jobs(id) ON DELETE CASCADE,
     partner_id              UUID REFERENCES partners(id),
     status                  VARCHAR(20) DEFAULT 'offered'
-                             CHECK (status IN ('offered','accepted','rejected','timed_out','completed')),
+                             CHECK (status IN ('offered','accepted','rejected','timed_out','completed','cancelled')),
     offered_at              TIMESTAMPTZ DEFAULT now(),
     responded_at            TIMESTAMPTZ,
     accepted_at             TIMESTAMPTZ,

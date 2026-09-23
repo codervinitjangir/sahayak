@@ -18,6 +18,13 @@ its weight cannot silently become the only term that matters.
 This module is pure arithmetic — no database, no Redis, no I/O. That is what
 makes the weighting testable in isolation and what lets the evaluation report
 replay a stored score_components row without standing the service up.
+
+The other dispatch knobs live next to the code that enforces them, because a
+constant far from its enforcement is a constant that gets edited without
+effect:
+
+    MAX_CONCURRENT_JOBS   app/repositories/dispatch_repository.py  (eligibility)
+    MAX_LOCATION_AGE_S    app/services/dispatch_service.py         (freshness)
 """
 from dataclasses import dataclass
 from typing import Optional
@@ -56,19 +63,53 @@ WEIGHTS: dict[str, float] = {
 # puzzling trend in the evaluation report months later.
 assert abs(sum(WEIGHTS.values()) - 1.0) < 1e-9, "Dispatch weights must sum to 1.0"
 
-# What an unrated partner's rating_score is worth.
-#
-# 0.6 rather than 0.0. A brand-new partner has no evidence against them, and
-# scoring absence of evidence as a zero would bury every new joiner beneath
-# anyone holding a single one-star review — which is both unfair and
-# self-defeating, since a partner who is never dispatched can never earn a
-# rating. 0.6 is deliberately below the average of an actually-good partner
-# (4.5/5 = 0.9) and above a bad one, so proven quality still wins while a new
-# joiner stays reachable.
-UNRATED_PARTNER_RATING_SCORE: float = 0.6
-
 # The rating scale ratings are recorded on, used to normalize to [0, 1].
 MAX_RATING: float = 5.0
+
+# Bayesian smoothing for ratings: the prior every partner is scored against
+# until their own reviews outweigh it.
+#
+# The naive rating_avg / 5 treats one five-star review as exactly the same
+# evidence as fifty of them. That is not a rounding problem, it is a ranking
+# problem with a predictable failure: the top of the board fills with partners
+# holding a single review, because a perfect 5.0 from one customer beats a 4.7
+# earned over a year. It also runs the other way — one bad night gives a new
+# partner a 1.0 average they cannot climb out of, since a partner nobody
+# dispatches never earns a second rating.
+#
+# Smoothing fixes both by treating the prior as PRIOR_WEIGHT imaginary reviews
+# at PRIOR_MEAN stars:
+#
+#     smoothed = (rating_avg * rating_count + PRIOR_MEAN * PRIOR_WEIGHT)
+#                / (rating_count + PRIOR_WEIGHT)
+#
+# so evidence has to accumulate before it moves the score. One 5★ review lands
+# at 3.75/5, five of them at 4.25, fifty at 4.86 — the score converges on the
+# true average at a rate set by how much has actually been observed.
+#
+# PRIOR_MEAN 3.5 is "unremarkable but fine", deliberately above the midpoint: a
+# partner who passed verification is not a coin flip. PRIOR_WEIGHT 5.0 means
+# five real reviews are worth as much as the prior — enough to resist a single
+# outlier, small enough that a genuinely good partner is not held back for
+# months. Both are chosen, not fitted; they are the second thing to revisit
+# after the weights once the pilot produces real outcomes.
+PRIOR_MEAN: float = 3.5
+PRIOR_WEIGHT: float = 5.0
+
+# What an unrated partner's rating_score works out to: 3.5 / 5 = 0.7.
+#
+# Derived rather than declared, which is the point. An earlier version set this
+# to a flat 0.6 as a special case for rating_count == 0, which meant the rule
+# for "no reviews" and the rule for "some reviews" were two separate pieces of
+# arithmetic that could disagree at the boundary — a partner's score could jump
+# the instant their first review landed. With the prior doing the work there is
+# no boundary and no special case: an unrated partner simply *is* the prior, and
+# every rating after that moves them off it continuously.
+#
+# It still satisfies what the flat default was for: 0.7 sits below a proven good
+# partner and above a bad one, so quality wins while a new joiner stays
+# reachable.
+UNRATED_PARTNER_RATING_SCORE: float = PRIOR_MEAN / MAX_RATING
 
 # What a candidate who passed the service filter scores on skill.
 #
@@ -117,11 +158,15 @@ def load_score(active_job_count: int) -> float:
     """1.0 when idle, 0.5 on one job, 0.33 on two — never zero.
 
     1 / (1 + n) rather than a hard cap, because "how busy" is a preference and
-    not a rule. A partner on two jobs is a worse choice than an idle one and
+    not a rule. A partner on one job is a worse choice than an idle one and
     still a better choice than nobody, which is what dispatch must answer at
-    3 a.m. when the idle ones are all 9 km away. A hard eligibility ceiling, if
-    one is ever wanted, belongs in the candidate filter where it can be
-    explained — not smuggled in as a score of zero.
+    3 a.m. when the idle ones are all 9 km away.
+
+    The hard ceiling is a separate thing and lives where it can be explained:
+    MAX_CONCURRENT_JOBS in dispatch_repository removes a partner from the
+    candidate set entirely once they are at capacity. Expressing that here as a
+    score of zero would have hidden a safety rule inside a preference, where a
+    future re-weighting could silently overrule it.
     """
     return 1.0 / (1.0 + max(active_job_count, 0))
 
@@ -132,16 +177,30 @@ def skill_score() -> float:
 
 
 def rating_score(rating_avg: Optional[float], rating_count: int) -> float:
-    """The partner's average rating on a 0–1 scale, or the neutral default.
+    """The partner's rating on a 0–1 scale, smoothed toward the prior.
 
-    An unrated partner (rating_count == 0) gets UNRATED_PARTNER_RATING_SCORE
-    rather than rating_avg / 5, because rating_avg for those rows is 0.0 — a
-    default, not a judgement. Reading it as a score would treat "nobody has
-    rated them" and "everybody rated them one star" as the same fact.
+    Not rating_avg / 5. The raw average answers "how well were they rated",
+    which is the wrong question for a ranking — the right one is "how well
+    should we expect them to do", and a single review is very weak evidence
+    about that. See PRIOR_MEAN / PRIOR_WEIGHT for the arithmetic and why.
+
+    rating_avg is clamped to the recorded scale *before* smoothing, so a
+    corrupt row cannot drag the posterior outside [0, 1]. A NULL rating_avg is
+    treated as no evidence at all rather than as zero stars, even when
+    rating_count claims otherwise: a row with reviews but no average is
+    inconsistent, and reading it as "rated zero" would punish a partner for a
+    data fault. An unrated partner (rating_count == 0, rating_avg 0.0 by column
+    default) falls through the same formula and lands exactly on the prior —
+    "nobody has rated them" and "everybody rated them one star" stay different
+    facts without needing a branch to keep them apart.
     """
-    if rating_count <= 0 or rating_avg is None:
-        return UNRATED_PARTNER_RATING_SCORE
-    return max(0.0, min(float(rating_avg) / MAX_RATING, 1.0))
+    if rating_avg is None:
+        count, observed = 0, 0.0
+    else:
+        count = max(int(rating_count), 0)
+        observed = max(0.0, min(float(rating_avg), MAX_RATING))
+    smoothed = ((observed * count) + (PRIOR_MEAN * PRIOR_WEIGHT)) / (count + PRIOR_WEIGHT)
+    return max(0.0, min(smoothed / MAX_RATING, 1.0))
 
 
 def score(candidate: Candidate, max_radius_m: float = MAX_RADIUS_M) -> tuple[float, dict[str, float]]:

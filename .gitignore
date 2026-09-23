@@ -11,8 +11,13 @@ build/
 .venv/
 venv/
 env/
+# Secrets. `.env` alone matches only that exact name; a suffixed backup such as
+# `.env.bak-direct-host` holds the same live credentials and was not covered.
 .env
+.env.*
+*.env
 *.env.local
+!.env.example
 
 # Node / Frontend
 node_modules/

@@ -262,6 +262,11 @@ async def resolve_identity(db: AsyncSession, claims: TokenClaims) -> Identity:
     enforce "not in both", so that case is checked here and treated as a server
     fault rather than resolved by picking one. Silently preferring users over
     partners would hand whoever created the second row the other's permissions.
+
+    When nothing matches, the caller gets one of two 403s — IDENTITY_NOT_LINKED
+    if an unclaimed profile exists for their number, USER_NOT_REGISTERED if not.
+    They are separate codes because the remedies are different endpoints, and a
+    client cannot work out which applies from the outside. See ADR-011.
     """
     user = await auth_repository.get_user_by_auth_id(db, claims.auth_user_id)
     partner = await auth_repository.get_partner_by_auth_id(db, claims.auth_user_id)
@@ -285,23 +290,91 @@ async def resolve_identity(db: AsyncSession, claims: TokenClaims) -> Identity:
             auth_user_id=claims.auth_user_id, role="partner", local_id=partner.id
         )
 
-    # Authenticated, but no profile. 403 rather than 401: the token is genuine,
-    # so re-authenticating would change nothing. The client's actual remedy is
-    # to call link-auth, which the distinct code points at.
+    # Authenticated, but no profile. Which of the two answers this is decides
+    # what the client does next, so it is worth one extra query on a path that
+    # has already failed.
+    #
+    # A profile may exist and simply not be bound yet: ops register a mechanic
+    # by phone before that mechanic ever opens the app, so partners rows
+    # routinely sit with auth_user_id NULL waiting for a link-auth call. The
+    # token's own phone claim is the evidence that connects the two, and it is
+    # evidence we can trust — Supabase put it there after verifying the number,
+    # the caller did not.
+    #
+    # Everything else is somebody who passed OTP and never signed up.
+    unlinked = await _find_unlinked_profile(db, claims.phone)
+    if unlinked is not None:
+        log_event(
+            "auth_identity_not_linked",
+            level=logging.WARNING,
+            auth_user_id=str(claims.auth_user_id),
+            profile_kind=unlinked,
+            outcome="failure",
+        )
+        raise ForbiddenError(
+            code=ErrorCode.IDENTITY_NOT_LINKED,
+            message=(
+                "This account is not linked to the Sahayak profile registered "
+                "with your number. Call POST /api/v1/partners/{partner_id}/link-auth "
+                "or POST /api/v1/users/{user_id}/link-auth first."
+            ),
+        )
+
+    # 403 rather than 401, and this is the case where the distinction bites. The
+    # token is genuine; re-authenticating produces an identical token and an
+    # identical refusal. A client that reads 401 and returns the user to OTP
+    # entry loops them forever — the remedy is a signup screen, which only a
+    # distinct code can point at.
     log_event(
-        "auth_identity_not_linked",
+        "auth_user_not_registered",
         level=logging.WARNING,
         auth_user_id=str(claims.auth_user_id),
         outcome="failure",
     )
     raise ForbiddenError(
-        code=ErrorCode.IDENTITY_NOT_LINKED,
+        code=ErrorCode.USER_NOT_REGISTERED,
         message=(
-            "This account is not linked to a Sahayak profile. "
-            "Call POST /api/v1/partners/{partner_id}/link-auth or "
-            "POST /api/v1/users/{user_id}/link-auth first."
+            "This account has been verified but has no Sahayak profile yet. "
+            "Call POST /api/v1/users to complete registration."
         ),
     )
+
+
+async def _find_unlinked_profile(
+    db: AsyncSession, phone: Optional[str]
+) -> Optional[Role]:
+    """Is there an existing, unclaimed profile for this phone number?
+
+    Returns "user"/"partner" when one exists, None otherwise — which is the
+    difference between "call link-auth" and "sign up".
+
+    Only reached when the caller has no identity, so it costs nothing on the
+    normal path. A token with no phone claim (an email or OAuth sign-in) has
+    nothing to search on and returns None, which is the right answer: with no
+    evidence of an existing profile, signup is the correct next step.
+
+    Matching on phone alone is safe *here* because it grants nothing. It selects
+    which error message to show; the link-auth endpoints do their own checking
+    before they bind anything, and they are the ones holding the authority.
+    """
+    if not phone:
+        return None
+
+    # Supabase reports the claim without a leading '+' while the schema stores
+    # E.164, so both spellings are tried rather than normalising the column —
+    # a function on phone would defeat its unique index, on the failure path of
+    # every unregistered request.
+    candidates = [phone, f"+{phone}"] if not phone.startswith("+") else [phone, phone[1:]]
+
+    partner = await auth_repository.get_partner_by_phone_unlinked(db, candidates)
+    if partner is not None:
+        return "partner"
+
+    user = await auth_repository.get_user_by_phone_unlinked(db, candidates)
+    if user is not None:
+        return "user"
+
+    return None
 
 
 async def link_partner_auth(

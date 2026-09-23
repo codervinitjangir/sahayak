@@ -395,12 +395,20 @@ async def main() -> None:
         # The whole point of a weighted engine. If this fails, dispatch is an
         # expensive distance sort and the divergence metric will read zero
         # forever.
+        #
+        # rating_count matters here in a way it did not before ratings were
+        # smoothed: a score is now pulled toward the prior in proportion to how
+        # little evidence stands behind it, so twelve reviews and forty reviews
+        # are genuinely different claims. Forty is used deliberately — the
+        # scenario being asserted is "an established 4.9 beats an established
+        # 1.5", and running it on thin evidence would be testing the prior
+        # rather than the weighting.
         q.execute(
-            "UPDATE partners SET rating_avg = 1.5, rating_count = 12 WHERE phone = %(p)s",
+            "UPDATE partners SET rating_avg = 1.5, rating_count = 40 WHERE phone = %(p)s",
             {"p": QA_PHONES[0]},   # the NEAREST partner is now the worst rated
         )
         q.execute(
-            "UPDATE partners SET rating_avg = 4.9, rating_count = 12 WHERE phone = %(p)s",
+            "UPDATE partners SET rating_avg = 4.9, rating_count = 40 WHERE phone = %(p)s",
             {"p": QA_PHONES[1]},   # the mid-distance partner is excellent
         )
 
@@ -560,8 +568,95 @@ async def main() -> None:
         check("the assigned job was not given a third offer",
               len(assignments_for(job_b)) == 2, f"{len(assignments_for(job_b))} rows")
 
+        # ------------------------------------------------------------------
+        section("9. A partner at capacity is filtered out, not merely penalised")
+        # ------------------------------------------------------------------
+        # load_score already prefers an idle partner, so a test that only checked
+        # "the busy one lost" would pass with no cap at all. The distinction
+        # being asserted is that MAX_CONCURRENT_JOBS removes a partner from the
+        # candidate set — which is only visible when they would otherwise have
+        # won, and when there is nobody else to win instead.
+        from app.repositories.dispatch_repository import MAX_CONCURRENT_JOBS
+
+        capped = partners["near"]
+        others = [partners["mid"], partners["far"]]
+
+        async def set_available(meta: dict, available: bool):
+            return await c.patch(
+                f"/api/v1/partners/{meta['id']}/availability",
+                json={"is_available": available},
+                headers=hdr(meta["token"]),
+            )
+
+        # The near partner is nearest to every job raised at the pickup point, so
+        # taking the other two off shift is enough to route the filler jobs to
+        # them and load them to exactly the cap.
+        for meta in others:
+            await set_available(meta, False)
+
+        # Counted the way dispatch counts it — through the job's status, not the
+        # assignment's. See ADR-008.
+        def active_jobs_for(partner_id: str) -> int:
+            return one(
+                "SELECT COUNT(*) AS n FROM job_assignments a JOIN jobs j ON j.id = a.job_id "
+                "WHERE a.partner_id = %(p)s AND a.status = 'accepted' "
+                "  AND j.status IN ('assigned','partner_en_route','in_progress')",
+                {"p": partner_id},
+            )["n"]
+
+        # Measured rather than assumed: this partner may already be holding the
+        # job they accepted in section 5, and which partner that was is decided
+        # by the scoring, not by this script. Topping up to the cap from wherever
+        # they actually are keeps the section independent of that outcome.
+        already = active_jobs_for(capped["id"])
+        for n in range(MAX_CONCURRENT_JOBS - already):
+            filler = await create_job(c, owner_token, f"DISPATCH-QA load {n}")
+            offers = assignments_for(filler)
+            if len(offers) != 1:
+                raise SystemExit(f"filler job {n}: expected 1 offer, got {len(offers)}")
+            r = await c.post(
+                f"/api/v1/job-assignments/{offers[0]['id']}/respond",
+                json={"action": "accept"},
+                headers=hdr(capped["token"]),
+            )
+            if r.status_code != 200:
+                raise SystemExit(f"filler accept {n} failed: {r.status_code} {r.text[:300]}")
+
+        active = active_jobs_for(capped["id"])
+        check(f"the nearest partner is now holding {MAX_CONCURRENT_JOBS} active jobs",
+              active == MAX_CONCURRENT_JOBS, f"{active} active (started at {already})")
+
+        for meta in others:
+            await set_available(meta, True)
+
+        job_e = await create_job(c, owner_token, "DISPATCH-QA capped")
+        offers_e = assignments_for(job_e)
+        check("a job raised next to the capped partner still found somebody",
+              len(offers_e) == 1, f"{len(offers_e)} offer(s)")
+        if offers_e:
+            check("it was NOT offered to the capped partner, who was nearest",
+                  str(offers_e[0]["partner_id"]) != capped["id"],
+                  f"went to {label_of(partners, offers_e[0]['partner_id'])}")
+
+        # The decisive case: with the other two off shift again, the capped
+        # partner is the only partner within range. A preference would still
+        # pick them. A filter returns nobody.
+        for meta in others:
+            await set_available(meta, False)
+
+        job_f = await create_job(c, owner_token, "DISPATCH-QA capped alone")
+        job_row = one("SELECT status FROM jobs WHERE id=%(i)s", {"i": job_f})
+        check("the only partner in range being at capacity yields no_match_found",
+              job_row["status"] == "no_match_found", job_row["status"])
+        check("no third job was forced onto a partner already holding two",
+              len(assignments_for(job_f)) == 0,
+              f"{len(assignments_for(job_f))} offer(s)")
+
+        for meta in others:
+            await set_available(meta, True)
+
     # ----------------------------------------------------------------------
-    section("9. Cleanup — the database must return to baseline")
+    section("10. Cleanup — the database must return to baseline")
     # ----------------------------------------------------------------------
     purge()
     purge_supabase_accounts()

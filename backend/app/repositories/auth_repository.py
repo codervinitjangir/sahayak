@@ -13,7 +13,7 @@ order to name the role — a UNION would have to carry a literal discriminator
 column and would be harder to read for no measurable gain.
 """
 import uuid
-from typing import Optional
+from typing import Optional, Sequence
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -44,6 +44,47 @@ async def get_user_by_id(db: AsyncSession, user_id: uuid.UUID) -> Optional[User]
     """Load a user row by primary key, for the link-auth target check."""
     result = await db.execute(select(User).where(User.id == user_id))
     return result.scalar_one_or_none()
+
+
+async def get_partner_by_phone_unlinked(
+    db: AsyncSession, phones: Sequence[str]
+) -> Optional[Partner]:
+    """Find an unclaimed partner profile registered to one of these numbers.
+
+    `phones` is a small set of spellings of the same number (with and without
+    the E.164 '+'), matched with IN so the unique index on phone is still used —
+    normalising the column with a function instead would turn this into a table
+    scan on the failure path of every unregistered request.
+
+    Restricted to rows with auth_user_id IS NULL on purpose. A profile that is
+    already bound to a *different* account is not an invitation to link; it is
+    somebody else's, and the caller should be told to register rather than
+    pointed at an endpoint that will refuse them.
+    """
+    result = await db.execute(
+        select(Partner)
+        .where(Partner.phone.in_(list(phones)), Partner.auth_user_id.is_(None))
+        .limit(1)
+    )
+    return result.scalars().first()
+
+
+async def get_user_by_phone_unlinked(
+    db: AsyncSession, phones: Sequence[str]
+) -> Optional[User]:
+    """Find an unclaimed vehicle-owner profile registered to one of these numbers.
+
+    The users-table mirror of get_partner_by_phone_unlinked. Rows like this are
+    not created by the API any more — registration binds the account in the same
+    INSERT — so in practice this matches seed data and migrated rows, which is
+    exactly the case POST /users/{user_id}/link-auth was kept for.
+    """
+    result = await db.execute(
+        select(User)
+        .where(User.phone.in_(list(phones)), User.auth_user_id.is_(None))
+        .limit(1)
+    )
+    return result.scalars().first()
 
 
 async def set_user_auth_id(

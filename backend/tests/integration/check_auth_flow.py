@@ -299,9 +299,16 @@ for label, token in cases.items():
     r = c.get(f"/api/v1/jobs/{job_id}", headers=hdr(token))
     check(f"{label:38} -> 401", r.status_code == 401, f"{r.status_code} {code_of(r)}")
 
+# USER_NOT_REGISTERED, not IDENTITY_NOT_LINKED — resolve_identity now splits the
+# two by evidence, and this account has none to offer: supabase_identity() creates
+# email-only accounts, so the token carries no phone claim and there is no
+# unclaimed profile to match it against. "Verified but never signed up" is the
+# honest reading, and the remedy is POST /api/v1/users. Still 403 rather than 401:
+# the token is valid, so a client that read 401 would send the user back to OTP
+# entry and loop there forever. See ADR-011.
 r = c.get(f"/api/v1/jobs/{job_id}", headers=hdr(tok_orphan))
-check("valid token with no linked row -> 403 IDENTITY_NOT_LINKED",
-      r.status_code == 403 and code_of(r) == "IDENTITY_NOT_LINKED", f"{r.status_code} {code_of(r)}")
+check("valid token, no row, no unclaimed profile -> 403 USER_NOT_REGISTERED",
+      r.status_code == 403 and code_of(r) == "USER_NOT_REGISTERED", f"{r.status_code} {code_of(r)}")
 
 r = c.get(f"/api/v1/jobs/{job_id}", headers={"Authorization": "Bearer"})
 check("Bearer scheme with no credentials  -> 401", r.status_code == 401, f"{r.status_code} {code_of(r)}")

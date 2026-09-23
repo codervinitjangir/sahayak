@@ -144,7 +144,22 @@ class JobDetailResponse(BaseModel):
     price_final: Optional[Decimal] = None
     requested_at: datetime
     completed_at: Optional[datetime] = None
-    model_config = ConfigDict(from_attributes=True)
+    current_assignment: Optional[CurrentAssignmentResponse] = None
+    timeline: list[JobTimelineEntry] = Field(default_factory=list)
+
+    # extra="forbid" because these last two fields were missing from this class
+    # while job_service.get_job_with_status was already passing them. Pydantic
+    # ignores undeclared keyword arguments by default, so the service built the
+    # assignment and the timeline on every request and the response model threw
+    # both away — silently, with a 200 and no log line. The endpoint's own
+    # docstring promised "the signal a tracking screen polls on", and a client
+    # polling for it would have waited forever.
+    #
+    # Forbidding extras turns that class of mistake into an immediate error at
+    # the point of construction instead of missing data at the client. Safe
+    # here: get_job_with_status is the only caller, and it passes exactly these
+    # fields.
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
 
 
 class AssignmentRespondRequest(BaseModel):
@@ -184,6 +199,115 @@ class AssignmentRespondResponse(BaseModel):
     job_status: str
     responded_at: Optional[datetime] = None
     next_assignment_id: Optional[uuid.UUID] = None
+
+
+class JobStatusTransitionRequest(BaseModel):
+    """Inbound payload for POST /jobs/{job_id}/status — a partner moving a job
+    they are working through its remaining states.
+
+    Literal rather than a free string, for the same reason as
+    AssignmentRespondRequest: an unrecognised status is a 422 naming the four
+    valid values, not a database CHECK violation surfaced as a 500. The four
+    listed here are the ones a *partner* can reach. 'requested', 'matching',
+    'assigned' and 'no_match_found' are all written by the server — dispatch
+    owns them — so accepting them here would let a client rewind a job.
+
+    price_final and cancellation_reason are conditionally meaningful rather
+    than conditionally valid, which is why neither is enforced here. Pydantic
+    can express "required when status == 'completed'" with a model_validator,
+    but the resulting failure is a 422 VALIDATION_ERROR, and the specification
+    for this endpoint calls for a 400 with a code the client can branch on.
+    job_service.transition_job_status owns both checks.
+    """
+    status: Literal["partner_en_route", "in_progress", "completed", "cancelled"]
+    # ge=0 because a negative final price is not a discount, it is a bug. The
+    # column is NUMERIC(10,2); Decimal rather than float keeps the value the
+    # client sent from acquiring a binary-rounding tail on the way to money.
+    price_final: Optional[Decimal] = Field(default=None, ge=0)
+    cancellation_reason: Optional[str] = Field(default=None, max_length=500)
+
+
+class JobStatusTransitionResponse(BaseModel):
+    """What a partner gets back after moving a job.
+
+    Confirmation, not the job — the same call AssignmentRespondResponse makes.
+    GET /jobs/{job_id} already owns the full job representation *including* the
+    rules about which fields each caller may see, and duplicating that shape
+    here would mean two places to update the next time a field becomes
+    sensitive, with one of them certain to be forgotten.
+
+    It also keeps jobs.user_id out of a partner's hands. JobResponse carries it,
+    and while it is only an opaque uuid, it is the owner's primary key — the
+    same reasoning that withholds partner_id from non-participants in
+    get_job_with_status applies in the other direction.
+
+    assignment_status is here because it is the half of the transition a client
+    cannot otherwise see, and on a completion or a cancellation it is the field
+    that says the partner has actually been released from the job.
+    """
+    id: uuid.UUID
+    status: str
+    assignment_status: Optional[str] = None
+    price_final: Optional[Decimal] = None
+    completed_at: Optional[datetime] = None
+    cancelled_at: Optional[datetime] = None
+    cancellation_reason: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class JobCancelRequest(BaseModel):
+    """Inbound payload for POST /jobs/{job_id}/cancel — an owner calling off
+    their own booking.
+
+    One optional field, and no `status`. That absence is the design: the
+    partner's endpoint takes a target status because a partner has four of them
+    to choose between, whereas an owner has exactly one thing they can do to a
+    live job. Accepting a status here would mean accepting 'completed' as a
+    value a customer can post, and no amount of downstream validation is as
+    reliable as a field that does not exist.
+
+    The reason is optional for the same reason it is optional on the partner
+    side: a mandatory free-text field on a screen someone is tapping through in
+    a hurry produces a column full of "x", which is worse than a column full of
+    nulls because it looks like data.
+
+    extra="forbid" so a client that sends `{"status": "cancelled"}` — the
+    obvious guess if they have only read the other endpoint — gets a 422 naming
+    the offending field rather than a silent 200 that ignored it.
+    """
+    cancellation_reason: Optional[str] = Field(default=None, max_length=500)
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class JobCancelResponse(BaseModel):
+    """What the owner's app gets back after cancelling.
+
+    Confirmation, not the job — the same call JobStatusTransitionResponse and
+    AssignmentRespondResponse make, so GET /jobs/{job_id} stays the single place
+    that owns the job representation and its visibility rules.
+
+    Deliberately *not* a reuse of JobStatusTransitionResponse, despite the
+    overlap. That model carries price_final and completed_at, which on a
+    cancellation are null by definition; shipping them would invite an owner app
+    to render a price field that can never be populated on this path. It also
+    exists to describe a *partner's* view, and its docstring reasons about
+    withholding jobs.user_id from a partner — reasoning that does not transfer
+    to the person who owns the row.
+
+    assignment_status is null when the job was cancelled before anyone had been
+    offered it, which is the normal case for a cancel from 'requested'. When it
+    reads 'cancelled', a partner was released — and 'cancelled' is the point:
+    see ADR-012 on why this must not be recorded as a rejection.
+    """
+    id: uuid.UUID
+    status: str
+    assignment_status: Optional[str] = None
+    cancelled_at: Optional[datetime] = None
+    cancellation_reason: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class DispatchAssignmentResponse(BaseModel):

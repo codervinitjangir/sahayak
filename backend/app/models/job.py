@@ -140,7 +140,12 @@ class JobAssignment(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "status IN ('offered','accepted','rejected','timed_out','completed')",
+            # 'cancelled' added by db/migrations/003. Kept distinct from
+            # 'rejected' on purpose: 'rejected' is the partner's answer to an
+            # offer and feeds acceptance rate, so reusing it for a job the
+            # *customer* cancelled would penalise the partner for someone
+            # else's decision. See ADR-012.
+            "status IN ('offered','accepted','rejected','timed_out','completed','cancelled')",
             name="check_assignment_status"
         ),
     )
