@@ -195,6 +195,19 @@ A perfect `1.0` total score is now unreachable — smoothing is asymptotic, so a
 
 `MAX_CONCURRENT_JOBS` can starve a thin candidate set: in a sparse area, capping the only nearby partner yields `no_match_found` where an uncapped system would have offered a third job. That is the intended trade — a refused match is visible and recoverable, an over-committed partner is neither.
 
+**Amendment, 2026-09-24 — the filter is currently the cap's *only* enforcement point, and that is not sufficient.** Recorded here rather than as a new ADR because it is a consequence of this decision, not a separate one.
+
+Choosing to express the cap as an eligibility filter means it is evaluated once, when candidates are selected, and never again. Two things follow that were not intended:
+
+- An `'offered'` assignment costs no capacity — `ACTIVE_ASSIGNMENT_STATUSES` is `("accepted",)` (ADR-008) — so a partner can hold any number of outstanding offers while still looking idle to the filter.
+- `POST /api/v1/job-assignments/{id}/respond` does not re-check the cap before accepting. `MAX_CONCURRENT_JOBS` appears nowhere in `assignment_service.py`.
+
+So a partner who is offered five jobs before answering any of them can accept all five, and the filter that was supposed to stop the third one was satisfied — correctly — five offers ago. The 2026-09-24 load test observed one partner holding **four** accepted jobs against a cap of 2, and six distinct partners over cap in a single two-minute run; it also occurred at only 4 creations/s, so this is a missing check rather than a narrow race.
+
+Fixing it is a re-check at accept time under the `jobs` → `job_assignments` lock ordering established in ADR-015, plus a decision on what a capacity-refused accept returns and what becomes of the partner's surplus offers. That is deferred to its own task with its own reverted-first test; the reasoning above is recorded now so the gap is not rediscovered as a surprise. Full evidence: [`docs/load-test-dispatch-concurrency.md`](../load-test-dispatch-concurrency.md) §7.1.
+
+The general lesson is the one worth keeping: **a filter enforces an invariant at the moment it runs, not for the lifetime of the thing it filtered.** Any rule expressed only as a candidate-selection filter needs a second check wherever the filtered-on state can change between selection and commit.
+
 ---
 
 # ADR-010: Stale Partner Locations are Observed, Not Enforced

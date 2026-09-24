@@ -917,3 +917,47 @@ has never failed proves nothing: I reverted the fix and re-ran first, and it dro
 to 23 of 43 with the bug reproducing in 5 of 6 trials. Sequential calls can't
 reproduce it at all even with the bug present — which is why five green test suites
 sat next to it for two days without noticing.
+
+---
+
+## 10. A partner can't answer an offer through the API yet (found 2026-09-24)
+
+Nothing changed here — this is a gap I hit while load-testing dispatch, and you'll hit
+it the moment you build a partner offer screen. Flagging it now so you don't design
+around an endpoint that doesn't exist.
+
+**The problem.** To answer an offer you call
+`POST /api/v1/job-assignments/{assignment_id}/respond`. There is currently no way for a
+partner client to learn its `assignment_id`:
+
+- `GET /api/v1/partners/{id}/current-assignment` returns `partner_id` but **not**
+  `assignment_id`;
+- there is no "list my offers" endpoint at all.
+
+So the path from "I've been offered a job" to "here's the id I need to answer" is
+broken. My load-test harness worked around it by reading the ids straight out of
+Postgres, which a real app obviously can't do.
+
+**What I'd suggest, but haven't built** (your call on shape, and it's a backend change
+either way — don't work around it client-side):
+
+```
+GET /api/v1/partners/me/offers        →  200  { data: [ { assignment_id, job_id,
+                                                          distance_at_offer_m,
+                                                          offered_at, job: {...} } ] }
+```
+
+or, smaller: add `assignment_id` to the existing `CurrentAssignmentResponse`. The first
+is better — a partner can hold several outstanding offers at once, and
+`current-assignment` is singular by design.
+
+**One thing to know before you build against it.** Holding several offers at once is
+currently *unbounded*: `MAX_CONCURRENT_JOBS = 2` is checked when we pick who to offer a
+job to, and never re-checked when a partner accepts, so a partner offered five jobs can
+accept all five. I found this under load (one partner held 4 against a cap of 2) and
+it's queued as its own backend fix. Two implications for the UI: don't assume a partner
+has at most one live offer, and don't assume an accept always succeeds — once the
+re-check lands, accepting past the cap will start returning a 409, so treat accept the
+same way you already treat the status-transition 409s in §9.
+
+Full measurement context, if you want it: `docs/load-test-dispatch-concurrency.md` §7.1.

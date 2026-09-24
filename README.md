@@ -200,9 +200,20 @@ npm test
 # End-to-end browser tests
 npx playwright test
 
-# Load test (while app is running)
-k6 run tests/load/dispatch.js
+# Dispatch concurrency load test (needs k6; seed once, then run a scenario)
+cd backend
+python tests/load/seed_dispatch_load.py
+python tests/load/collect_dispatch_load.py --mark   baseline
+k6 run -e SCENARIO=baseline tests/load/dispatch.js
+python tests/load/collect_dispatch_load.py --report baseline
+python tests/load/seed_dispatch_load.py --purge
 ```
+
+Scenarios are `baseline`, `spike` and `mixed`; `mixed` also needs
+`python tests/load/responder_dispatch_load.py --duration 150` running alongside it.
+The `--mark` step is not optional — the deadlock and transaction counters it reads are
+cumulative, so a run without a pre-run snapshot cannot be reported on. Results and
+analysis: [`docs/load-test-dispatch-concurrency.md`](docs/load-test-dispatch-concurrency.md).
 
 ---
 
