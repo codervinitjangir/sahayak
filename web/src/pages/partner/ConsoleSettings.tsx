@@ -18,8 +18,8 @@ import {
   Volume2,
 } from 'lucide-react';
 
-import { usePartnerAvailability } from '../../features/partners/usePartnerAvailability';
 import { resetPartnerStore, usePartnerProfile } from '../../features/partners/partnerStore';
+import { PartnerTopBar } from './components/PartnerTopBar';
 import {
   resetConsoleSettings,
   updateConsoleSettings,
@@ -171,7 +171,6 @@ export const ConsoleSettingsView: React.FC<{
   onNavigate?: (view: ConsoleView) => void;
 }> = ({ embedded = false, onNavigate }) => {
   const profile = usePartnerProfile();
-  const { isAvailable, toggle } = usePartnerAvailability();
   const settings = useConsoleSettings();
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -217,32 +216,6 @@ export const ConsoleSettingsView: React.FC<{
           </div>
 
           <div className="flex items-center gap-2.5 flex-wrap">
-            {/* Duty Status Switch Pill */}
-            <div className="flex items-center gap-2 bg-white rounded-[12px] px-3.5 py-1.5 border border-[#E7E0D2] shadow-2xs text-xs">
-              <span className="text-[#5B5346] font-medium text-[11px]">Status:</span>
-              <span className="relative flex h-2 w-2">
-                {isAvailable && (
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                )}
-                <span
-                  className={`relative inline-flex rounded-full h-2 w-2 ${
-                    isAvailable ? 'bg-emerald-600' : 'bg-neutral-300'
-                  }`}
-                />
-              </span>
-              <span className="font-bold text-[#1B1712] text-[11px]">{isAvailable ? 'On Duty' : 'Off Duty'}</span>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={isAvailable}
-                aria-label="Toggle availability"
-                onClick={toggle}
-                className={`toggle-switch scale-75 origin-right ${isAvailable ? 'toggle-switch--active' : ''}`}
-              >
-                <span className="toggle-switch__thumb" />
-              </button>
-            </div>
-
             <button
               type="button"
               onClick={handleReset}
@@ -423,11 +396,14 @@ export const ConsoleSettingsView: React.FC<{
 
   return (
     <div className="min-h-screen bg-[#F6F1E6] text-[#1B1712] py-6 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-6xl mx-auto flex items-center gap-2 mb-4 text-[#5B5346]">
-        <Settings className="w-4 h-4 text-[#0F766E]" />
-        <span className="text-xs font-bold uppercase tracking-wider">Partner Console</span>
+      <div className="max-w-6xl mx-auto">
+        <PartnerTopBar />
+        <div className="flex items-center gap-2 mb-4 text-[#5B5346]">
+          <Settings className="w-4 h-4 text-[#0F766E]" />
+          <span className="text-xs font-bold uppercase tracking-wider">Roadside Dispatch</span>
+        </div>
+        {body}
       </div>
-      <div className="max-w-6xl mx-auto">{body}</div>
     </div>
   );
 };

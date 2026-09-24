@@ -8,6 +8,7 @@ import { ConsoleSettingsView } from './ConsoleSettings';
 import { usePartnerAvailability } from '../../features/partners/usePartnerAvailability';
 import { usePartnerProfile } from '../../features/partners/partnerStore';
 import { IS_PARTNER_API_MOCK, partnerService } from '../../services/partner.service';
+import { PartnerTopBar } from './components/PartnerTopBar';
 import './partner.css';
 
 function viewForPath(pathname: string): ConsoleView | undefined {
@@ -66,6 +67,7 @@ export const PartnerConsole: React.FC = () => {
       {/* One canvas, one scroll region. Each view renders `embedded`, so it
           contributes only its own content and never a second shell. */}
       <main className="partner-main-canvas flex flex-col">
+        <PartnerTopBar profile={profile} />
         {view === 'dispatches' && <PartnerDashboard embedded />}
         {view === 'preferences' && <Preferences embedded />}
         {view === 'verification' && <VerificationStatus embedded onNavigate={setView} />}

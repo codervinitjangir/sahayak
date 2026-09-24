@@ -28,6 +28,7 @@ import {
 } from '../../types/partner';
 import { Button } from '../../components/ui/Button';
 import { usePartnerAvailability } from '../../features/partners/usePartnerAvailability';
+import { PartnerTopBar } from './components/PartnerTopBar';
 import './partner.css';
 
 // Filter out 'fuel_delivery' per requirement
@@ -83,9 +84,7 @@ export const Preferences: React.FC<{ embedded?: boolean }> = ({ embedded = false
 
   // Tier 1 Identity Gating
   const tier1Complete = isTier1Complete(profile);
-
-  // Master Availability — shared with the dashboard toggle, not a local copy.
-  const { isAvailable, toggle: handleToggleMasterAvailability } = usePartnerAvailability();
+  const { isAvailable } = usePartnerAvailability();
 
   // Toggle Service in Step 2
   const handleToggleService = (serviceId: number) => {
@@ -183,6 +182,8 @@ export const Preferences: React.FC<{ embedded?: boolean }> = ({ embedded = false
       }
     >
       <div className={`w-full flex flex-col gap-5 ${embedded ? '' : 'max-w-6xl mx-auto'}`}>
+        {!embedded && <PartnerTopBar />}
+
         {/* Header Strip with Steps Badge & Navigation */}
         <header className="w-full flex flex-col gap-3">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -209,44 +210,16 @@ export const Preferences: React.FC<{ embedded?: boolean }> = ({ embedded = false
               </p>
             </div>
 
-            {/* Quick Actions: Duty Toggle & Links */}
-            <div className="flex items-center gap-2.5 flex-wrap">
-              {/* Duty Status Switch Pill (Tested by PartnerPages.test.tsx) */}
-              <div className="flex items-center gap-2 bg-white rounded-[12px] px-3.5 py-1.5 border border-[#E7E0D2] shadow-2xs text-xs">
-                <span className="text-[#5B5346] font-medium text-[11px]">Status:</span>
-                <span className="relative flex h-2 w-2">
-                  {isAvailable && (
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                  )}
-                  <span
-                    className={`relative inline-flex rounded-full h-2 w-2 ${
-                      isAvailable ? 'bg-emerald-600' : 'bg-neutral-300'
-                    }`}
-                  />
-                </span>
-                <span className="font-bold text-[#1B1712] text-[11px]">{isAvailable ? 'On Duty' : 'Off Duty'}</span>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={isAvailable}
-                  aria-label="Toggle availability"
-                  onClick={handleToggleMasterAvailability}
-                  className={`toggle-switch scale-75 origin-right ${isAvailable ? 'toggle-switch--active' : ''}`}
+            {/* Cross-links only when this page stands alone. Inside the
+                console the sidebar already owns navigation, and a <Link>
+                here would jump the user out of the shell. */}
+            {!embedded && (
+              <div className="flex items-center gap-2.5 flex-wrap">
+                {/* Direct Dashboard Link */}
+                <Link
+                  to="/partner/dashboard"
+                  className="px-3.5 py-1.5 rounded-[10px] bg-white hover:bg-[#FBF8F1] border border-[#E7E0D2] shadow-2xs text-xs font-semibold text-[#1B1712] flex items-center gap-1.5 transition-all"
                 >
-                  <span className="toggle-switch__thumb" />
-                </button>
-              </div>
-
-              {/* Cross-links only when this page stands alone. Inside the
-                  console the sidebar already owns navigation, and a <Link>
-                  here would jump the user out of the shell. */}
-              {!embedded && (
-                <>
-                  {/* Direct Dashboard Link */}
-                  <Link
-                    to="/partner/dashboard"
-                    className="px-3.5 py-1.5 rounded-[10px] bg-white hover:bg-[#FBF8F1] border border-[#E7E0D2] shadow-2xs text-xs font-semibold text-[#1B1712] flex items-center gap-1.5 transition-all"
-                  >
                     <Truck className="w-3.5 h-3.5 text-[#0F766E]" />
                     <span>Live Dispatches</span>
                   </Link>
@@ -259,9 +232,8 @@ export const Preferences: React.FC<{ embedded?: boolean }> = ({ embedded = false
                     <ShieldCheck className="w-3.5 h-3.5 text-[#0F766E]" />
                     <span>Verification & KYC</span>
                   </Link>
-                </>
+                </div>
               )}
-            </div>
           </div>
 
           {/* Segmented Step Progress Bar */}

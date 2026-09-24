@@ -1,18 +1,14 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  Bell,
   CheckCircle2,
-  ChevronDown,
   ChevronRight,
   Eye,
   EyeOff,
   MapPin,
-  MessageSquare,
   Plus,
   Power,
   RefreshCw,
-  Search,
   Settings,
   ShieldCheck,
   TrendingUp,
@@ -26,7 +22,6 @@ import { JobTimeline } from '../../components/JobTimeline';
 import { usePartnerAvailability } from '../../features/partners/usePartnerAvailability';
 import { usePartnerProfile } from '../../features/partners/partnerStore';
 import { updateConsoleSettings, useConsoleSettings } from '../../features/partners/consoleSettings';
-import { useOptionalAuth, type UserRole } from '../../app/AuthProvider';
 import {
   useActiveJob,
   useOfferResponse,
@@ -154,29 +149,25 @@ export const PartnerSidebar: React.FC<{
       className="partner-sidebar"
     >
       <div>
-        {/* Brand Header: Fraunces Serif Logo + Sahayak Deep Teal Emblem */}
-        <div className="flex items-center gap-3 mb-6 pb-4 border-b border-[#E7E0D2]">
-          <div className="w-9 h-9 rounded-[10px] bg-[#0F766E] flex items-center justify-center text-white shadow-xs shrink-0">
-            <svg
-              viewBox="0 0 24 24"
-              className="w-5 h-5 text-white"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-            </svg>
-          </div>
-          <div className="min-w-0">
-            <span className="font-['Fraunces'] font-semibold text-xl tracking-tight text-[#1B1712] block leading-tight">
+        {/* Brand Header: Fraunces Wordmark + Roadside Dispatch */}
+        <div className="mb-6 pb-4 border-b border-[#E7E0D2]">
+          <Link
+            to="/partner/dashboard"
+            onClick={(e) => {
+              if (onNavigate) {
+                e.preventDefault();
+                onNavigate('dispatches');
+              }
+            }}
+            className="block group focus:outline-none"
+          >
+            <span className="font-['Fraunces'] font-semibold text-xl tracking-tight text-[#1B1712] block leading-tight group-hover:text-[#0F766E] transition-colors">
               Sahayak
             </span>
             <span className="text-[10px] font-bold text-[#5B5346] tracking-wider uppercase block mt-0.5">
-              Partner Console
+              Roadside Dispatch
             </span>
-          </div>
+          </Link>
         </div>
 
         {/* Section 1: MAIN MENU */}
@@ -255,124 +246,22 @@ export const PartnerSidebar: React.FC<{
   );
 };
 
-/* ── 1. Top Bar: Header Strip with Search & Telemetry ─────────────────────── */
+import { PartnerTopBar } from './components/PartnerTopBar';
 
 const TopBar: React.FC<{
   profile: PartnerProfile;
   capability: string;
   onSimulate?: () => void;
-}> = ({ profile, capability, onSimulate }) => {
-  const { isAvailable, toggle, locationAgeSeconds } = usePartnerAvailability();
-  const auth = useOptionalAuth();
-
+  hideTopRow?: boolean;
+}> = ({ profile, capability, onSimulate, hideTopRow }) => {
   return (
     <header className="w-full flex flex-col gap-4 mb-6">
-      {/* Top Search + Actions + Profile Row */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        {/* Left: Main Search Bar */}
-        <div className="flex-1 max-w-md">
-          <div className="relative flex items-center bg-white hover:bg-[#FBF8F1] rounded-[12px] px-3.5 py-2 border border-[#E7E0D2] shadow-2xs transition-all">
-            <Search className="w-4 h-4 text-[#9A917F] shrink-0 mr-2.5" />
-            <input
-              type="text"
-              aria-label="Search dispatches"
-              placeholder="Search a job ID or vehicle number"
-              className="w-full bg-transparent text-xs text-[#1B1712] placeholder-[#9A917F] font-medium outline-none"
-            />
-          </div>
-        </div>
-
-        {/* Right: Messages + Notifications + Duty Switch + Avatar */}
-        <div className="flex items-center gap-2.5 flex-wrap">
-          {/* Messages Button */}
-          <Link
-            to="/partner/verification"
-            className="w-9 h-9 rounded-[10px] bg-white hover:bg-[#FBF8F1] border border-[#E7E0D2] shadow-2xs flex items-center justify-center text-[#5B5346] hover:text-[#1B1712] transition-colors"
-            title="Messages"
-          >
-            <MessageSquare className="w-4 h-4" />
-          </Link>
-
-          {/* Notifications Button */}
-          <button
-            type="button"
-            className="w-9 h-9 rounded-[10px] bg-white hover:bg-[#FBF8F1] border border-[#E7E0D2] shadow-2xs flex items-center justify-center text-[#5B5346] hover:text-[#1B1712] transition-colors relative"
-            title="Notifications"
-          >
-            <Bell className="w-4 h-4" />
-            <span className="w-1.5 h-1.5 rounded-full bg-accent absolute top-2 right-2" />
-          </button>
-
-          {/* Optional Role Switcher for Demo / Dev */}
-          {auth && (
-            <div className="relative flex items-center bg-white hover:bg-[#FBF8F1] border border-[#E7E0D2] rounded-[10px] px-2.5 py-1.5 shadow-2xs transition-all">
-              <div className="flex items-center gap-1.5 text-xs">
-                <span className="text-[10px] font-bold text-[#9A917F] uppercase tracking-wider">Role</span>
-                <span className="text-[#E7E0D2]">/</span>
-                <select
-                  value={auth.role}
-                  onChange={(e) => auth.setRole(e.target.value as UserRole)}
-                  className="bg-transparent text-xs font-semibold text-[#1B1712] outline-none cursor-pointer pr-3 appearance-none hover:text-black focus:ring-0"
-                  aria-label="Switch User Role"
-                >
-                  <option value="owner">Owner (Asha)</option>
-                  <option value="partner">Partner (Ramesh)</option>
-                  <option value="ops">Admin (Ops)</option>
-                </select>
-              </div>
-              <ChevronDown className="w-3 h-3 text-[#9A917F] pointer-events-none" />
-            </div>
-          )}
-
-          {/* Duty Status Switch Pill (Tested by PartnerPages.test.tsx) */}
-          <div className="flex items-center gap-2 bg-white rounded-[12px] px-3.5 py-1.5 border border-[#E7E0D2] shadow-2xs text-xs">
-            <span className="text-[#5B5346] font-medium text-[11px]">Status:</span>
-            <span className="relative flex h-2 w-2">
-              {isAvailable && (
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-              )}
-              <span className={`relative inline-flex rounded-full h-2 w-2 ${isAvailable ? 'bg-emerald-600' : 'bg-neutral-300'}`} />
-            </span>
-            <span className="font-bold text-[#1B1712] text-[11px]">{isAvailable ? 'On Duty' : 'Off Duty'}</span>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={isAvailable}
-              aria-label="Toggle availability"
-              onClick={toggle}
-              className={`toggle-switch scale-75 origin-right ${isAvailable ? 'toggle-switch--active' : ''}`}
-            >
-              <span className="toggle-switch__thumb" />
-            </button>
-          </div>
-
-          {/* GPS Freshness Pill */}
-          <div className="hidden xl:flex items-center gap-1.5 bg-white rounded-[12px] px-3 py-1.5 border border-[#E7E0D2] shadow-2xs text-[11px]">
-            <span className="text-[#5B5346] font-medium">GPS:</span>
-            <span className="font-bold text-[#1B1712] tabular-nums">
-              {/* No fix is "we don't know where you are", not a service-level
-                  number — the old fallback quoted an arrival SLA here. */}
-              {locationAgeSeconds !== null ? `Live (${formatAge(locationAgeSeconds)})` : 'No fix yet'}
-            </span>
-          </div>
-
-          {/* User Profile Avatar with Teal Ring */}
-          <div className="relative">
-            <img
-              src="/assets/partner_portrait.jpg"
-              alt={profile.name}
-              className="w-9 h-9 rounded-full object-cover ring-2 ring-[#0F766E]/40 shadow-xs"
-              title={`${profile.name} (Speedy Mechanics)`}
-            />
-          </div>
-        </div>
-      </div>
-
+      {!hideTopRow && <PartnerTopBar profile={profile} />}
       {/* Subheader Row: Fraunces Serif Title + Secondary Tabs + Action Button */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
         <div>
           <h1 className="font-['Fraunces'] text-2xl sm:text-3xl font-semibold text-[#1B1712] tracking-tight">
-            Dispatch Console
+            Dispatches
           </h1>
           <p className="text-xs text-[#5B5346] mt-0.5">
             Live Bengaluru urban grid rescue operations & automated dispatch
@@ -1300,7 +1189,7 @@ export const PartnerDashboard: React.FC<{ embedded?: boolean }> = ({ embedded = 
   const content = (
     <>
       {/* Top Header Strip */}
-      <TopBar profile={profile} capability={capability} />
+      <TopBar profile={profile} capability={capability} hideTopRow={embedded} />
 
       {/* Error banner if offer error occurs */}
       {offerError && (
