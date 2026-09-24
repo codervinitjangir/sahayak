@@ -3,11 +3,9 @@ import { Link } from 'react-router-dom';
 import {
   AlertCircle,
   ArrowRight,
-  Bell,
   CheckCircle2,
   FileText,
   Lock,
-  MessageSquare,
   PlayCircle,
   RefreshCw,
   SlidersHorizontal,
@@ -29,6 +27,7 @@ import {
 import { useAnnouncementToast } from '../../features/partners/useVerificationEvents';
 import { usePartnerAvailability } from '../../features/partners/usePartnerAvailability';
 import { PartnerSidebar, type ConsoleView } from './PartnerDashboard';
+import { PartnerTopBar } from './components/PartnerTopBar';
 import './partner.css';
 
 /* ── Row primitives ───────────────────────────────────────────────────────── */
@@ -156,7 +155,7 @@ export const VerificationStatus: React.FC<{
 }> = ({ embedded = false, onNavigate }) => {
   const profile = usePartnerProfile();
   const [showWalkthroughModal, setShowWalkthroughModal] = useState<boolean>(false);
-  const { isAvailable, toggle: handleToggleMasterAvailability } = usePartnerAvailability();
+  const { isAvailable } = usePartnerAvailability();
 
   // The toast and the dashboard Inbox read the same store events, so a status
   // change can never be described one way here and another way there.
@@ -368,56 +367,6 @@ export const VerificationStatus: React.FC<{
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5 flex-wrap shrink-0">
-          <button
-            type="button"
-            className="w-9 h-9 rounded-[10px] bg-white hover:bg-[#FBF8F1] border border-[#E7E0D2] shadow-2xs flex items-center justify-center text-[#5B5346] hover:text-[#1B1712] transition-colors"
-            title="Messages"
-          >
-            <MessageSquare className="w-4 h-4" />
-          </button>
-
-          <button
-            type="button"
-            className="w-9 h-9 rounded-[10px] bg-white hover:bg-[#FBF8F1] border border-[#E7E0D2] shadow-2xs flex items-center justify-center text-[#5B5346] hover:text-[#1B1712] transition-colors relative"
-            title="Notifications"
-          >
-            <Bell className="w-4 h-4" />
-            <span className="w-1.5 h-1.5 rounded-full bg-[#0F766E] absolute top-2 right-2" />
-          </button>
-
-          <div className="flex items-center gap-2 bg-white rounded-[12px] px-3.5 py-1.5 border border-[#E7E0D2] shadow-2xs text-xs">
-            <span className="text-[#5B5346] font-medium text-[11px]">Status:</span>
-            <span className="relative flex h-2 w-2">
-              {isAvailable && (
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-              )}
-              <span
-                className={`relative inline-flex rounded-full h-2 w-2 ${
-                  isAvailable ? 'bg-emerald-600' : 'bg-neutral-300'
-                }`}
-              />
-            </span>
-            <span className="font-bold text-[#1B1712] text-[11px]">{isAvailable ? 'On Duty' : 'Off Duty'}</span>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={isAvailable}
-              aria-label="Toggle availability"
-              onClick={handleToggleMasterAvailability}
-              className={`toggle-switch scale-75 origin-right ${isAvailable ? 'toggle-switch--active' : ''}`}
-            >
-              <span className="toggle-switch__thumb" />
-            </button>
-          </div>
-
-          <img
-            src="/assets/partner_portrait.jpg"
-            alt={profile.name}
-            className="w-9 h-9 rounded-full object-cover ring-2 ring-[#0F766E]/40 shadow-xs"
-            title={profile.name}
-          />
-        </div>
       </header>
 
       {/* Checklist left, status rail right. The rail is what stops this page
@@ -680,7 +629,10 @@ export const VerificationStatus: React.FC<{
   return (
     <div className="partner-shell">
       <PartnerSidebar profile={profile} isAvailable={isAvailable} activeNav="verification" />
-      <main className="partner-main-canvas flex flex-col">{body}</main>
+      <main className="partner-main-canvas flex flex-col">
+        <PartnerTopBar profile={profile} />
+        {body}
+      </main>
     </div>
   );
 };
