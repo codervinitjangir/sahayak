@@ -19,6 +19,8 @@
 | Partner screens | **Nothing exists yet.** Blocks auth. See §4 — this is the one that needs a decision this week. |
 | **Job status past `assigned`** | **Now real — no action, but retest.** Jobs used to freeze at `assigned` forever because no endpoint could move them. Tracking will now show en-route → in-progress → completed. §6. |
 | **Owner cancel button** | **New, action needed — this one's yours.** `POST /api/v1/jobs/{id}/cancel` exists as of 2026-09-22. Optional body, and `assignment_status` in the response decides what the confirmation screen says. §7. |
+| **`409 PARTNER_AT_CAPACITY` on accept** | **New, 2026-09-25 — action needed on the partner side when you build it.** A full mechanic's accept is now refused, and the refusal must not look like "offer gone". §11.1. |
+| **`no_match_found` with no offers** | **Confirm only.** Already legal, now more frequent. If your job screen renders an empty offers list without crashing or spinning forever, you're done. §11.2. |
 
 
 ---
@@ -961,3 +963,108 @@ re-check lands, accepting past the cap will start returning a 409, so treat acce
 same way you already treat the status-transition 409s in §9.
 
 Full measurement context, if you want it: `docs/load-test-dispatch-concurrency.md` §7.1.
+
+**Update, 2026-09-25: the re-check has landed.** The 409 that paragraph warned you about is
+now real, with its own error code. See §11 — the "don't assume an accept always succeeds"
+advice is no longer forward-looking.
+
+
+---
+
+## 11. Two new responses on the partner side, and one on the owner side (added 2026-09-25)
+
+Both of the bugs the load test found (§7.1, §7.2 of the load-test doc) are fixed. One adds a
+new error code you have to handle; the other adds no new code at all but makes a state you
+may not have expected show up more often. No request shape changed. No response shape
+changed.
+
+### 11.1 `409 PARTNER_AT_CAPACITY` — accept can now be refused because the mechanic is full
+
+**Where:** `POST /api/v1/job-assignments/{assignment_id}/respond` with `{"action": "accept"}`.
+
+```
+409  {
+  "error": {
+    "code": "PARTNER_AT_CAPACITY",
+    "message": "You are already working the maximum number of jobs (2). This job has been
+                offered to another partner."
+  }
+}
+```
+
+**What it means.** The mechanic already holds 2 active jobs (`assigned`,
+`partner_en_route` or `in_progress`), and the cap is 2. It is not an error in their app and
+not a failed save — it is the platform refusing to overload them.
+
+**How to handle it — and this is the part that differs from every other 409 you handle:**
+
+- **Do not** show "try again". The retry will fail identically until one of their current
+  jobs finishes.
+- **Do not** remove the offer card and tell them the job is gone. *The offer is still
+  `'offered'`.* We deliberately do not mark it rejected — being full is not declining, and
+  we are not charging a mechanic's acceptance rate for a limit we imposed. If they finish a
+  job in the next few minutes, that same `assignment_id` may become acceptable.
+- **Do** show the `message` (it names the cap) or your own copy along the lines of *"You're
+  at your job limit — finish a job to take this one."*
+- **Do** expect the customer's side to have moved on: we re-offer the job to the next
+  candidate immediately, so in practice the card will usually turn into
+  `ASSIGNMENT_ALREADY_ANSWERED` on the next tap, once someone else has taken it. Both are
+  409s; they are not interchangeable, so branch on `code`, never on the status alone.
+
+**Why it is its own code and not `ASSIGNMENT_ALREADY_ANSWERED`.** The remedies are
+opposite. `ASSIGNMENT_ALREADY_ANSWERED` means *this offer is gone, stop showing it*.
+`PARTNER_AT_CAPACITY` means *you are full, this offer may work later*. Folding them together
+would have forced you to guess which one you had.
+
+**Why it is a 409 and not a 403.** Nothing is wrong with the mechanic's permissions. The
+request conflicts with the current state of the world, and it will succeed unchanged once
+that state changes — which is exactly what 409 means, and matches how §9's 409s already
+behave.
+
+**A repeat tap is safe.** If the mechanic taps a stale offer card again, they get the same
+409 and *no* additional job gets re-dispatched — there is a guard for that. You do not need
+to debounce it to protect the backend, though debouncing is still nicer for them.
+
+### 11.2 `no_match_found` with zero assignments is a legitimate state to render
+
+**Where:** `GET /api/v1/jobs/{id}` and the owner's job list, right after `POST /api/v1/jobs`.
+
+An owner can now see a job go from `requested` to **`no_match_found`** within a second or
+two of creating it, having never been offered to anybody — `assignments` empty, no offers,
+no history beyond the two rows. This was always possible (it is what happens when no mechanic
+within 10 km offers that service), but it will now also happen when our partner-location
+store is unreachable, which is the case the load test caught leaving jobs invisible.
+
+**What you have to do:** nothing new, as long as your job-detail screen does not assume that
+a `no_match_found` job has at least one assignment to show. If it renders an empty offers
+list, you are already correct. If it crashes, or shows a spinner forever waiting for an
+offer that never comes, that is the bug to fix.
+
+**Copy suggestion, same for both causes:** *"We couldn't find a mechanic for this request."*
+plus the two actions the owner actually has — **cancel**, or **request again**.
+`no_match_found` is deliberately *not* terminal: cancel works from it, and re-requesting is
+a fresh `POST /api/v1/jobs`.
+
+**What you should not surface:** the distinction between "nobody was available" and "our
+location service was down". The reason is recorded server-side in `job_status_history.note`
+(prefix `Dispatch unavailable:`) so that our evaluation numbers don't count an outage as a
+legitimate "no mechanics nearby". It is not in the API response, and an owner staring at a
+broken-down car does not benefit from the difference — the action available to them is the
+same either way. If you ever need it for an admin screen, say so and I will expose it
+explicitly rather than have you parse a note.
+
+### 11.3 What did not change
+
+- `POST /api/v1/jobs` still returns **201** even when dispatch fails outright. It was
+  measured at 782 ms with the location store hard-timing-out on every call. Keep treating a
+  201 as "the job exists"; keep reading `status` from the body rather than assuming
+  `matching`.
+- Reject is unchanged, including `next_assignment_id: null`.
+- Availability toggle, offer reads and polling are unchanged (§9.4 still holds).
+- No new status values, so nothing new to add to your status→label map.
+
+Verified by 49 assertions against the real database and 21 unit tests
+(`backend/tests/integration/check_dispatch_capacity.py`,
+`backend/tests/unit/test_dispatch_capacity.py`), including a control run with both fixes
+reverted that reproduces the original defects — 12 accepts landing on a cap of 2, and a job
+left silently in `requested`.

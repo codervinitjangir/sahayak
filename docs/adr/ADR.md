@@ -204,9 +204,25 @@ Choosing to express the cap as an eligibility filter means it is evaluated once,
 
 So a partner who is offered five jobs before answering any of them can accept all five, and the filter that was supposed to stop the third one was satisfied — correctly — five offers ago. The 2026-09-24 load test observed one partner holding **four** accepted jobs against a cap of 2, and six distinct partners over cap in a single two-minute run; it also occurred at only 4 creations/s, so this is a missing check rather than a narrow race.
 
-Fixing it is a re-check at accept time under the `jobs` → `job_assignments` lock ordering established in ADR-015, plus a decision on what a capacity-refused accept returns and what becomes of the partner's surplus offers. That is deferred to its own task with its own reverted-first test; the reasoning above is recorded now so the gap is not rediscovered as a surprise. Full evidence: [`docs/load-test-dispatch-concurrency.md`](../load-test-dispatch-concurrency.md) §7.1.
+Full evidence: [`docs/load-test-dispatch-concurrency.md`](../load-test-dispatch-concurrency.md) §7.1.
 
 The general lesson is the one worth keeping: **a filter enforces an invariant at the moment it runs, not for the lifetime of the thing it filtered.** Any rule expressed only as a candidate-selection filter needs a second check wherever the filtered-on state can change between selection and commit.
+
+**Closed 2026-09-25 — the second enforcement point.** `dispatch_service._require_capacity()` now runs as the first statement of `_accept()`: it counts the partner's active jobs again and refuses with **`409 PARTNER_AT_CAPACITY`** when the accept would take them past `MAX_CONCURRENT_JOBS`. Four things about it were decisions rather than mechanics.
+
+**1. The lock is on the `partners` row, not the `jobs` row — and the spec that asked for this fix assumed otherwise.** The obvious reading is to re-check "inside the transaction already locked for the accept-vs-cancel race" (ADR-015), but that lock is on the job, and the failure mode here is *one partner, two different jobs*: two job rows, so neither transaction waits for the other, both count the same pre-accept number, and both commit. The job lock cannot order them because they never contend for it. The `partners` row is the only row the two transactions have in common, so `dispatch_repository.lock_partner_for_update()` takes `FOR UPDATE` on it and the count runs after. Under READ COMMITTED the count is a later statement with a fresh snapshot, so the transaction that waits sees the accept that went first (the same EvalPlanQual property ADR-015 depends on). Nothing is written to the partner row; the lock is being used purely as a mutex on a number derived from other tables, which is why it has to be taken explicitly rather than falling out of an `UPDATE`.
+
+**The lock order is now `jobs` → `partners` → `job_assignments`.** Verified acyclic by inspection before the change rather than after: `with_for_update()` appeared in exactly one place in the codebase (`job_repository.py`), so no path locked `partners` ahead of `jobs`, and the new lock could only be inserted in the middle. `pg_stat_database.deadlocks` held at 4 → 4 across the capacity harness. ADR-015's Resolved section records why that measurement is evidence and not proof.
+
+**2. A refused offer stays `'offered'`; it is not written `'rejected'`.** Being full is not declining. Marking it rejected would charge a mechanic's acceptance rate for a limit the platform imposed on them — the same reasoning that gave owner-cancelled assignments their own status in ADR-012. The cost is that the job can briefly carry two live offers, the refused one and the re-dispatched one; the first accepted wins and the other gets the ordinary `ASSIGNMENT_ALREADY_ANSWERED`, which is already what happens to any offer a job outruns.
+
+**3. The refusal re-dispatches, so a capacity refusal is indistinguishable from a decline on the customer's side.** `_require_capacity()` commits (releasing both row locks — `_offer_next()` reaches Redis, and this module holds no Postgres lock across a call to another service) and calls the same `_offer_next()` a rejection uses, *then* raises the 409. The 409 is the partner's answer; the customer's job simply moves to the next candidate.
+
+**4. The re-dispatch is guarded on `assignment_rank`, which the spec did not ask for and the design needs.** Because the refused offer survives at `'offered'`, the partner's app keeps showing it and it will be tapped again. Unguarded, every tap fires another `_offer_next()`: one more candidate burned per tap, the pool walked to exhaustion, and the job finally landed in `no_match_found` while several partners were still holding live offers for it. Re-offering only when this offer is the newest one on the job (`assignment.assignment_rank >= get_max_assignment_rank()`) makes the refusal idempotent.
+
+**`PARTNER_AT_CAPACITY` is its own error code rather than a reuse of `ASSIGNMENT_ALREADY_ANSWERED`,** because the remedies differ: that one means the offer is gone and there is nothing to retry, this one means *you are full* and the same offer may well be acceptable in ten minutes. 409 rather than 403 because permission is not the problem — the state is, and it changes on its own.
+
+**Evidence.** 21 unit tests (`tests/unit/test_dispatch_capacity.py`), **11 failing** with `_require_capacity` neutered to a no-op; the 10 survivors are the regression guards and the pure contract assertions, which deliberately do not depend on the new call site. Live: **49 of 49** in `tests/integration/check_dispatch_capacity.py` against **28 of 45** with the same call removed. The control run reproduced the original defect exactly — six QA partners ending on **3** active jobs against a cap of 2 — including a scaled-down replay of the load test's own shape (12 jobs, 4 partners, all offers made while the fleet was idle, then every accept fired at once): **12 accepted / 0 refused / every partner over cap** reverted, against **8 accepted / 6 refused / every partner at exactly 2** fixed. The two-way race at `MAX_CONCURRENT_JOBS - 1` splits one 200 and one `PARTNER_AT_CAPACITY` with the fix and two 200s without it, and the assertion that discriminates them is the count on the row, not the status codes.
 
 ---
 
@@ -545,6 +561,8 @@ The locking read also carries `.execution_options(populate_existing=True)`. No c
 
 Both mutating paths take the job row lock as the first statement of their transaction, before touching `job_assignments`. The two dispatch paths added later keep that same `jobs` → `job_assignments` ordering, though `_offer_next()` takes its lock after a Redis round trip rather than first — for a reason given in the Resolved section.
 
+**Amended 2026-09-25: the order is now `jobs` → `partners` → `job_assignments`.** A third table joined it when the concurrency cap gained a second enforcement point — `dispatch_repository.lock_partner_for_update()`, taken inside the accept path between the job lock and the assignment write. The reasoning for that lock belongs to the decision that needed it and is recorded in the ADR-009 amendment; what belongs here is the order itself, because this is where a future caller will look it up. It was checkable in advance for once: `with_for_update()` existed in exactly one place in the codebase before the change, so nothing locked `partners` ahead of `jobs` and the new lock could only be inserted in the middle. Measured delta across the capacity harness: `pg_stat_database.deadlocks` 4 → 4.
+
 ## Context
 
 ADR-013 named this as a known deferral: neither `POST /jobs/{job_id}/status` nor `POST /jobs/{job_id}/cancel` locked the job row, so a partner completing a job and its owner cancelling it at the same moment both read `in_progress`, both passed their own legality check, and both committed. The loser's write simply landed second. The observable result was a row that contradicted itself — `status = 'cancelled'` with a `price_final` and a `completed_at`, or `completed` with a `cancelled_at` — two terminal rows in `job_status_history`, and HTTP 200 returned to both callers, neither of whom had any way to know.
@@ -622,3 +640,74 @@ Pre-fix: **0 → 4**, with four of six trials dying on `MissingGreenlet("greenle
 **Evidence.** 17 unit tests (`tests/unit/test_dispatch_locking.py`), using the same tripwire technique — `get_job_by_id` is replaced by a function that raises `AssertionError` naming this ADR, so a future revert fails with a sentence instead of passing quietly. Reverted, **12 of 17 fail**; the 5 survivors are exactly the assignment-guard and ownership tests, whose behaviour deliberately did not change, which is itself the check that the new tests test the new thing. Live: **69 of 69** assertions in `tests/integration/check_dispatch_race.py` against **37 of 45** reverted. The `asyncio.gather()` race split 5 cancel-first / 1 accept-first across six trials, so both orderings were observed rather than one inferred from the other; a separate section reproduces outcome A with no timing luck at all by holding the job row from an outside connection, firing the accept so that it queues on the lock instead of deciding, then cancelling and committing inside the holding transaction. That section leaves the assignment `'offered'` on purpose, so that a pass isolates the new post-lock job-status check and cannot be credited to the assignment guard.
 
 Full regression after the change: **175 unit tests** and **443 live assertions** across nine harnesses, baseline restored.
+
+---
+
+# ADR-016: A Dispatch Outage Shares a Status With "Nobody Available", and Stays Distinguishable in the Timeline
+
+**Status:** Accepted
+**Date:** 2026-09-25
+
+## Decision
+
+When the partner location store cannot be reached, dispatch no longer leaves the job where it was. Three pieces:
+
+1. `find_candidates()` raises **`DispatchUnavailableError`** — a new Python *type*, a subclass of `InternalError`, with a deliberately unchanged wire contract (500, `INTERNAL_ERROR`, same message).
+2. `job_service._try_dispatch()` catches that type specifically, separately from its existing catch-all, and calls `dispatch_service.mark_dispatch_unavailable()`.
+3. That function moves the job to **`no_match_found`** — the same status as "we searched and nobody was eligible" — with a `job_status_history` note fixed by the constant `DISPATCH_UNAVAILABLE_NOTE`: `"Dispatch unavailable: could not reach the partner location service"`.
+
+No new job status, no new error code, no migration, and no synchronous retry.
+
+## Context
+
+`POST /jobs` triggers dispatch inside a guard, on the principle that a dispatch fault must never fail a job creation that genuinely succeeded — the job exists, it is durable, and returning a 500 would tell a stranded driver their request failed while inviting a retry that creates a second job for one breakdown. That principle is not in question and did not change.
+
+What the guard also did was leave the status alone, and for most faults that is right: `'requested'` is the honest description of a job nobody has been asked about yet. It is wrong for exactly one fault — the one where *nothing will ever look again*. There is no background worker in this system (deliberately deferred), so a job left in `'requested'` by a Redis timeout has no path out of it. The driver's app shows a live request card. Nothing in the timeline says otherwise. Nobody is coming.
+
+The 2026-09-24 dispatch load test produced these at **0.08%** of creations — 5 jobs out of roughly 6,000. Low frequency, and the worst failure mode this particular product has: a stranded customer with no assignment, no signal, and no retry path.
+
+## Rationale
+
+**Why an exception type and not a return value.** `find_candidates()` already has a meaningful empty answer — no eligible partners — and that answer is correctly handled as `no_match_found` today. Overloading it to also mean "the search did not run" would put the distinction in a flag that every caller has to remember to check, which is the shape of bug that gets reintroduced. As a type, it is impossible to catch by accident and impossible to ignore: `_try_dispatch`'s `except DispatchUnavailableError` sits above its `except Exception`, and anything that is not this specific fault still takes the old path.
+
+**Why it is an `InternalError` subclass with an identical response.** A client's remedy does not change, so the contract must not. The type exists to let one internal caller tell three situations apart — "we could not look", "we looked and nobody was there", "the database write failed" — that leave the job in three different places, only one of which is normal. Before it existed, the first was indistinguishable from the third inside a bare `except Exception`.
+
+**Why `no_match_found` rather than a new status — the part that contradicts an earlier comment in this codebase.** `find_candidates()` carried a warning against exactly this conflation, and `_try_dispatch`'s docstring still says that marking a job `no_match_found` would confuse "we looked and there was nobody" with "we never got to look". That warning was about *silently* conflating them, and it stands. The resolution here is that the **status** is shared while the **cause** stays separable:
+
+- From the driver's seat the two situations are identical. Nobody is coming, the request did not find help, and the action available is the same one: cancel, or ask again. A status is a description of the customer's situation, not a diagnosis of ours.
+- `no_match_found` is already the one non-terminal dead end in the system. ADR-013 kept it out of `TERMINAL_JOB_STATUSES` precisely so an owner can still cancel or re-request from it, which is what makes it safe to route an infrastructure fault there. A genuinely terminal status would strand the driver a second way.
+- The cause lives in `job_status_history.note`, which is the same mechanism ADR-013 already uses to carry a cancellation's actor. The note is a module constant rather than a literal because the reporting query matches on it:
+
+```sql
+SELECT count(*) FROM job_status_history
+ WHERE status = 'no_match_found'
+   AND note LIKE 'Dispatch unavailable:%';
+```
+
+That query is what keeps the evaluation honest: coverage and match-rate numbers can exclude the outages instead of quietly counting an infrastructure failure as a legitimate "no partners nearby". A single blended number would have been the actually misleading outcome.
+
+**Why not a new status.** It was the first instinct and the blast radius decided it: a `jobs.status` CHECK-constraint migration on a shipped table, a new key in `ALLOWED_TRANSITIONS`, a terminality decision, matching work in the owner and partner clients, and a new value Adarsh's frontend must learn to render — all for a path that occurs in under one job in a thousand and whose correct handling is byte-for-byte what `no_match_found` already gets. If the evaluation ever needed to report on it as a first-class outcome the trade would change; the note-based split covers the reporting need at none of the cost.
+
+**Why the recovery is itself guarded.** `mark_dispatch_unavailable()` is wrapped in its own `try`. Recovery from a failure must not become a second failure, and if the recording write also fails the job stays in `'requested'` — exactly where it was a moment earlier, so strictly no worse than before this ADR existed.
+
+**Why nothing retries.** A retry inside the request would block the driver's POST on a dependency that has just timed out, paying the timeout twice to create one job. Whether the job is retried later is a background-worker question, and there is no background worker; when there is one, the natural sweep is over jobs in `'requested'` past some age, which this change does not obstruct. `mark_dispatch_unavailable()` re-reads the job under `FOR UPDATE` and does nothing if it has already left `'requested'`, so it cannot overwrite a dispatch that succeeded on a later path.
+
+## Alternatives considered
+
+**Leave it, and fix it when the background worker is built.** Rejected. The worker is deferred indefinitely, and "invisible until some future task" is the property that makes this the product's worst failure mode rather than a cosmetic gap.
+
+**Fail the POST with a 503 so the client can retry.** Rejected, and it is the tempting one. It would be honest about the dependency, but it breaks the principle the guard exists for: the job *was* created, durably, before dispatch ran. A 503 after a successful write invites the client to create a duplicate job for the same breakdown, which turns one unmatched request into two.
+
+**Retry dispatch inline with a short backoff.** Rejected: it converts a single timeout into a multiple of that timeout inside the driver's request, for a dependency that has already declined to answer once.
+
+**A separate `dispatch_failed` column or flag alongside the status.** Rejected as a worse version of the note — a second field carrying the same information, which every query would then have to know to consult, and which no client would render.
+
+## Consequence
+
+A Redis outage during job creation is now visible in three places instead of none: the job's status, its timeline, and a `dispatch_after_create_failed` log event carrying `reason="location_store_unavailable"`. `POST /jobs` still returns 201 and still returns it promptly — measured at 782ms with the location store hard-timing-out on every call, against an 8s ceiling in the harness.
+
+Owners will occasionally see a job go straight to `no_match_found` seconds after creation with no offers ever made. That is correct and was already possible (an empty candidate set does the same), so no client change is required; `HANDOFF-frontend-contract.md` notes that a `no_match_found` job with zero assignments is a legitimate state to render.
+
+The evaluation write-up must split the two causes using the query above rather than reporting a single `no_match_found` count.
+
+**Evidence.** 6 unit tests in `tests/unit/test_dispatch_capacity.py` covering the branch selection — that `DispatchUnavailableError` is recorded, that every other exception is not, that a success records nothing, that a failure *while* recording still does not fail the POST, and that nothing retries. Live: `tests/integration/check_dispatch_capacity.py` §8 injects the outage at the Redis client that `find_candidates()` fetches, so the real `except RedisError` handler and the real exception are exercised rather than a mock one level higher. Reverted (with `job_service.DispatchUnavailableError` rebound so the specific catch never matches, which is precisely the pre-fix path): the job stays `'requested'`, the 201 body reports `'requested'`, and the timeline is empty of any explanation — the three assertions that now pass.

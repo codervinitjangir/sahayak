@@ -25,8 +25,15 @@ Scripts: [`tests/load/`](../backend/tests/load/) — `seed_dispatch_load.py`, `d
    concurrent load, not just targeted trials.
 5. **The real ceiling is a connection limit, not a job rate** — and there are *two*
    ceilings, both equal to 15, which is why the system has no headroom at all. See §6.
-6. **Two new bugs found**, both flagged and unfixed. One is a genuine correctness
-   defect: `MAX_CONCURRENT_JOBS` is never enforced at accept time. See §7.
+6. **Two new bugs found**, one a genuine correctness defect (`MAX_CONCURRENT_JOBS` is never
+   enforced at accept time) and one a visibility defect (a job stranded in `requested` by a
+   Redis timeout). Both were flagged here and **both were fixed on 2026-09-25**, together
+   with row 1 of §9. The findings below are left as they were measured; each carries a dated
+   closure. See §7 and §9.
+7. **Match accuracy is 73 % under create-only load and 22 % once the fleet saturates.** Both
+   numbers are real and both belong in the write-up: the spread is the candidate set
+   changing as `MAX_CONCURRENT_JOBS` caps out the near partners, not the algorithm making
+   worse choices. See §4.
 
 ---
 
@@ -187,6 +194,39 @@ matcher. A pure-nearest system would have sent it 100 %.
 **The defensible headline is therefore "73 % under create-only load, falling to 22 % as the
 fleet saturates"**, with the explanation above — not a single figure.
 
+### 4.1 Metric hygiene, added 2026-09-25 — exclude dispatch outages before computing any rate
+
+Since 2026-09-25 a Redis failure during dispatch no longer strands the job in `requested`;
+it moves to `no_match_found` with the note `Dispatch unavailable: ...` (ADR-016). That is
+the right product behaviour and the wrong raw input for evaluation: **an infrastructure
+outage now looks exactly like "no partners were nearby" unless the query separates them.**
+
+Any figure quoted in the final report must therefore be computed over dispatches that
+actually ran. Two metrics are affected, both defined in the PRD:
+
+- **No-match rate** (`no_match_found` jobs / requested jobs) — inflates directly. An outage
+  counts as a coverage failure the fleet never had.
+- **Matching accuracy / divergence** (`was_baseline_choice`) — deflates its denominator. A
+  job that never reached scoring produces no rank-1 assignment at all.
+
+The exclusion, which is the whole reason the cause was kept separable in the note text:
+
+```sql
+-- how many "no matches" were actually outages
+SELECT count(*) FROM job_status_history
+ WHERE status = 'no_match_found'
+   AND note LIKE 'Dispatch unavailable:%';
+
+-- genuine no-match rate: subtract the above from the no_match_found count
+```
+
+Everything in §4 above predates the change and is unaffected — those runs were measured on
+code that had no such status, and the one dispatch that did lose its Redis call (§7.2) was
+identified by hand. **The first evaluation run that includes post-2026-09-25 traffic is the
+one that has to apply this filter**, and a number quoted without it should be treated as
+unverified. Same class of error as the three false zeros in §10: a metric that silently
+absorbs its own infrastructure failures reports good news it has not earned.
+
 ---
 
 ## 5. Throughput and behaviour under surge
@@ -257,11 +297,20 @@ requests got an immediate **500**. Same root cause, two symptoms, and which one 
 depends on whether anything else is connected — a second uvicorn worker, a migration, a
 monitoring probe, an admin session.
 
+**Resolved 2026-09-25.** Row 1 of that table is now 3 + 2 overflow = **5 per worker**, so
+the two limits are no longer the same number and the app no longer consumes the entire
+shared budget on its own. Which limit binds first is now unambiguous: the app's own pool
+always does, and it queues rather than 500s. §9.1 has the decision and its cost.
+
 ---
 
 ## 7. New bugs found
 
-Per the task instruction, these are described and **not fixed**.
+Per the task instruction these were described and not fixed *by this task*. Both were then
+fixed the following day, on 2026-09-25, in a separate task with its own reverted-first
+tests; each subsection keeps its original finding and ends with a dated closure. The
+distinction matters for reading the numbers: everything measured above was measured against
+the *unfixed* code.
 
 ### 7.1 `MAX_CONCURRENT_JOBS` is never enforced when an offer is accepted — *correctness defect*
 
@@ -292,6 +341,37 @@ offer-timeout feature. It warrants its own task with its own reverted-first test
 This is a consequence of the "filter, not a score" decision, so it is also recorded inside
 [ADR-009](adr/ADR.md) rather than as a new ADR, per the one-ADR-per-search-term rule.
 
+**Closed 2026-09-25.** The three open decisions were answered as: **409
+`PARTNER_AT_CAPACITY`** (its own code — the remedy differs from
+`ASSIGNMENT_ALREADY_ANSWERED`: that offer is gone, this one may be acceptable in ten
+minutes); the refused offer is **left `'offered'`** and is never written `'rejected'`, since
+being full is not declining and charging a mechanic's acceptance rate for a platform limit
+repeats the mistake ADR-012 already rejected; and the job is **re-dispatched to the next
+candidate** so that from the driver's side a capacity refusal is indistinguishable from a
+decline.
+
+One claim in the paragraph above turned out to be wrong, and it is the useful part of the
+story: the fix does **not** sit under the existing `jobs` → `job_assignments` ordering. Two
+accepts by the same partner for two *different* jobs lock two different `jobs` rows, so
+neither transaction ever waits for the other and both read the same pre-accept count. The
+partner row is the only row the two transactions share, so the check has to take
+`partners` `FOR UPDATE` — making the lock order `jobs` → `partners` → `job_assignments`
+(verified acyclic; before the change `with_for_update()` existed in exactly one module).
+A re-check written to this section's own assumption would have passed every sequential test
+and closed nothing.
+
+Two further additions the flagging did not anticipate: the locks are committed *before*
+`_offer_next()` runs, because that call reaches Redis and this module holds no lock across
+another service; and a rank guard suppresses re-dispatch when the refused offer has already
+been superseded, without which every repeat tap on a stale offer card burns another
+candidate.
+
+Evidence: the same 12-job replay against the same fleet, reverted → **12 accepted, 0
+refused, six partners ending on 3 active jobs against a cap of 2**; fixed → **8 accepted, 6
+refused with `PARTNER_AT_CAPACITY`, every partner ending at exactly 2**. Deadlocks 4 → 4.
+Full detail in [ADR-009](adr/ADR.md)'s closure; the lock order itself is recorded in
+ADR-015 where a future caller would look it up.
+
 ### 7.2 A job can be silently stranded in `requested` with no assignments and no retry path
 
 **What.** When Redis `GEOSEARCH` times out during dispatch, the handler logs
@@ -308,6 +388,29 @@ real: there is no state that says "this job needs dispatching again", so the onl
 is the owner cancelling and re-booking. The natural fix — retry, or a background worker
 sweeping `requested` jobs — is explicitly on the deferred list, which is why this is flagged
 rather than patched.
+
+**Closed 2026-09-25, without building either deferred thing.** The gap was visibility, not
+retry, so the fix is visibility only: `find_candidates()` now raises a distinct type
+(`DispatchUnavailableError`), `_try_dispatch()` catches that type specifically above its
+existing catch-all, and the job is moved to **`no_match_found`** — the same status as
+"nobody was eligible" — carrying the fixed note `"Dispatch unavailable: could not reach the
+partner location service"`. The status is shared because from the driver's seat the two
+situations are identical; the *cause* stays separable in `job_status_history.note`, which is
+what lets the evaluation exclude outages from match-rate figures instead of counting an
+infrastructure failure as a legitimate "no partners nearby":
+
+```sql
+SELECT count(*) FROM job_status_history
+ WHERE status = 'no_match_found'
+   AND note LIKE 'Dispatch unavailable:%';
+```
+
+Nothing retries inside the request, and the recording write is itself guarded — if it fails
+the job stays in `'requested'`, exactly where it already was. `POST /jobs` still returns
+**201**, measured at **782 ms** with the location store hard-timing-out on every call.
+Reasoning, the rejected alternatives (a new status; a 503; an inline retry) and why this
+deliberately overrides an earlier warning comment in `find_candidates()` are in
+[ADR-016](adr/ADR.md).
 
 ### 7.3 Observability gap (minor, contributed directly to the cost of this task)
 
@@ -355,12 +458,21 @@ genuinely saturated at 22 concurrent held jobs; that is a property of the test d
 size, not a system limit, and it is why the calibration run's partner spread is the most
 realistic one in this report.
 
+**A third caveat, added 2026-09-25.** Every figure in the box above was measured with the
+app pool at 15 — i.e. with one worker holding the entire pooler budget. The pool has since
+been reduced to 5 per worker (§9.1). The *system* ceiling of 15 concurrent database-using
+requests is unchanged, but it now takes three workers to reach it, and a single worker
+should be expected to sustain roughly 5–6 creations/s rather than 10. The per-worker number
+in this box should be read as "what one worker did at pool=15", not as the current
+single-worker figure; §9.1 states what was measured and what is predicted.
+
 ---
 
-## 9. Configuration that needs attention — flagged, not changed
+## 9. Configuration that needs attention — flagged, not changed (row 1 applied 2026-09-25)
 
 Config changes affect the deployed Render/Supabase environment, so nothing below was
-altered.
+altered *by this task*. Row 1 was decided and applied the following day; see the closure
+after the table.
 
 | # | Item | Current | Concern |
 |---|---|---|---|
@@ -377,6 +489,70 @@ the client cap substantially and is the likelier correct answer, but it forbids
 session-scoped state (`SET`, session advisory locks, some prepared-statement usage) and so
 needs verification against the dispatch engine's `FOR UPDATE` paths before it is adopted.
 That is a decision with consequences, and when taken it should get its own ADR.
+
+### 9.1 Decision taken 2026-09-25 — shrink the app pool, leave Supabase alone
+
+Rows 1–2 were decided together, as this section asked, and the decision was to **shrink the
+app's pool rather than touch the pooler**: `create_async_engine` in
+`app/config/database.py` now passes `pool_size=3, max_overflow=2` — **5 connections total
+per worker, down from the default 5 + 10 = 15** — with a comment recording that the
+Supavisor session-mode cap is 15 *shared across all processes*, so the app must run as a
+single Render worker until a transaction-mode migration is done.
+
+The reason to act rather than keep flagging: zero headroom is a deployment risk, not a
+benchmark artefact. A second worker — from autoscaling, or from someone bumping workers for
+demo stability — would not degrade gracefully; it would take immediate 500s from the pooler
+the moment both pools filled. At 5 per worker, three workers still fit under the cap with
+room for a psql session.
+
+Transaction-mode pooling was **not** adopted now, deliberately: it reopens the
+`statement_cache_size=0` / asyncpg prepared-statement problem that this project avoided
+earlier, which is not worth reopening at this scale.
+
+**Future Scope.** *Production deployment with multiple workers would require migrating to
+Supavisor transaction-mode pooling with statement_cache_size=0, deferred as out of scope
+for single-worker MVP deployment.*
+
+**The assumption behind the change was measured, not asserted.** §5 established that the
+baseline scenario was nowhere near 15 concurrent connections, but "nowhere near 15" is not
+the same as "under 5", and shrinking a pool below actual demand would turn a headroom fix
+into a throughput regression. A sampler
+(`tests/integration/check_dispatch_capacity.py` §10) polls
+`engine.pool.checkedout()` every 10 ms across the regression harness and reports the peak:
+
+| workload | peak connections checked out | of |
+|---|---|---|
+| sequential harness traffic | **1** | 5 |
+| the two-way accept race | **2** | 5 |
+| a 12-job concurrent burst | **5** | 5 |
+
+Zero pool-exhaustion errors, and nothing left checked out at the end. Sequential usage has
+an order of magnitude of headroom; the 12-job burst saturates the pool *exactly*, which is
+the honest number to quote — it did not fail, but it had nothing spare. That is the real
+cost of the change, and it is the right trade for an MVP whose measured ceiling (§8) is a
+connection limit shared with every other client of the same database.
+
+**Where the assumption does *not* hold, stated plainly.** It is true for the regression
+suite and for pilot-scale traffic. It is **not** true for §8's headline 10 creations/s. That
+figure was measured at `pool_size=5, max_overflow=10`, and the arithmetic says it will not
+survive at 5: a dispatch spends roughly 860 ms of its life holding a connection, so
+10 creations/s demands about **8.6 connections continuously** (Little's law). A 5-connection
+pool cannot supply that, so a single worker's create-only throughput should fall to
+roughly **5–6/s**, with the surplus queueing on a 30 s checkout timeout rather than
+erroring.
+
+That is a prediction from the measured service time, **not a measurement** — settling it
+means re-running the k6 baseline scenario at the new pool size, which was not done as part
+of this change. It is flagged rather than buried because it is the one number in this report
+the config change invalidates.
+
+It is still the right trade, for a reason that is easy to miss: the *system* ceiling has not
+moved. The binding limit was always the 15 shared pooler slots, and before this change one
+worker consumed all 15, so the only way to serve more than ~10/s — a second worker — produced
+immediate 500s instead of more throughput. At 5 per worker, three workers fit inside the same
+budget and reach the same ceiling horizontally. The change trades single-worker peak
+throughput, which no pilot-scale deployment needs, for the ability to scale out at all.
+Pilot load is on the order of a few jobs per *minute*; both figures are far above it.
 
 ---
 

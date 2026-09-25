@@ -110,6 +110,21 @@ class ErrorCode:
     # typically their own second tap, or an offer that expired under them — and
     # a partner app should refresh its offer list, not the job.
     ASSIGNMENT_ALREADY_ANSWERED = "ASSIGNMENT_ALREADY_ANSWERED"
+    # The partner already holds MAX_CONCURRENT_JOBS active jobs, so this accept
+    # is refused and the job goes to the next candidate instead.
+    #
+    # Its own code rather than ASSIGNMENT_ALREADY_ANSWERED, even though both are
+    # 409 and both mean "this offer is not yours to take any more", because the
+    # remedies differ and a partner app should be able to say something true:
+    # ASSIGNMENT_ALREADY_ANSWERED means the offer is gone, PARTNER_AT_CAPACITY
+    # means *you are full* — finish or hand off a job and the next offer will
+    # work. Showing "this offer expired" to a mechanic who is simply at their
+    # limit would make the cap look like a bug in the app.
+    #
+    # 409 rather than 403: nothing about the partner's permission is wrong, it is
+    # the current state of their workload that makes the request impossible, and
+    # that state changes on its own. See ADR-009.
+    PARTNER_AT_CAPACITY = "PARTNER_AT_CAPACITY"
 
     # Partners
     PARTNER_ALREADY_EXISTS = "PARTNER_ALREADY_EXISTS"
@@ -234,3 +249,20 @@ class InternalError(AppError):
         self, message: str = "An unexpected error occurred.", code: str = "INTERNAL_ERROR"
     ) -> None:
         super().__init__(status_code=500, code=code, message=message)
+
+
+class DispatchUnavailableError(InternalError):
+    """Dispatch could not run because a dependency it needs is unreachable.
+
+    Specifically: the Redis location store did not answer. Distinct as a *Python
+    type* from every other InternalError raised during dispatch — the response
+    is identical (500, INTERNAL_ERROR, same message), because a client's remedy
+    does not change and the wire contract must not.
+
+    It exists so that job_service._try_dispatch can tell "we could not look" from
+    "we looked and nobody was there", and from "the database write failed". Those
+    three leave the job in three different places and only one of them is a
+    normal outcome. Before this existed the first case was indistinguishable from
+    the third inside a bare `except Exception`, and the job was simply left in
+    'requested' with nothing anywhere to say why. See ADR-016.
+    """

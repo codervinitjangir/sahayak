@@ -67,7 +67,88 @@ VERIFIED = "verified"
 # dense area becomes the default answer for everything near them — which is
 # exactly what a demo with more than a handful of test partners would surface,
 # and exactly the kind of thing that looks like the algorithm "not working".
+#
+# **Enforced in two places, and it needs both.** As an eligibility filter in
+# get_eligible_partners (who may be offered this job) and again in
+# dispatch_service._accept (who may take it). The filter alone is not a cap: it
+# runs when candidates are chosen and never again, an 'offered' row costs no
+# capacity, and the load test of 2026-09-24 duly found a partner holding four
+# active jobs against this limit of 2. A filter enforces an invariant at the
+# moment it runs, not for the lifetime of the thing it filtered. See ADR-009.
 MAX_CONCURRENT_JOBS: int = 2
+
+
+def _active_job_count_select(partner_id):
+    """The one definition of "how many jobs is this partner on right now".
+
+    Built as a function because the same count is needed in two shapes and they
+    must not be allowed to drift: correlated against the partners table inside
+    get_eligible_partners (who may be *offered* a job), and standalone for a
+    single partner inside count_active_jobs (who may *accept* one). Two hand-
+    written copies of this join would be two definitions of "at capacity", and
+    the day they disagreed the filter and the enforcement would quietly stop
+    describing the same rule — which is the failure this whole check exists to
+    prevent.
+
+    ``partner_id`` is either a literal UUID or the ``Partner.id`` column, which
+    is what makes the same statement work correlated and uncorrelated.
+    """
+    return (
+        select(func.count(JobAssignment.id))
+        .select_from(JobAssignment)
+        .join(Job, Job.id == JobAssignment.job_id)
+        .where(
+            JobAssignment.partner_id == partner_id,
+            JobAssignment.status.in_(ACTIVE_ASSIGNMENT_STATUSES),
+            Job.status.in_(ACTIVE_JOB_STATUSES),
+        )
+    )
+
+
+async def count_active_jobs(db: AsyncSession, partner_id: uuid.UUID) -> int:
+    """How many active jobs this one partner is holding, counted live.
+
+    The accept path's half of MAX_CONCURRENT_JOBS. get_eligible_partners applies
+    the same count as a filter when candidates are chosen; this answers the same
+    question again at the moment the partner commits, because the two moments can
+    be minutes apart and everything in between can change.
+
+    Derived, never stored — same rule as everywhere else. See the docstring on
+    get_eligible_partners for why.
+    """
+    result = await db.execute(_active_job_count_select(partner_id))
+    return int(result.scalar_one())
+
+
+async def lock_partner_for_update(
+    db: AsyncSession, partner_id: uuid.UUID
+) -> Optional[Partner]:
+    """Read a partner row under ``SELECT … FOR UPDATE``, or None if absent.
+
+    Exists for one reason: **counting is not enough to enforce a cap.** Two
+    offers to the same partner, for two different jobs, accepted at the same
+    moment, each lock their own jobs row — different rows, so neither waits for
+    the other — and both then count the same pre-accept number and both commit.
+    The cap is breached by a transaction that never saw a violation.
+
+    Locking the *partner* gives the two transactions one row in common, which is
+    the only thing that can serialise them. The count that follows this call is a
+    separate statement, so under READ COMMITTED it takes a fresh snapshot once
+    the lock is granted and sees the accept that went first.
+
+    Lock ordering (ADR-015): this is taken **after** the jobs row and **before**
+    anything is written to job_assignments, so the order across every locking
+    path stays jobs → partners → job_assignments. Nothing in the codebase locks
+    partners before jobs, which is what keeps that order acyclic.
+
+    populate_existing is not set here, unlike the job equivalent: this row is
+    read solely to be locked and counted against, never to be returned or
+    written, so a stale identity-map copy cannot be acted on.
+    """
+    result = await db.execute(
+        select(Partner).where(Partner.id == partner_id).with_for_update()
+    )
+    return result.scalar_one_or_none()
 
 
 async def get_service_by_id(db: AsyncSession, service_id: int) -> Optional[Service]:
@@ -162,17 +243,12 @@ async def get_eligible_partners(
     # alternative (a derived table, or repeating the count in a HAVING) buys
     # nothing here and puts the eligibility rule further from the filters it
     # belongs with.
+    #
+    # Correlated against Partner so it counts per candidate row; the same
+    # statement, uncorrelated, is what count_active_jobs runs for one partner at
+    # accept time. One definition, two call sites — see _active_job_count_select.
     active_job_count = (
-        select(func.count(JobAssignment.id))
-        .select_from(JobAssignment)
-        .join(Job, Job.id == JobAssignment.job_id)
-        .where(
-            JobAssignment.partner_id == Partner.id,
-            JobAssignment.status.in_(ACTIVE_ASSIGNMENT_STATUSES),
-            Job.status.in_(ACTIVE_JOB_STATUSES),
-        )
-        .correlate(Partner)
-        .scalar_subquery()
+        _active_job_count_select(Partner.id).correlate(Partner).scalar_subquery()
     )
 
     offers_this_service = exists().where(

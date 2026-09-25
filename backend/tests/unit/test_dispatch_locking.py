@@ -68,6 +68,11 @@ class FakeAssignment:
         self.responded_at = None
 
 
+class FakePartner:
+    def __init__(self, partner_id: uuid.UUID) -> None:
+        self.id = partner_id
+
+
 class FakeSession:
     """Just enough AsyncSession for the service's transaction boundary."""
 
@@ -92,13 +97,14 @@ def wire(monkeypatch, *, job: FakeJob, assignment: FakeAssignment) -> dict:
     Returns a dict recording what happened, so a test can assert on the order
     of events rather than only on the return value.
     """
-    state: dict = {"locked_read": False, "checked_status_at": None, "writes": []}
+    state: dict = {"locked_read": False, "checked_status_at": None, "writes": [], "locks": []}
 
     async def get_assignment_by_id(_db, _assignment_id):
         return assignment
 
     async def get_job_by_id_for_update(_db, _job_id):
         state["locked_read"] = True
+        state["locks"].append("job")
         # Snapshot the status as the service sees it at lock time. Any later
         # assertion about "checked after locking" is then a fact about
         # ordering, not an inference from the outcome.
@@ -135,10 +141,30 @@ def wire(monkeypatch, *, job: FakeJob, assignment: FakeAssignment) -> dict:
         state["writes"].append("offer_next")
         return None
 
+    async def lock_partner_for_update(_db, partner_id):
+        """The accept-time capacity re-check, added to _accept() after this file
+        was written (ADR-009's closure).
+
+        It is not what these tests are about, but it now runs before any write on
+        the accept path, so leaving it unstubbed would have the fake session
+        asked for a real connection. The partner is returned under the cap, so
+        every accept here proceeds exactly as it did before that check existed —
+        which is the point: these tests must keep testing the *lock*, not the cap.
+        """
+        state["partner_locked"] = True
+        state["locks"].append("partner")
+        return FakePartner(partner_id)
+
+    async def count_active_jobs(_db, _partner_id):
+        state["active_counted"] = True
+        return 0
+
     monkeypatch.setattr(dispatch_repository, "get_assignment_by_id", get_assignment_by_id)
     monkeypatch.setattr(dispatch_repository, "mark_assignment_accepted", mark_assignment_accepted)
     monkeypatch.setattr(dispatch_repository, "mark_assignment_rejected", mark_assignment_rejected)
     monkeypatch.setattr(dispatch_repository, "set_job_status", set_job_status)
+    monkeypatch.setattr(dispatch_repository, "lock_partner_for_update", lock_partner_for_update)
+    monkeypatch.setattr(dispatch_repository, "count_active_jobs", count_active_jobs)
     monkeypatch.setattr(job_repository, "get_job_by_id_for_update", get_job_by_id_for_update)
     monkeypatch.setattr(job_repository, "get_job_by_id", get_job_by_id)
     monkeypatch.setattr(job_repository, "create_status_history_row", create_status_history_row)
@@ -164,6 +190,25 @@ class TestTheLockIsTaken:
         respond(FakeSession(), a, partner_id, "accept")
 
         assert state["locked_read"] is True
+
+    def test_the_job_lock_is_taken_before_the_partner_lock(self, monkeypatch):
+        """The lock order itself, in the fast suite (ADR-015 as amended).
+
+        The accept path now takes two row locks, and the order between them is
+        the whole reason it cannot deadlock against anything else: jobs first,
+        then partners, then writes to job_assignments. Reversing them here would
+        still pass every other test in this file and every capacity test, and
+        would only show up as an intermittent deadlock under real concurrency —
+        which is the most expensive kind of bug to find twice.
+        """
+        job = FakeJob(STATUS_MATCHING)
+        partner_id = uuid.uuid4()
+        a = FakeAssignment(job.id, partner_id, "offered")
+        state = wire(monkeypatch, job=job, assignment=a)
+
+        respond(FakeSession(), a, partner_id, "accept")
+
+        assert state["locks"] == ["job", "partner"]
 
     def test_rejecting_reads_the_job_through_the_locking_read_too(self, monkeypatch):
         """A rejection writes the job's history and can re-dispatch.
