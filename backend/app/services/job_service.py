@@ -32,6 +32,7 @@ from app.services.auth_service import Identity
 from app.utils.errors import (
     BadRequestError,
     ConflictError,
+    DispatchUnavailableError,
     ErrorCode,
     ForbiddenError,
     InternalError,
@@ -270,15 +271,23 @@ async def _try_dispatch(db: AsyncSession, job: Job) -> None:
         is recoverable by re-running dispatch; a driver who gave up because they
         saw an error is not.
 
-      * **The status is left alone on failure.** 'requested' is exactly what the
-        job is: nobody has been asked yet. Marking it 'no_match_found' would
-        conflate "we looked and there was nobody" with "we never got to look",
-        and those need different responses from ops.
+      * **The status is left alone on failure — with one exception.** For most
+        faults 'requested' is exactly what the job is: nobody has been asked yet,
+        and marking it 'no_match_found' would conflate "we looked and there was
+        nobody" with "we never got to look". The exception is the fault where
+        *nothing will ever look again*: if the location store is unreachable
+        there is no worker to come back, so the job would sit in 'requested'
+        forever with a live-looking card in the driver's app and no signal
+        anywhere that their request had been dropped. That case is recorded — see
+        dispatch_service.mark_dispatch_unavailable, and ADR-016 for why it shares
+        a status with "nobody available" while staying distinguishable in the
+        timeline.
 
     The obvious next step, once there is a worker to run it, is a sweep that
     re-dispatches jobs left in 'requested' past some age. That is deliberately
     not built here — it is a background job, and this task is synchronous
-    dispatch only.
+    dispatch only. Note that nothing below retries: a retry inside the request
+    would block the driver's POST on a dependency that has just timed out.
     """
     # Imported here rather than at module scope: dispatch_service imports
     # job_repository and its own models, and a top-level import in both
@@ -287,6 +296,28 @@ async def _try_dispatch(db: AsyncSession, job: Job) -> None:
 
     try:
         await dispatch_service.dispatch_job(db, job.id)
+    except DispatchUnavailableError as exc:
+        log_event(
+            "dispatch_after_create_failed",
+            level=logging.ERROR,
+            job_id=job.id,
+            job_status=job.status,
+            error_type=type(exc).__name__,
+            reason="location_store_unavailable",
+            outcome="failure",
+        )
+        # Guarded in its own right: this is recovery from a failure, and a
+        # failure in the recovery must still not fail the POST. Worst case the
+        # job stays in 'requested', which is where it was a moment ago.
+        try:
+            await dispatch_service.mark_dispatch_unavailable(db, job.id)
+        except Exception:  # noqa: BLE001 - see docstring: never fail the POST
+            log_event(
+                "dispatch_unavailable_not_recorded",
+                level=logging.ERROR,
+                job_id=job.id,
+                outcome="failure",
+            )
     except Exception as exc:  # noqa: BLE001 - see docstring: never fail the POST
         log_event(
             "dispatch_after_create_failed",

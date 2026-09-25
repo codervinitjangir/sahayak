@@ -282,6 +282,19 @@ Every dispatch also records which partner the **nearest-only baseline** would ha
 | Integration + Trust | 13–16 | Admin, verification, ratings, load tests |
 | Finalization | 17–20 | Polish, docs, demo rehearsal |
 
+### Future Scope — deployment
+
+**Production deployment with multiple workers would require migrating to Supavisor
+transaction-mode pooling with statement_cache_size=0, deferred as out of scope for
+single-worker MVP deployment.**
+
+The backend's SQLAlchemy pool is deliberately sized at `pool_size=3, max_overflow=2` (5
+connections per worker) because Supabase's session-mode pooler caps this project at 15
+client connections *shared across every process*. One worker at the old default of 15 left
+zero headroom for a second worker, a migration or a psql session. Measurement, cost and the
+rejected alternative are in
+[`docs/load-test-dispatch-concurrency.md` §9.1](docs/load-test-dispatch-concurrency.md).
+
 ---
 
 ## 👥 Contributors

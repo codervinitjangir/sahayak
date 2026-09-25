@@ -32,7 +32,10 @@ _ERROR_RESPONSES = {
     401: {"model": ErrorResponse, "description": "Missing or invalid token"},
     403: {"model": ErrorResponse, "description": "Offer belongs to another partner"},
     404: {"model": ErrorResponse, "description": "Resource not found"},
-    409: {"model": ErrorResponse, "description": "Offer has already been answered"},
+    409: {
+        "model": ErrorResponse,
+        "description": "Offer already answered, or the partner is at capacity",
+    },
     422: {"model": ErrorResponse, "description": "Request failed validation"},
     500: {"model": ErrorResponse, "description": "Unexpected server error"},
 }
@@ -74,6 +77,14 @@ async def respond_to_assignment(
     returns 409 ASSIGNMENT_ALREADY_ANSWERED — this is the common case of a double
     tap on a bad connection, not an unusual one. Returns 404
     ASSIGNMENT_NOT_FOUND for an id that does not exist at all.
+
+    An accept from a partner who is already working the maximum number of
+    concurrent jobs returns 409 PARTNER_AT_CAPACITY. The offer is *not* closed —
+    being full is not a decline, and it is not counted against the partner's
+    acceptance rate — but the job is immediately offered to the next candidate,
+    so the driver sees the same thing they would have seen after a rejection. A
+    client should treat this as "try again when you have finished something",
+    not as an error to report.
 
     The job itself is not returned. GET /jobs/{job_id} owns that shape, including
     which fields a partner is allowed to see, and duplicating it here would mean

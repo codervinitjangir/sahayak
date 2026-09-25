@@ -32,6 +32,12 @@ that reaches Redis *between* reading the job and writing it, and a row lock held
 across a call to another service turns one slow dependency into a queue of
 blocked writers. It is also the one path with nothing to lose: it requires
 'requested', a status no other endpoint can leave a job in.
+
+The accept path takes a second lock, on the *partner* row, for the capacity
+check added 2026-09-24 — two accepts by one partner for two different jobs share
+no jobs row, so the jobs lock cannot order them. The order is jobs → partners →
+job_assignments everywhere, and nothing in this codebase locks partners first.
+See _require_capacity.
 """
 import logging
 import time
@@ -52,6 +58,7 @@ from app.models.job import Job, JobAssignment
 from app.repositories import dispatch_repository, job_repository
 from app.utils.errors import (
     ConflictError,
+    DispatchUnavailableError,
     ErrorCode,
     ForbiddenError,
     InternalError,
@@ -90,6 +97,14 @@ FIRST_ASSIGNMENT_RANK = 1
 # retroactively.
 MAX_LOCATION_AGE_S = 300
 
+# The timeline note written when dispatch could not run at all, as opposed to
+# running and finding nobody. Both end in 'no_match_found'; this string is the
+# only thing that tells them apart, so it is a constant rather than a literal —
+# the evaluation query matches on it. See mark_dispatch_unavailable and ADR-016.
+DISPATCH_UNAVAILABLE_NOTE = (
+    "Dispatch unavailable: could not reach the partner location service"
+)
+
 
 @dataclass(frozen=True)
 class ScoredCandidate:
@@ -122,11 +137,16 @@ async def find_candidates(
     dispatch_job, where it becomes no_match_found.
 
     Raises:
-        InternalError (500): Redis is unreachable. Distinct from "nobody nearby"
-            on purpose: one is a fact about the world, the other is a fact about
-            our infrastructure, and recording an outage as "no partners
-            available" would quietly corrupt the coverage metrics the pilot is
-            being judged on.
+        InternalError (500): Redis is unreachable — specifically
+            DispatchUnavailableError, a subclass that responds identically but
+            can be caught apart from a failed write. Distinct from "nobody
+            nearby" on purpose: one is a fact about the world, the other is a
+            fact about our infrastructure, and recording an outage as "no
+            partners available" would quietly corrupt the coverage metrics the
+            pilot is being judged on. What the caller does with the distinction
+            is ADR-016: the job still ends in 'no_match_found', because the
+            driver's situation is the same either way, but the timeline entry
+            says which of the two happened and the metrics split on it.
     """
     excluded = exclude_partner_ids or set()
 
@@ -159,7 +179,9 @@ async def find_candidates(
             error_type=type(exc).__name__,
             outcome="failure",
         )
-        raise InternalError("Could not search for nearby partners right now.") from exc
+        raise DispatchUnavailableError(
+            "Could not search for nearby partners right now."
+        ) from exc
 
     # {partner_id: distance_m}, dropping anyone already asked.
     distances: dict[uuid.UUID, float] = {}
@@ -388,6 +410,79 @@ async def dispatch_job(db: AsyncSession, job_id: uuid.UUID) -> Optional[JobAssig
     return assignment
 
 
+async def mark_dispatch_unavailable(db: AsyncSession, job_id: uuid.UUID) -> bool:
+    """Record that dispatch could not run for this job, so it stops being invisible.
+
+    Called only from job_service._try_dispatch, and only for
+    DispatchUnavailableError — the Redis location store not answering. Returns
+    True if the job was moved, False if it had already left 'requested'.
+
+    **The problem this solves.** Job creation triggers dispatch inside a guard,
+    so a dispatch fault cannot fail a POST that genuinely succeeded. Until now
+    the guard also left the job exactly where it was: 'requested', with no
+    assignment, no history entry beyond "Job created", and no worker to come
+    back for it. The load test produced these at a rate of about 0.08 %. Nothing
+    anywhere said that a request had been dropped — the driver's app showed a
+    live job and would have gone on showing it. A stranded customer with no
+    assignment and no retry path is the worst failure this product has.
+
+    **Why 'no_match_found' and not a new status.** Two reasons, one about the
+    driver and one about cost. The driver's situation is identical in both
+    cases — we did not get you a partner, please try again or call someone —
+    and 'no_match_found' is already the status that says so, is already
+    cancellable by the owner (ADR-013), and is already rendered by the client.
+    A new status would be a CHECK-constraint migration, an entry in
+    ALLOWED_TRANSITIONS, a decision about terminality, and a contract change for
+    the frontend, for a path that is rarer than one job in a thousand and whose
+    real fix is the re-dispatch worker that does not exist yet.
+
+    **What keeps the two distinguishable** — which matters, because counting an
+    outage as "no partners were available" would overstate a coverage problem
+    the platform does not have — is the job_status_history note. Every entry
+    written here says DISPATCH_UNAVAILABLE_NOTE and nothing else does, so the
+    evaluation query splits on it:
+
+        SELECT count(*) FROM job_status_history
+        WHERE status = 'no_match_found' AND note LIKE 'Dispatch unavailable:%';
+
+    That is the same mechanism ADR-013 already uses to carry the actor of a
+    cancellation, for the same reason: the fact is recorded where it happened,
+    rather than encoded in a status whose meaning every other consumer would
+    then have to learn. See ADR-016.
+
+    **No retry here.** Not a synchronous one, at least: retrying inside the
+    request would block the driver's POST on a dependency that has just timed
+    out, which is the one thing the guard exists to prevent. Recovery is the
+    background sweep this codebase still does not have; what this function buys
+    is that the sweep — or a human — has something to find.
+    """
+    job = await job_repository.get_job_by_id_for_update(db, job_id)
+    if job is None or job.status != STATUS_REQUESTED:
+        # Nothing to do, and not an error: the only other thing that can move a
+        # job out of 'requested' this quickly is the owner cancelling it, whose
+        # answer is the truer one. Locked read rather than a plain one so that
+        # this check and the write below cannot be split (ADR-015).
+        log_event(
+            "dispatch_unavailable_not_recorded",
+            level=logging.WARNING,
+            job_id=str(job_id),
+            job_status=job.status if job is not None else "missing",
+            outcome="skipped",
+        )
+        return False
+
+    await _transition(db, job, STATUS_NO_MATCH_FOUND, note=DISPATCH_UNAVAILABLE_NOTE)
+    log_event(
+        "dispatch_unavailable_recorded",
+        level=logging.WARNING,
+        job_id=str(job.id),
+        job_status=STATUS_NO_MATCH_FOUND,
+        reason="location_store_unavailable",
+        outcome="success",
+    )
+    return True
+
+
 async def respond_to_assignment(
     db: AsyncSession,
     assignment_id: uuid.UUID,
@@ -402,7 +497,11 @@ async def respond_to_assignment(
     because the partner accepted, or because there was nobody left to ask.
 
     On accept: the offer becomes 'accepted' and the job becomes 'assigned'. No
-    further offers are made for that job.
+    further offers are made for that job — unless the partner is already at
+    MAX_CONCURRENT_JOBS, in which case the accept is refused with 409
+    PARTNER_AT_CAPACITY and the job is passed to the next candidate exactly as a
+    rejection would pass it. From the driver's side those two are the same event;
+    only the partner is told the difference. See _require_capacity.
 
     On reject: the offer becomes 'rejected', the candidate search runs again
     excluding **every partner already offered this job** — not merely the one
@@ -438,6 +537,9 @@ async def respond_to_assignment(
             Also raised when the *job* has moved off 'matching' underneath a
             still-'offered' row — the same code deliberately, so a client
             cannot tell the racing case from the sequential one.
+        ConflictError (409) PARTNER_AT_CAPACITY: accept only. The partner is
+            already on MAX_CONCURRENT_JOBS jobs. The offer is left 'offered' and
+            the job is re-dispatched. See _require_capacity.
         InternalError (500): the write failed; the transaction is rolled back.
     """
     started = time.perf_counter()
@@ -513,7 +615,13 @@ async def respond_to_assignment(
 async def _accept(
     db: AsyncSession, assignment: JobAssignment, job: Job, started: float
 ) -> tuple[JobAssignment, Job, None]:
-    """Accept an offer: the partner is committed and the job is assigned."""
+    """Accept an offer: the partner is committed and the job is assigned.
+
+    The capacity check runs first and can end this call with a 409 — see
+    _require_capacity. Everything after it is the write.
+    """
+    await _require_capacity(db, assignment, job, started)
+
     try:
         await dispatch_repository.mark_assignment_accepted(db, assignment)
         await _transition(
@@ -547,6 +655,102 @@ async def _accept(
         duration_ms=round((time.perf_counter() - started) * 1000, 2),
     )
     return assignment, job, None
+
+
+async def _require_capacity(
+    db: AsyncSession, assignment: JobAssignment, job: Job, started: float
+) -> None:
+    """Refuse an accept that would take the partner past MAX_CONCURRENT_JOBS.
+
+    Returns silently when there is room. Otherwise it passes the job to the next
+    candidate and raises 409 PARTNER_AT_CAPACITY.
+
+    **Why this exists at all**, given that candidate selection already filters on
+    the same number: the filter runs once, when the offer is made, and an
+    'offered' assignment costs no capacity (ADR-008). Between those two moments
+    the partner can accept any number of other offers, and nothing looked again.
+    The dispatch load test found a partner holding four active jobs against a cap
+    of two, and one breach at only four job creations per second — a missing
+    check, not a narrow race. See the ADR-009 amendment.
+
+    **Why the partner row is locked.** Counting under the job lock already held
+    by respond_to_assignment() would not be enough: two offers to the same
+    partner for two *different* jobs lock two different job rows, so neither
+    transaction waits, both count the same pre-accept number, and both commit.
+    The partner row is the only row those two transactions have in common, so it
+    is the only thing that can order them. Under READ COMMITTED the count is a
+    later statement with a fresh snapshot, so the one that waits sees the accept
+    that went first. Lock order stays jobs → partners → job_assignments.
+
+    **What a refusal does to the offer.** Nothing: it stays 'offered'. Being full
+    is not declining, and writing 'rejected' here would charge a mechanic's
+    acceptance rate for a limit the platform imposed on them — the same reasoning
+    that gave owner cancellation its own assignment status in ADR-012. The
+    consequence is that the job can briefly carry two live offers, the refused
+    one and the re-dispatched one; the first of them to be accepted wins and the
+    other gets the ordinary ASSIGNMENT_ALREADY_ANSWERED, which is exactly what
+    already happens to any offer the job outruns.
+
+    **Why the re-dispatch is guarded on rank.** Because the offer survives, the
+    partner's app keeps showing it, and every retry would otherwise fire another
+    re-dispatch: a new candidate per tap, the pool walked to exhaustion, and the
+    job finally moved to 'no_match_found' while several partners still hold live
+    offers for it. Re-offering only from the newest offer makes the refusal
+    idempotent.
+    """
+    partner_id = assignment.partner_id
+
+    locked = await dispatch_repository.lock_partner_for_update(db, partner_id)
+    if locked is None:
+        # job_assignments.partner_id is a foreign key, so this cannot happen
+        # without the row having been deleted underneath a live offer. Say so and
+        # carry on rather than inventing a 404 for the partner who is standing
+        # there holding their phone: the count below is then 0, and letting them
+        # take the job is the outcome that serves the stranded customer.
+        log_event(
+            "capacity_check_partner_missing",
+            level=logging.WARNING,
+            assignment_id=str(assignment.id),
+            partner_id=str(partner_id),
+            outcome="degraded",
+        )
+
+    active_job_count = await dispatch_repository.count_active_jobs(db, partner_id)
+    if active_job_count < dispatch_repository.MAX_CONCURRENT_JOBS:
+        return
+
+    # Nothing has been written in this transaction; the commit is here to release
+    # the two row locks — the job's, taken by respond_to_assignment(), and the
+    # partner's, taken above — before _offer_next() reaches Redis. Holding a
+    # Postgres lock across a call to another service is the thing this module
+    # refuses to do anywhere (see _offer_next). It also mirrors _reject(): the
+    # answer is settled first, the re-dispatch happens after.
+    await db.commit()
+
+    latest_rank = await dispatch_repository.get_max_assignment_rank(db, job.id)
+    next_assignment = None
+    if assignment.assignment_rank >= latest_rank:
+        next_assignment = await _offer_next(db, job)
+
+    log_event(
+        "offer_refused_at_capacity",
+        level=logging.WARNING,
+        assignment_id=str(assignment.id),
+        job_id=str(job.id),
+        partner_id=str(partner_id),
+        assignment_rank=assignment.assignment_rank,
+        active_job_count=active_job_count,
+        max_concurrent_jobs=dispatch_repository.MAX_CONCURRENT_JOBS,
+        next_assignment_id=str(next_assignment.id) if next_assignment else None,
+        outcome="rejected_partner_at_capacity",
+        duration_ms=round((time.perf_counter() - started) * 1000, 2),
+    )
+    raise ConflictError(
+        ErrorCode.PARTNER_AT_CAPACITY,
+        "You are already working the maximum number of jobs "
+        f"({dispatch_repository.MAX_CONCURRENT_JOBS}). This job has been offered "
+        "to another partner.",
+    )
 
 
 async def _reject(
