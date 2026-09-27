@@ -20,6 +20,7 @@
 | **Job status past `assigned`** | **Now real — no action, but retest.** Jobs used to freeze at `assigned` forever because no endpoint could move them. Tracking will now show en-route → in-progress → completed. §6. |
 | **Owner cancel button** | **New, action needed — this one's yours.** `POST /api/v1/jobs/{id}/cancel` exists as of 2026-09-22. Optional body, and `assignment_status` in the response decides what the confirmation screen says. §7. |
 | **`409 PARTNER_AT_CAPACITY` on accept** | **New, 2026-09-25 — action needed on the partner side when you build it.** A full mechanic's accept is now refused, and the refusal must not look like "offer gone". §11.1. |
+| **Partner offer screen** | **Unblocked, 2026-09-27.** `GET /api/v1/partners/me/offers` now exists — this was the last backend gap in the partner flow, and it's where `assignment_id` comes from. Shape is decided; build against §10. No owner phone or map pin on an offer card (ADR-017). |
 | **`no_match_found` with no offers** | **Confirm only.** Already legal, now more frequent. If your job screen renders an empty offers list without crashing or spinning forever, you're done. §11.2. |
 
 
@@ -300,13 +301,22 @@ db has:      requested | matching | assigned | partner_en_route | in_progress | 
 
 **There are no partner screens.** Not in `web/`, not in `mobile/`. No partner API module, no partner types, no partner routes. `mobile/src/features/` has `auth`, `jobs`, `profile`, `tracking` — all owner-side.
 
-Meanwhile the backend now has three live partner endpoints:
+Meanwhile the backend now has six live partner endpoints:
 
 | Endpoint | Purpose |
 |---|---|
 | `POST /api/v1/partners` | Register a mechanic (pending verification, off-shift) |
+| `POST /api/v1/partners/{id}/link-auth` | Bind a Supabase account to the profile, once, at signup |
 | `PATCH /api/v1/partners/{id}/availability` | Go on / off shift |
+| `POST /api/v1/partners/{id}/location` | Report current position (Redis only, no DB write) |
 | `POST /api/v1/partners/{id}/services` | Declare which services they can perform |
+| `GET /api/v1/partners/me/offers` | **New 2026-09-27** — outstanding offers, with the `assignment_id` needed to answer them. §10 |
+
+**Update 2026-09-27: question #2 below is closed, #1 is still open.** The offers-endpoint
+shape is decided and shipped (§10), so the partner flow has no remaining backend gap:
+register → link-auth → go available → poll offers → accept/reject → move the job through
+its statuses are all live endpoints. The role-switch question is the only one left, and
+it is still yours.
 
 **Why this is time-sensitive.** The build order is locked: **partner endpoints → auth → dispatch.** Auth has now shipped (§2.5) — which changes this from "coming" to "here". Every partner endpoint above except registration requires a Supabase token today, and a partner can only modify their own profile, so there is no longer any way to drive the partner side except by minting tokens in a script. A mechanic and a vehicle owner authenticate into different home screens with different permissions; that surface still doesn't exist on the client.
 
@@ -922,51 +932,161 @@ sat next to it for two days without noticing.
 
 ---
 
-## 10. A partner can't answer an offer through the API yet (found 2026-09-24)
+## 10. Listing a partner's offers — `GET /api/v1/partners/me/offers` (gap found 2026-09-24, **shipped 2026-09-27**)
 
-Nothing changed here — this is a gap I hit while load-testing dispatch, and you'll hit
-it the moment you build a partner offer screen. Flagging it now so you don't design
-around an endpoint that doesn't exist.
+**Read this section top to bottom if you are building the partner offer screen — it is
+the endpoint that makes that screen possible.** The gap described below is closed; I've
+kept the description because it explains why the response looks the way it does.
 
-**The problem.** To answer an offer you call
-`POST /api/v1/job-assignments/{assignment_id}/respond`. There is currently no way for a
-partner client to learn its `assignment_id`:
+### What was broken
 
-- `GET /api/v1/partners/{id}/current-assignment` returns `partner_id` but **not**
-  `assignment_id`;
-- there is no "list my offers" endpoint at all.
+To answer an offer you call
+`POST /api/v1/job-assignments/{assignment_id}/respond`. Until 2026-09-27 there was no way
+for a partner client to learn its `assignment_id`:
 
-So the path from "I've been offered a job" to "here's the id I need to answer" is
-broken. My load-test harness worked around it by reading the ids straight out of
-Postgres, which a real app obviously can't do.
+- the `/partners` router had **no GET route at all** — every route on it was a POST or a
+  PATCH;
+- `CurrentAssignmentResponse` (which carries `partner_id`, `partner_name`,
+  `partner_phone`, ETA) is not an endpoint. It is a nested field on `GET /jobs/{id}`,
+  which is the **owner's** view of who is coming to them — a partner cannot read it, and
+  it carries no `assignment_id` anyway;
+- there was no "list my offers" endpoint at all.
 
-**What I'd suggest, but haven't built** (your call on shape, and it's a backend change
-either way — don't work around it client-side):
+My load-test harness worked around it by reading the ids straight out of Postgres, which
+a real app obviously can't do.
+
+### The shipped endpoint
 
 ```
-GET /api/v1/partners/me/offers        →  200  { data: [ { assignment_id, job_id,
-                                                          distance_at_offer_m,
-                                                          offered_at, job: {...} } ] }
+GET /api/v1/partners/me/offers
+Authorization: Bearer <partner token>
 ```
 
-or, smaller: add `assignment_id` to the existing `CurrentAssignmentResponse`. The first
-is better — a partner can hold several outstanding offers at once, and
-`current-assignment` is singular by design.
+`/me`, not `/{partner_id}` — the partner is read from the token, so there is no id in the
+URL to pass and none to get wrong. `/api/v1/partners/{someone_else}/offers` does not
+exist and won't.
 
-**One thing to know before you build against it.** Holding several offers at once is
-currently *unbounded*: `MAX_CONCURRENT_JOBS = 2` is checked when we pick who to offer a
-job to, and never re-checked when a partner accepts, so a partner offered five jobs can
-accept all five. I found this under load (one partner held 4 against a cap of 2) and
-it's queued as its own backend fix. Two implications for the UI: don't assume a partner
-has at most one live offer, and don't assume an accept always succeeds — once the
-re-check lands, accepting past the cap will start returning a 409, so treat accept the
-same way you already treat the status-transition 409s in §9.
+**200** — every offer this partner can still answer, **newest first**:
 
-Full measurement context, if you want it: `docs/load-test-dispatch-concurrency.md` §7.1.
+```json
+{
+  "data": [
+    {
+      "assignment_id": "05080fbe-2174-4c27-88e9-586b2a9c312a",
+      "job_id": "bffbec91-3810-4681-9557-ace3c88caa2b",
+      "offered_at": "2026-09-27T11:03:30.784705Z",
+      "distance_at_offer_m": "988.74",
+      "estimated_arrival_min": 4,
+      "assignment_rank": 1,
+      "job": {
+        "status": "matching",
+        "service_code": "battery_jumpstart",
+        "service_name": "Battery Jumpstart",
+        "vehicle_number": "GJ01AB1234",
+        "pickup_address_text": "Outer Ring Rd, near Marathahalli bridge",
+        "issue_description": "Battery dead, car won't start",
+        "price_estimate": "450.00",
+        "requested_at": "2026-09-27T11:03:29.101422Z"
+      }
+    }
+  ],
+  "meta": { "request_id": "8d26eb65-ae63-426e-ab41-9e9ff83c3f2a" }
+}
+```
 
-**Update, 2026-09-25: the re-check has landed.** The 409 that paragraph warned you about is
-now real, with its own error code. See §11 — the "don't assume an accept always succeeds"
-advice is no longer forward-looking.
+`data` is the array itself (same shape as `GET /vehicles`), not an object wrapping one.
+
+Six things worth knowing before you design the card:
+
+1. **`data: []` with a 200 is the normal idle state, not an error.** A mechanic on shift
+   with no work pending gets an empty array. Don't render an error screen for it — that
+   is the single most common state this endpoint will ever return.
+2. **`assignment_id` is the field the screen exists for.** It is what you POST to
+   `/job-assignments/{assignment_id}/respond`. `job_id` is *not* interchangeable with it.
+3. **It's a list, deliberately.** A partner can hold several outstanding offers at once,
+   so there is no "the" current assignment. Don't build a single-offer UI.
+4. **`distance_at_offer_m` and `estimated_arrival_min` are snapshots, not live values.**
+   They were computed when the engine scored this partner and are never recomputed on
+   read — they will drift as the mechanic drives. Label them accordingly ("~1.0 km when
+   offered") or recompute client-side from the device's own GPS.
+5. **`price_estimate` and `distance_at_offer_m` are JSON strings, not numbers** — they're
+   `Decimal` on the server and serialise as strings so nothing rounds in transit. Parse
+   before you do arithmetic.
+6. **`service_code`, `service_name`, `vehicle_number`, `pickup_address_text`,
+   `issue_description` and `price_estimate` are all nullable.** Only `status` and
+   `requested_at` are guaranteed inside `job`. Don't `.toUpperCase()` a nullable.
+
+### What is NOT in the response, and won't be
+
+**No owner name, no owner phone number, no `user_id`, and no pickup lat/lng.** This is
+deliberate, not an oversight, and it is not a field I can add on request — see
+`docs/adr/ADR.md` ADR-017 for the full reasoning. The short version: contact details are
+released to the *assigned* partner, and a partner holding an offer hasn't accepted yet.
+An offer is a question, and answering "no" must not cost the customer their phone number
+— especially since the same job is then offered onward to the next candidate.
+
+So: **the offer card cannot have a "call customer" button or a map pin.** It shows
+`pickup_address_text` (the human string — enough to decide whether to take the job) plus
+the distance. Both the phone number and the exact coordinates arrive from
+`GET /api/v1/jobs/{job_id}` *after* the partner accepts, where they're already gated.
+
+If the mechanic-side design needs turn-by-turn navigation before acceptance, raise it
+with me rather than working around it — it's a policy change, not a missing field.
+
+### Errors, and the one you must handle
+
+| Status | Code | When |
+|---|---|---|
+| 401 | `UNAUTHORIZED` | no token, or an invalid/expired one |
+| 403 | `FORBIDDEN` | a valid token that isn't a partner's (e.g. an owner's) |
+| 403 | `IDENTITY_NOT_LINKED` | a verified Supabase account not yet bound to a partner profile |
+
+**The important one is a 409 on the *next* call, not on this one.** This list is a
+snapshot taken without a row lock (deliberately — see ADR-015; a lock here would queue
+every polling app against the accepts it exists to produce). So between reading the list
+and tapping Accept, the offer can legitimately go away:
+
+- the owner cancelled the job, or
+- this partner already answered it on another device, or
+- the offer was re-assigned onward.
+
+`POST /job-assignments/{assignment_id}/respond` then returns
+**`409 ASSIGNMENT_ALREADY_ANSWERED`**. Treat that as ordinary traffic, exactly like the
+status-transition 409s in §9: show "this job is no longer available", re-read
+`/partners/me/offers`, and move on. It is not a bug and not worth an error toast that
+blames the user.
+
+**One more 409 to expect: `PARTNER_AT_CAPACITY`.** The list does *not* filter by
+capacity, so a partner already holding `MAX_CONCURRENT_JOBS = 2` active jobs still sees
+their outstanding offers. That's intentional — hiding them would make the 409 arrive from
+nowhere, and the cap can only be enforced correctly at accept time under the lock. See
+§11 for that code.
+
+### Polling
+
+There's no push yet (notifications are a scheduled backlog item, not built). Poll this
+endpoint while the partner is on shift. It's a single indexed query with no lock and no
+transaction — it measured **33–52 ms** server-side in the live harness — but the shared
+connection pool is small (5 per worker against a 15-connection Supavisor cap), so please
+poll on the order of **5–10 seconds**, not sub-second, and stop polling when the app is
+backgrounded or the partner goes off shift.
+
+### Correction to something I told you earlier
+
+An earlier version of this section, and of `adarsh-send-2026-09-25.md` §4, said
+`GET /api/v1/partners/{id}/current-assignment` existed and merely lacked an
+`assignment_id`. **That was wrong** — there was no such route, and no GET route on
+`/partners` at all. Both documents are now corrected. If you designed anything against
+that endpoint, it never existed; use the one above.
+
+### Historical note on capacity (now resolved)
+
+The original version of this section warned that holding several offers was *unbounded*:
+`MAX_CONCURRENT_JOBS = 2` was checked when picking who to offer a job to and never
+re-checked on accept, so a partner offered five jobs could accept all five. I found it
+under load (one partner held 4 against a cap of 2). **The re-check landed 2026-09-25** —
+accepting past the cap now returns `409 PARTNER_AT_CAPACITY`. See §11. Full measurement
+context: `docs/load-test-dispatch-concurrency.md` §7.1.
 
 
 ---

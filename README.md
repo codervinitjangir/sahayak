@@ -273,6 +273,11 @@ Every dispatch also records which partner the **nearest-only baseline** would ha
 
 ## 📈 Project Roadmap
 
+> **Superseded.** The table below was written against a 20-week/5-month plan. The real
+> duration is **12 weeks**; the authoritative timeline is
+> [`ROADMAP.md`](ROADMAP.md). The phase *ordering* below still reflects the original
+> intent, but do not use its week numbers for pacing.
+
 | Phase | Weeks | Focus |
 |---|---|---|
 | Kickoff | 1 | Repo, board, interview scripts, roles |

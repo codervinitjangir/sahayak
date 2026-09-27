@@ -2,6 +2,7 @@
 Partner endpoints: registration, availability toggle, service coverage, auth link.
 
   POST  /api/v1/partners
+  GET   /api/v1/partners/me/offers
   POST  /api/v1/partners/{partner_id}/link-auth
   PATCH /api/v1/partners/{partner_id}/availability
   POST  /api/v1/partners/{partner_id}/location
@@ -21,6 +22,7 @@ Note on scope: partner documents, equipment and the verification workflow are
 not here. This module covers identity, shift status and coverage only.
 """
 import uuid
+from typing import List
 
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -35,11 +37,12 @@ from app.schemas.partner import (
     PartnerCreateRequest,
     PartnerLocationRequest,
     PartnerLocationResponse,
+    PartnerOfferItem,
     PartnerResponse,
     PartnerServicesLinkRequest,
     PartnerServicesResponse,
 )
-from app.services import auth_service, partner_service
+from app.services import auth_service, dispatch_service, partner_service
 from app.services.auth_service import Identity, TokenClaims
 from app.utils.auth import get_token_claims, require_partner
 
@@ -85,6 +88,42 @@ async def register_partner(
     """
     partner = await partner_service.register_partner(db, payload)
     return envelope(partner)
+
+
+@router.get(
+    "/me/offers",
+    response_model=ApiResponse[List[PartnerOfferItem]],
+    status_code=status.HTTP_200_OK,
+    summary="List the caller's outstanding job offers",
+)
+async def list_my_offers(
+    identity: Identity = Depends(require_partner),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[List[PartnerOfferItem]]:
+    """Every offer the calling partner can still answer, newest first.
+
+    Each item carries the `assignment_id` that
+    `POST /api/v1/job-assignments/{assignment_id}/respond` needs. This endpoint
+    is the only way a partner client can learn it.
+
+    `/me`, not `/{partner_id}`: the partner is read from the token, so there is
+    no id in the path to tamper with and no ownership check to forget. Every
+    other route on this router takes a `{partner_id}` and has to prove the
+    caller owns it — a list of *my* offers has no reason to accept that risk,
+    and `/partners/{someone_else}/offers` should not be a URL that exists.
+
+    A partner with nothing pending gets `"data": []` and a 200. That is the
+    normal state of an idle mechanic on shift, not a 404.
+
+    `data` is the array itself, matching GET /vehicles: the envelope already
+    carries `meta`, which is where a cursor would go if this ever pages.
+
+    The list is a snapshot taken without a lock, so an offer can be answered by
+    the time it is tapped — expect `409 ASSIGNMENT_ALREADY_ANSWERED` as ordinary
+    traffic and re-read this list when it happens.
+    """
+    offers = await dispatch_service.list_open_offers(db, identity.local_id)
+    return envelope(offers)
 
 
 @router.post(

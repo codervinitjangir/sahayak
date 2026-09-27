@@ -214,3 +214,54 @@ class PartnerAuthLinkResponse(BaseModel):
     verification_status: str
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class PartnerOfferJob(BaseModel):
+    """What an offered partner is told about a job before they accept it.
+
+    Enough to decide, and nothing more. Absent on purpose: the owner's id, their
+    name, their phone number, and the pickup coordinates. Contact details are
+    released by job_service to the *assigned* partner, and an offered partner is
+    not one — an offer is a question, and answering it "no" must not have cost
+    the customer their phone number. Distance is already on the offer itself, so
+    a mechanic can judge the trip without the exact point.
+
+    pickup_address_text is the one location field here, and it is the human
+    string the owner typed or a geocoder produced ("Outer Ring Rd, near Marathahalli
+    bridge") rather than a lat/lng. That is the level of detail a mechanic needs
+    to say yes; the precise point arrives with GET /jobs/{id} once they have.
+    """
+    status: str
+    service_code: Optional[str] = None
+    service_name: Optional[str] = None
+    vehicle_number: Optional[str] = None
+    pickup_address_text: Optional[str] = None
+    issue_description: Optional[str] = None
+    price_estimate: Optional[Decimal] = None
+    requested_at: datetime
+
+
+class PartnerOfferItem(BaseModel):
+    """One outstanding offer in GET /partners/me/offers.
+
+    assignment_id is the field this endpoint exists for: it is the id
+    POST /job-assignments/{assignment_id}/respond needs, and until this endpoint
+    landed there was no way for a partner client to learn it at all.
+
+    The job is nested rather than flattened so that "what was offered to me"
+    (distance, ETA, rank, when) stays visibly separate from "what the job is".
+    They have different lifetimes — the offer fields are frozen at offer time and
+    never change, while the job's fields keep moving — and flattening them would
+    invite a client to re-render the whole card when only the job moved.
+
+    distance_at_offer_m is a snapshot, as its name says: metres between the
+    partner's last known position and the pickup at the moment dispatch scored
+    them. It is not recomputed on read and will drift as the mechanic moves.
+    """
+    assignment_id: uuid.UUID
+    job_id: uuid.UUID
+    offered_at: datetime
+    distance_at_offer_m: Optional[Decimal] = None
+    estimated_arrival_min: Optional[int] = None
+    assignment_rank: Optional[int] = None
+    job: PartnerOfferJob
