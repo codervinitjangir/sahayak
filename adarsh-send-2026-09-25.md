@@ -1,5 +1,10 @@
 # One message to paste to Adarsh — 2026-09-25
 
+> **SENT 2026-09-25. §4 of this message is now out of date** — the gap it describes was
+> closed on 2026-09-27 by `GET /api/v1/partners/me/offers`. Do not re-send this file; the
+> follow-up is `adarsh-send-2026-09-27.md`, and the current contract is
+> `HANDOFF-frontend-contract.md` §10.
+>
 > **This file exists to be copied and sent, once.** It is not a source of truth — 
 > `HANDOFF-frontend-contract.md` is. It deliberately repeats content from §10 and §11 of that 
 > doc so the message stands on its own without him opening the repo. Delete or ignore this 
@@ -62,7 +67,8 @@ Don't try to distinguish "nobody available" from "our service was down" — we r
 
 Before you build a partner offer screen, know that **there is currently no way for a partner client to learn its `assignment_id`** — which is the one thing you need to answer an offer:
 
-- `GET /api/v1/partners/{id}/current-assignment` returns `partner_id` but **not** `assignment_id`
+- the `/partners` router has **no GET route at all** — it is POST/PATCH only
+- the `current_assignment` object you've seen in the contract is a *nested field on the owner's* `GET /jobs/{id}`, not an endpoint. A partner can't read it, and it has no `assignment_id` in it anyway
 - there's no "list my offers" endpoint at all
 
 So the path from "I've been offered a job" to "here's the id to accept it with" is broken. My load-test harness cheated by reading ids out of Postgres, which a real app obviously can't do. **Please don't work around this client-side.** What I'd build:

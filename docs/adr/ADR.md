@@ -641,6 +641,12 @@ Pre-fix: **0 → 4**, with four of six trials dying on `MissingGreenlet("greenle
 
 Full regression after the change: **175 unit tests** and **443 live assertions** across nine harnesses, baseline restored.
 
+**Amendment 2026-09-27 — a third polled read, and why it takes no lock either.** `GET /api/v1/partners/me/offers` (`dispatch_repository.get_open_offers_for_partner`) is the second endpoint in the system polled on a timer, and it falls on the same side of this split as `GET /jobs/{job_id}`: no `FOR UPDATE`, no transaction, no `commit()`. The reasoning is the one above, sharpened by what this particular read is *for* — it exists to produce accepts, and the accept path locks the job row. A lock here would make every idle partner app queue against the very writes the list is trying to cause. A unit test compiles the emitted SQL and asserts `for update` does not appear in it, and a second asserts the service never calls `commit()` or `rollback()`, so the two halves of the split are now each pinned by a test rather than by a docstring.
+
+The consequence is one a client has to be told about, and it is recorded in `HANDOFF-frontend-contract.md`: because the list is a snapshot taken without a lock, an offer can be answered — by this partner on another device, by the owner cancelling, or by the offer being reassigned — between the read and the tap. `409 ASSIGNMENT_ALREADY_ANSWERED` on a freshly-listed `assignment_id` is therefore **ordinary traffic, not an error state**, and the correct handling is to re-read the list. A filter cannot fix this and should not be attempted: any predicate evaluated at read time is a guess about the state at write time, which is the whole reason the guard lives under the lock.
+
+**Capacity is deliberately not one of the list's filters, for the same reason.** A partner at `MAX_CONCURRENT_JOBS` still sees their outstanding offers. Hiding them would look kinder and be worse: the cap is enforced in `_require_capacity` under the job lock (ADR-008 counts load through `jobs.status`, which is live data that moves independently of this list), so a hidden offer would still be answerable by a partner who completed a job a second later, while a shown-then-refused offer produces a `409 PARTNER_AT_CAPACITY` the mechanic can actually understand. An offer the app never displayed cannot be explained to the person holding the phone.
+
 ---
 
 # ADR-016: A Dispatch Outage Shares a Status With "Nobody Available", and Stays Distinguishable in the Timeline
@@ -711,3 +717,60 @@ Owners will occasionally see a job go straight to `no_match_found` seconds after
 The evaluation write-up must split the two causes using the query above rather than reporting a single `no_match_found` count.
 
 **Evidence.** 6 unit tests in `tests/unit/test_dispatch_capacity.py` covering the branch selection — that `DispatchUnavailableError` is recorded, that every other exception is not, that a success records nothing, that a failure *while* recording still does not fail the POST, and that nothing retries. Live: `tests/integration/check_dispatch_capacity.py` §8 injects the outage at the Redis client that `find_candidates()` fetches, so the real `except RedisError` handler and the real exception are exercised rather than a mock one level higher. Reverted (with `job_service.DispatchUnavailableError` rebound so the specific catch never matches, which is precisely the pre-fix path): the job stays `'requested'`, the 201 body reports `'requested'`, and the timeline is empty of any explanation — the three assertions that now pass.
+
+---
+
+# ADR-017: An Offer Carries No Way to Reach the Customer — Contact Release is Keyed to Assignment, Not to Role
+
+**Status:** Accepted
+**Date:** 2026-09-27
+
+## Decision
+
+`GET /api/v1/partners/me/offers` returns, for each outstanding offer, the `assignment_id`, the offer's own frozen facts (distance at offer, ETA, rank, timestamp) and a nested job object containing the service, the vehicle number, the human pickup address string, the issue description, the price estimate and the request time.
+
+It deliberately does **not** contain the owner's `user_id`, their name, their phone number, or the pickup coordinates. The mechanic learns none of those by being offered the job; they learn them by accepting it, from `GET /api/v1/jobs/{job_id}`, which already gates contact details on `may_see_contact_details = is_owner or is_assigned_partner`.
+
+The rule this generalises: **contact release follows the assignment, not the role.** "Partner" is not a permission to see a customer. The permission is "partner who has taken responsibility for *this* job".
+
+## Context
+
+Until this endpoint, the partner side of the API had no GET route at all. A partner could be offered a job by the dispatch engine and had no way to discover the `assignment_id` that `POST /job-assignments/{assignment_id}/respond` requires — the load-test harness worked around it by reading ids out of Postgres, which a phone cannot do. This endpoint is that missing read, and it is the first time the system has had to answer "what may a mechanic see about a customer *before* agreeing to help them?"
+
+The question is not academic. An offer is made by the engine to whoever scores best; the partner has done nothing to earn it and may well decline. The rejection path is a normal, frequent outcome — `_reject()` exists, re-dispatches, and is exercised in the race harness. So any field in this payload is a field handed to a mechanic who may say no and walk away with it, and by design the same job is then offered onward to the next candidate, who gets the same payload. A phone number in this response is a phone number distributed to every partner the engine considered.
+
+There was a real pull the other way, which is why this needed deciding rather than assuming. A mechanic deciding whether to accept genuinely wants to know where they are going, and "coordinates plus the customer's number" is the obvious way to let them judge and call ahead. The pilot's partner base is small and known; the tempting argument is that these are trusted contractors.
+
+## Rationale
+
+**The precedent already existed and was found rather than invented.** `job_service` (around lines 348–416) computes `may_see_contact_details` as `is_owner or is_assigned_partner`, and when it redacts, it withholds even `partner_id` — the comment there notes that on its own it is only an opaque uuid, but it is the lookup key for every partner-scoped read in the API. An *offered* partner is not an *assigned* partner. Reading the existing rule literally answers this endpoint's question without a new policy, and inventing a second, looser policy for the same data one endpoint over is how a codebase ends up with two contradictory privacy rules and no way to say which is authoritative.
+
+**`pickup_address_text` is enough to decide with, and is categorically different from a coordinate.** "Outer Ring Rd, near Marathahalli bridge" tells a mechanic which side of the city the job is on and whether to take it. A lat/lng to six decimal places is a person's position to within a few metres, which is what is needed to *arrive*, not to *choose*. The distance the engine measured at offer time is on the offer itself (`distance_at_offer_m`), so the trip length is answered without the point. That split — a description to decide, a coordinate to navigate — is the whole of the decision in one line.
+
+**The trusted-contractor argument fails on the timeline, not on trust.** The partner base is small now; the data handling has to be defensible for the base the platform is built for. And the cost of getting it wrong is asymmetric in a way that does not recover: a rescinded permission un-shows a screen, but a phone number that has been on a stranger's device cannot be recalled. Withholding it until acceptance costs a mechanic one extra read after they have already committed to the job.
+
+**It also keeps the offer payload honest about what it is.** An offer is a question. If answering "no" costs the customer their phone number, then the question was never really a question.
+
+## Alternatives considered
+
+**Include the coordinates but not the phone number.** Rejected, and this was the closest call. It reads as a reasonable middle — but a precise pickup point is identifying on its own: it is very often a home address, and combined with the vehicle number (which *is* in this payload, and which maps to a person through a public register) it is arguably more identifying than a phone number, not less. The vehicle number stays because a mechanic must be able to recognise the car on arrival and there is no substitute for it; the coordinate has a substitute, which is the address string.
+
+**Include the owner's first name.** Rejected as unnecessary rather than dangerous. Nothing in the accept/decline decision depends on the customer's name, and it would put the endpoint in the business of returning identity fields "because they're harmless", which is the disposition this ADR exists to prevent.
+
+**Reuse `JobDetailResponse` with its existing redaction and skip the new schemas.** Rejected. It would work, and it would make the privacy rule conditional on a flag computed at runtime — so the guarantee would hold only as long as nobody passed the wrong actor into that computation. `PartnerOfferJob` cannot leak an owner's phone number because it has no field for one. A shape that cannot express the mistake is stronger than a branch that avoids it, and it also stops this endpoint from inheriting every future addition to the owner's view by default.
+
+**Flatten the job's fields into the offer.** Rejected for a non-privacy reason, recorded here because the nesting is visible in the contract: the offer's fields are frozen at offer time and never change, while the job's keep moving. Nesting keeps "what was offered to me" and "what the job is" visibly separate, so a client re-rendering on job movement does not invite the assumption that the distance was recomputed too.
+
+## Consequence
+
+A partner app cannot show a "call the customer" button, or a map pin, on an offer card. It shows the address line, the distance and the ETA, and both of the withheld things appear once the offer is accepted. `HANDOFF-frontend-contract.md` §10 records the shipped shape and names this explicitly, so it is not discovered as a missing field mid-build.
+
+The list's filter — assignment `'offered'` **and** job `'matching'` — is the same predicate `respond_to_assignment` enforces under the job lock (ADR-015). Two copies of one rule in two modules is a drift risk, so `dispatch_repository.OFFER_ANSWERABLE_JOB_STATUS` and `dispatch_service.STATUS_MATCHING` are asserted equal by a unit test; if someone changes one, that test names the other.
+
+**Evidence.** 8 unit tests (`tests/unit/test_partner_offers.py`), including one that asserts the two schemas' field names do not intersect a forbidden set (`owner_phone`, `pickup_latitude`, `pickup_location`, …) and one that compiles the statement and reads the `WHERE` clause. Failing-first was done by mutation, since this is a new feature with no buggy predecessor to revert: three deliberate mutations (widen the schema, break the shared constant, drop a predicate) produced exactly the three expected failures — 3 failed, 5 passed — and the originals were restored from `.bak`.
+
+Live: **28 of 28** assertions in `tests/integration/check_partner_offers.py` against real Postgres and real Supabase tokens. The privacy section asserts against the owner's actual phone number and the job's actual coordinates read out of the database, not against a list of field names, so a field nobody thought to forbid still fails it. One section is worth naming: it puts an `'offered'` assignment row onto a `'cancelled'` job by hand — the remnant a lost cancel-vs-accept race leaves behind — and asserts the list hides it, which is the `jobs.status` half of the filter, and the half that stops a mechanic being sent to a job the customer already called off. Another takes the `assignment_id` from the HTTP response and answers the offer with it, never touching Postgres, because that round trip is the entire reason the endpoint exists.
+
+The control run (`--reverted`) removes the route from the router before the app is built — literally the state of the repository before this task — and scores **9 of 28**. Four of those nine passes are vacuous under the control (a 404 body trivially contains no phone number); they are meaningful only because the positive assertion in the same section fails. Noted rather than counted as coverage.
+
+Full regression: **205 unit tests** (197 + 8) and **492 live assertions** across eleven harnesses, database returned to baseline.

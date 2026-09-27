@@ -56,6 +56,7 @@ from app.config.redis_client import (
 )
 from app.models.job import Job, JobAssignment
 from app.repositories import dispatch_repository, job_repository
+from app.schemas.partner import PartnerOfferItem, PartnerOfferJob
 from app.utils.errors import (
     ConflictError,
     DispatchUnavailableError,
@@ -946,3 +947,73 @@ async def _transition(
             error_type=type(exc).__name__,
         )
         raise InternalError("Could not update the job status") from exc
+
+
+async def list_open_offers(
+    db: AsyncSession, partner_id: uuid.UUID
+) -> list[PartnerOfferItem]:
+    """Every offer this partner can still answer, newest first.
+
+    The read a partner app polls between jobs. Returns [] for a partner with
+    nothing pending — that is the ordinary state of an idle mechanic on shift,
+    not a 404, and a client should render "waiting for work" rather than an
+    error. It is also [] for a partner who has never been offered anything and
+    for one whose only offer was just cancelled; none of those three are
+    distinguishable to the caller, and none of them need to be.
+
+    No transaction boundary and no lock. This is the partner-side counterpart to
+    the polling GET /jobs/{id}, and it obeys the same rule (CLAUDE.md principle
+    7): a read that runs on a timer must never take a row lock, or a fleet of
+    idle apps polling for work would serialise against the accepts they exist to
+    produce.
+
+    Which means the list is a snapshot and cannot be anything else. An offer
+    listed here can be gone by the time the partner taps it — the owner cancels,
+    or under a rejection chain somebody else was asked and said yes first. The
+    client's contract is therefore "the list tells you what to show, the respond
+    call tells you what happened": a 409 ASSIGNMENT_ALREADY_ANSWERED on tap is
+    normal traffic, not a bug, and should refresh the list rather than raise an
+    error to the mechanic.
+
+    Capacity is deliberately not filtered on. A partner already holding
+    MAX_CONCURRENT_JOBS still sees their offers, because hiding them would make
+    the 409 PARTNER_AT_CAPACITY refusal arrive from nowhere — worse, an offer
+    that vanished and came back as jobs completed would look like a bug in the
+    app. The cap is enforced where it can be enforced correctly, under a lock in
+    _require_capacity; a filter on a poll would only be a guess with a race in
+    it.
+    """
+    started = time.perf_counter()
+    rows = await dispatch_repository.get_open_offers_for_partner(db, partner_id)
+
+    offers = [
+        PartnerOfferItem(
+            assignment_id=row.assignment_id,
+            job_id=row.job_id,
+            offered_at=row.offered_at,
+            distance_at_offer_m=row.distance_at_offer_m,
+            estimated_arrival_min=row.estimated_arrival_min,
+            assignment_rank=row.assignment_rank,
+            job=PartnerOfferJob(
+                status=row.job_status,
+                service_code=row.service_code,
+                service_name=row.service_name,
+                vehicle_number=row.vehicle_number,
+                pickup_address_text=row.pickup_address_text,
+                issue_description=row.issue_description,
+                price_estimate=row.price_estimate,
+                requested_at=row.requested_at,
+            ),
+        )
+        for row in rows
+    ]
+
+    log_event(
+        "partner_offers_listed",
+        partner_id=str(partner_id),
+        actor_role="partner",
+        offer_count=len(offers),
+        outcome="success",
+        duration_ms=round((time.perf_counter() - started) * 1000, 2),
+    )
+    return offers

@@ -407,3 +407,77 @@ async def mark_assignment_rejected(
         assignment.rejection_reason = rejection_reason
     await db.flush()
     return assignment
+
+
+# The status a job must be in for an offer against it to still be answerable.
+#
+# Not a tuple, because there is exactly one and the singularity is the point:
+# dispatch_job() moves a job 'requested' -> 'matching' and only then writes the
+# first offer, and the job stays 'matching' through an entire rejection chain.
+# Every other status means the job moved underneath a live 'offered' row —
+# cancelled by its owner, accepted by somebody else, or given up on.
+#
+# dispatch_service.respond_to_assignment enforces the same predicate under a row
+# lock before it writes. Keeping the two in step is what makes this endpoint
+# honest: a row this query returns is a row POST /job-assignments/{id}/respond
+# would accept. They can still disagree for the few milliseconds of a genuine
+# race, which is why the write path keeps its own check and the client has to
+# handle 409 ASSIGNMENT_ALREADY_ANSWERED — a list is a snapshot, never a lock.
+OFFER_ANSWERABLE_JOB_STATUS = "matching"
+
+
+async def get_open_offers_for_partner(
+    db: AsyncSession, partner_id: uuid.UUID
+) -> Sequence[Row]:
+    """Every still-answerable offer held by one partner, newest first.
+
+    Returns assignment columns joined to the job they are for and the service
+    that job asked for. A row per offer; a partner with nothing pending gets an
+    empty sequence, which is not an error condition here or upstream.
+
+    Columns rather than ORM objects, and the join done in SQL rather than by
+    lazy-loading ``JobAssignment.job``: this runs on a partner app's poll loop,
+    so N+1 round trips to Supabase would be the whole cost of the endpoint. It
+    also makes the column list the contract — a partner is not allowed to see
+    everything on a job before accepting it, and selecting explicitly is what
+    stops a later column addition leaking by default. Notably absent, on
+    purpose: the job's owner, their phone number, and the pickup coordinates.
+    Who is allowed to see contact details is decided in job_service against the
+    *assigned* partner, and an offered partner is not one yet.
+
+    Ordered newest-offer-first so a partner app can render the list as it
+    arrives. Offers do not currently expire, so this is not "recent" in any
+    bounded sense — see the offer-timeout item in TASKS.md.
+    """
+    stmt = (
+        select(
+            JobAssignment.id.label("assignment_id"),
+            JobAssignment.job_id,
+            JobAssignment.offered_at,
+            JobAssignment.distance_at_offer_m,
+            JobAssignment.estimated_arrival_min,
+            JobAssignment.assignment_rank,
+            Job.status.label("job_status"),
+            Job.vehicle_number,
+            Job.pickup_address_text,
+            Job.issue_description,
+            Job.price_estimate,
+            Job.requested_at,
+            Service.code.label("service_code"),
+            Service.name.label("service_name"),
+        )
+        .join(Job, Job.id == JobAssignment.job_id)
+        # Outer, because jobs.service_id is nullable in the schema even though
+        # POST /jobs always resolves one. An inner join would silently drop an
+        # offer rather than show it with a blank service label, and a mechanic
+        # not being told about work is the worse failure of the two.
+        .outerjoin(Service, Service.id == Job.service_id)
+        .where(
+            JobAssignment.partner_id == partner_id,
+            JobAssignment.status == "offered",
+            Job.status == OFFER_ANSWERABLE_JOB_STATUS,
+        )
+        .order_by(JobAssignment.offered_at.desc())
+    )
+    result = await db.execute(stmt)
+    return result.all()
