@@ -29,7 +29,9 @@ from app.schemas.job import (
     JobAssignmentBase, JobAssignmentCreate, JobAssignmentResponse,
     JobStatusHistoryBase, JobStatusHistoryCreate, JobStatusHistoryResponse
 )
-from app.schemas.rating import RatingBase, RatingCreate, RatingResponse
+from app.schemas.rating import (
+    RatingCreateRequest, RatingItem, JobRatingsResponse
+)
 from app.schemas.payment import PaymentBase, PaymentCreate, PaymentResponse
 from app.schemas.notification import NotificationBase, NotificationCreate, NotificationResponse
 
@@ -53,7 +55,7 @@ __all__ = [
     "JobTimelineEntry",
     "JobAssignmentBase", "JobAssignmentCreate", "JobAssignmentResponse",
     "JobStatusHistoryBase", "JobStatusHistoryCreate", "JobStatusHistoryResponse",
-    "RatingBase", "RatingCreate", "RatingResponse",
+    "RatingCreateRequest", "RatingItem", "JobRatingsResponse",
     "PaymentBase", "PaymentCreate", "PaymentResponse",
     "NotificationBase", "NotificationCreate", "NotificationResponse",
 ]

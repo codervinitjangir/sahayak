@@ -224,6 +224,10 @@ The general lesson is the one worth keeping: **a filter enforces an invariant at
 
 **Evidence.** 21 unit tests (`tests/unit/test_dispatch_capacity.py`), **11 failing** with `_require_capacity` neutered to a no-op; the 10 survivors are the regression guards and the pure contract assertions, which deliberately do not depend on the new call site. Live: **49 of 49** in `tests/integration/check_dispatch_capacity.py` against **28 of 45** with the same call removed. The control run reproduced the original defect exactly — six QA partners ending on **3** active jobs against a cap of 2 — including a scaled-down replay of the load test's own shape (12 jobs, 4 partners, all offers made while the fleet was idle, then every accept fired at once): **12 accepted / 0 refused / every partner over cap** reverted, against **8 accepted / 6 refused / every partner at exactly 2** fixed. The two-way race at `MAX_CONCURRENT_JOBS - 1` splits one 200 and one `PARTNER_AT_CAPACITY` with the fix and two 200s without it, and the assertion that discriminates them is the count on the row, not the status codes.
 
+**Amendment, 2026-09-29 — until this date the smoothing above had no input to smooth.** `rating_score` reads `partners.rating_avg` and `partners.rating_count`, and nothing in the system could write either column: the Postgres trigger meant to maintain them resolved the rated partner through `job_assignments.status = 'accepted'`, which completing a job has already left. So `rating_count` was zero for every partner forever, every candidate took the `UNRATED_PARTNER_RATING_SCORE = 0.7` branch, and this ADR's entire rationale — that evidence should accumulate before it moves a score — described arithmetic that never ran on a real rating. Ranking was decided by distance, load and skill alone, at effective weights of 0.5 / 0.25 / 0.25 rather than the documented 0.4 / 0.2 / 0.2 / 0.2.
+
+**ADR-018** records who maintains those two columns now and why the aggregate is recomputed from source rather than incremented. The division of ownership between the two ADRs is deliberate: the formula, the prior and the cap live here; the writer, its lock and its storage exception live there. It also matters for reading any earlier dispatch measurement — no ranking observed before 2026-09-29 exercised this dimension.
+
 ---
 
 # ADR-010: Stale Partner Locations are Observed, Not Enforced
@@ -773,4 +777,81 @@ Live: **28 of 28** assertions in `tests/integration/check_partner_offers.py` aga
 
 The control run (`--reverted`) removes the route from the router before the app is built — literally the state of the repository before this task — and scores **9 of 28**. Four of those nine passes are vacuous under the control (a 404 body trivially contains no phone number); they are meaningful only because the positive assertion in the same section fails. Noted rather than counted as coverage.
 
-Full regression: **205 unit tests** (197 + 8) and **492 live assertions** across eleven harnesses, database returned to baseline.
+Full regression: **205 unit tests** (197 + 8) and **520 live assertions** across eleven harnesses, database returned to baseline.
+
+*(Figure corrected 2026-09-29. This line originally read 492, which was the ten-harness total from before this task; when `check_partner_offers` and its 28 assertions were appended to the per-harness list the headline total was not recomputed. The eleven harnesses named here sum to 520. The current figure is 564 across twelve — see ADR-018.)*
+
+---
+
+# ADR-018: The Stored Partner Rating is Maintained by the Service and Recomputed From Source — the Trigger That Was Meant To Do It Could Never Have Fired Correctly
+
+**Status:** Accepted
+**Date:** 2026-09-29
+
+## Decision
+
+Ratings are written through `POST /api/v1/jobs/{job_id}/ratings`, one row per side per job, with the direction (`rated_by`) taken from the verified token and never from the body.
+
+`partners.rating_avg` and `partners.rating_count` are maintained by `rating_service.submit_rating`, in the same transaction as the rating insert, by **recomputing both values from the `ratings` table** — not by incrementing them. The recompute resolves "which partner does this job's rating belong to" by importing `job_repository.RESPONSIBLE_ASSIGNMENT_STATUSES`, the same tuple ADR-012 defined for that question everywhere else. The partner row is locked `FOR UPDATE` before the insert when, and only when, there is an aggregate to update.
+
+The Postgres trigger `trg_update_partner_rating` and its function `update_partner_rating()` are **dropped** (`db/migrations/004_drop_rating_trigger.sql`); the block in `db/schema.sql` is replaced by a pointer to this ADR.
+
+Two core principles are deliberately departed from here, both flagged in the code and argued below: **principle 1** (derived data is never stored) and **principle 7** (concurrency-sensitive mutations take the locking read).
+
+## Context
+
+ADR-009's matching score has four weighted inputs. `rating_score` is one of them at `W_RATING = 0.2`, and it reads exactly these two columns, Bayesian-smoothed against `PRIOR_MEAN = 3.5` with `PRIOR_WEIGHT = 5.0`, falling back to `UNRATED_PARTNER_RATING_SCORE = 0.7` when `rating_count` is zero.
+
+Nothing in the system could write those columns. `rating_count` was therefore zero for every partner, permanently, so every candidate scored an identical 0.7 on that dimension and ranking was decided entirely by distance, load and skill. A fifth of the dispatch algorithm was a constant, and nothing anywhere said so — not a log line, not a test, not a comment. That is the reason this task was pulled ahead of the rest of the backlog: the gap was not in the ratings feature, it was in the engine.
+
+A trigger existed in `schema.sql` and looked like the answer, which is most of why the gap went unnoticed.
+
+## Rationale
+
+**The trigger's resolution rule was impossible, not merely fragile.** It found the rated partner through `job_assignments.status = 'accepted'`. But `TERMINAL_ASSIGNMENT_STATUS` in `job_service` maps `"completed" → "completed"`: the act that makes a job rateable is the same act that moves its assignment out of `'accepted'`. The subquery was guaranteed to be empty at the only moment the trigger could legally fire. Its `UPDATE` matched zero rows and reported success — no error, no warning, no row count anyone reads. A trigger that silently does nothing is worse than a missing trigger, because the missing one gets noticed.
+
+This is measured, not reasoned. A probe inserted ratings against a genuinely completed job with the trigger still installed and the columns did not move; and the live harness's `--reverted` arm is a faithful port of the trigger's own predicate, which fails every aggregate assertion with `('0.0', 0)`.
+
+**It was also a second copy of ADR-012's rule, written in a different language.** `RESPONSIBLE_ASSIGNMENT_STATUSES = ("accepted", "completed", "cancelled")` is the single definition of whose job a job is. The trigger restated a narrower version of it in PL/pgSQL and drifted the instant the lifecycle grew a terminal assignment status — which it did, in the same task that made completion possible. The service version *imports* the tuple, so the next status added to it is picked up without anyone having to remember that an aggregate depends on it. The bug was not the predicate being wrong; it was the predicate being duplicated at all.
+
+**Service rather than trigger, as a general matter.** The transaction boundary, the lock ordering, the structured log line that reports the new aggregate, and the seam the tests substitute at all live in Python. A trigger is invisible to the layering contract, cannot be unit tested alongside the rule it implements, and fires inside a transaction it did not open and does not know the shape of.
+
+**Recompute, not increment.** Two arguments, and the weaker one is the one usually given first. The *primary* argument is self-healing: a recompute-from-source is correct after any event that changes the underlying rows — a rating deleted for abuse, a mis-set assignment repaired later, a job backfilled — with no backfill step and no reconciliation job. This is measured: §10 of the harness deletes one rating directly in Postgres, and the next rating written brings the aggregate to `('4.0', 2)`, matching the rows that actually exist. An incremental writer would report three ratings forever, and nothing would ever contradict it. The *secondary* argument is arithmetic: `rating_avg` is `NUMERIC(2, 1)`, so a recompute's error is bounded by a single rounding (±0.05) no matter how many ratings accumulate, whereas a read-modify-write reads back the rounded value and folds it forward as if it were exact, compounding. The cost is one aggregate query per rating submitted — on a human-paced path, not the dispatch path.
+
+**The principle-1 exception, on the record.** `rating_avg` is stored derived data, which principle 1 exists to prevent. It is stored because `get_eligible_partners` reads it inside the dispatch SQL, for every candidate, on every job creation; an aggregate subquery there lands in the one code path that already holds a pooled connection for 1198 ms against 15 shared session-mode Supavisor connections. The contrast with `active_job_count`, which is computed live and must be, is the useful part: that value changes *without any write to the partner row* — some other job the partner never touched reaching a terminal status changes it — so there is no invalidation event to hang a column on. `rating_avg` has exactly one writer and exactly one invalidation event: a `ratings` row. One writer, one event, one place to get it wrong. That is the test to apply to any future candidate for this exception, and `active_job_count` still fails it.
+
+**The partners row is locked; the jobs row deliberately is not.** Two owners rating two *different* jobs of the same mechanic share no job row, so nothing serialises them: both would recompute against a snapshot taken before the other's insert was visible, both would write the same count, and one rating would vanish from the aggregate while remaining in the table. The partner row is the only thing the two racers have in common, so that is where the lock goes, before the insert; under READ COMMITTED the recompute runs as a later statement and takes a fresh snapshot that includes whichever insert committed first. Same mechanism and same reasoning as the accept-time capacity check (ADR-015). Lock ordering `jobs → partners → job_assignments` is preserved by vacuity — this path takes the partners lock and no other. The partner→owner direction takes no lock, because there is no aggregate on that side; `UNIQUE (job_id, rated_by)` is the whole of its concurrency control and is sufficient.
+
+**The principle-7 deviation.** The jobs row is read with `get_job_by_id`, not `get_job_by_id_for_update`. `'completed'` is terminal, so a read that sees it cannot stop being true, and a read that sees anything else yields a 409 that was truthful at the instant it was taken. Locking would place a write lock on the jobs row of every finished job for the duration of a rating and buy nothing. It is pinned by `test_jobs_row_is_read_without_a_lock`, which replaces `get_job_by_id_for_update` with a function that raises, so reintroducing the lock fails a test that names this ADR in its message.
+
+**Duplicate submissions are refused by the constraint, not by a pre-check.** A `SELECT` before the `INSERT` lets two concurrent submits both past the check, and the second then fails at the database as a 500. Catching `IntegrityError` on `ratings_job_id_rated_by_key` turns the real race into the 409 it actually is — which is the case that matters, because the way this happens in the field is one person tapping submit twice on a bad connection.
+
+## Alternatives considered
+
+**Fix the trigger's subquery and keep it.** Widening `= 'accepted'` to the three responsible statuses would have worked, and this was the closest call by a distance. Rejected because it repairs the symptom and preserves the cause: two copies of one rule, one of them in a language the test suite cannot reach, with no import to hold them in step. The next terminal assignment status would break it again, silently, in exactly the same way.
+
+**Store nothing and compute the aggregate inside the dispatch query.** The principle-1-pure option, and genuinely the more correct design. Rejected on the measured cost of the dispatch path above. Recorded deliberately: if the connection ceiling stops being the binding constraint — transaction-mode pooling, a read replica, a larger connection budget — this is the version to come back to, and the only thing standing in its way is a number that is expected to change.
+
+**A background recompute over all partners on a schedule.** Rejected twice over: background workers are explicitly out of scope for this phase, and it would trade an exact number available for free at write time against a staleness window nobody asked for.
+
+**Add `rating_avg` / `rating_count` to `users` for symmetry.** Rejected as building columns nothing reads — which is principle 1 in its plainest form. Recorded as a stated gap below instead.
+
+**Treat a repeat submission as idempotent and return 200.** Rejected. A rating is a judgement, not a state to converge on: accepting the second one either overwrites the first without saying so or discards the second without saying so, and both are indistinguishable from a working submit button to the person pressing it.
+
+## Consequence
+
+ADR-009's rating dimension is live for the first time, so dispatch ranking now genuinely varies by reputation. Any dispatch measurement taken before 2026-09-29 — including the load-test figures — was taken with `rating_score` pinned at 0.7 for every candidate. The evaluation write-up must say so rather than comparing results across that line as though one algorithm produced both.
+
+**A stated gap.** The partner→owner direction is stored and returned but aggregated nowhere: `users` has no rating columns and nothing in dispatch reads an owner's reputation, so there is no truthful number to compute yet. The rows are kept because they are the evidence a later feature would be built from. This is recorded here rather than as a TODO in code, because a TODO would suggest someone is expected to remove it.
+
+**A dormant schema asymmetry, named so it is not rediscovered as a hole.** `ratings.job_id` is nullable while `UNIQUE (job_id, rated_by)` treats NULLs as distinct, so unlimited job-less ratings per side could coexist. It is inert: the only writer is this endpoint, and it always supplies `job_id` from the path. Left unmigrated rather than fixed, because a `NOT NULL` migration on a live table is a larger change than the risk it removes.
+
+**The principle-7 deviation above stays in this ADR** rather than getting one of its own, per the rule that a consequence of an existing decision extends that decision — the locking half of it belongs to ADR-015, which this cross-references.
+
+**A bug in my own code, found by this task's own harness, kept in the record because the class of it generalises.** Both `except` blocks in `submit_rating` logged `str(job.id)` *after* `await db.rollback()`. `Session.rollback()` expires every object in the identity map unconditionally — unlike `commit()`, which `AsyncSessionLocal` opts out of with `expire_on_commit=False`. Reading an attribute off an expired object emits a lazy `SELECT`, and on an `AsyncSession` an implicit lazy load is not a slow query, it is a `MissingGreenlet`. The failure handler therefore raised out of itself, the `ConflictError` was never constructed, and a duplicate rating would have been served as a 500 instead of a 409 — a defect that exists only in the branch least likely to be tried by hand, and that no amount of happy-path testing can surface. Fixed by binding `job_uuid` and `job_status` out of the ORM object before the transaction opens. The rule is general and worth applying to every `except` block in this codebase that logs an ORM attribute after a rollback.
+
+**Evidence.** 43 unit tests in `tests/unit/test_rating_service.py`. Failed-first was done by reverting exactly one line — `job_uuid` back to `job.id` in the `IntegrityError` handler — giving 1 failed, 42 passed, and failing with `sqlalchemy.exc.MissingGreenlet`, the same exception class the live run produced. The stub that makes that reproducible without an event loop, `ExpirableJob`, raises `MissingGreenlet` from `__getattr__` once `expire()` has been called, and `FakeSession.rollback()` calls it — so the test models the actual SQLAlchemy behaviour rather than asserting on a message. One test pins the exact repository call sequence (`get_job_by_id`, `get_responsible_assignment`, `lock_partner`, `create_rating_row`, `recompute`); one asserts the partner→owner direction never touches the partner aggregate; and one pair asserts that the same data fault — a completed job with no responsible assignment — is tolerated for an owner (stored, logged, no aggregate) and refused for a partner (403), which is the asymmetry the two roles' evidence actually justifies.
+
+Live: **44 of 44** assertions in `tests/integration/check_ratings.py`, against real Postgres and real Supabase tokens, in QA phone namespace `+91900000099`. The control (`--reverted`) substitutes a faithful port of the dropped trigger's predicate for `recompute_partner_rating` and scores **38 of 44**, where the six failures are all and only the aggregate assertions and every one of them reads `('0.0', 0)` — precisely the behaviour that was live in this database until migration 004. The three decisive lines of the real arm: `('0.0', 0) → ('5.0', 1)` on the first rating, `('4.5', 2)` after a second, and `('4.0', 2)` after one rating is deleted directly in SQL, which is the self-healing property an incremental writer cannot produce.
+
+Full regression: **248 unit tests** and **564 live assertions** across twelve harnesses, every harness exiting 0, database returned to baseline — 8 tables at documented counts, `ratings` at 0, trigger and function both absent.
