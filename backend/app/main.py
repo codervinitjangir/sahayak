@@ -7,6 +7,7 @@ from app.api.health import router as health_router
 from app.api.job_assignments import router as job_assignments_router
 from app.api.jobs import router as jobs_router
 from app.api.partners import router as partners_router
+from app.api.ratings import router as ratings_router
 from app.api.users import router as users_router
 from app.api.vehicles import router as vehicles_router
 from app.config.redis_client import close_redis
@@ -70,3 +71,10 @@ app.include_router(users_router)
 
 # Include the vehicles router (an owner registering and listing their vehicles)
 app.include_router(vehicles_router)
+
+# Include the ratings router (both sides rating a completed job). Registered
+# after jobs_router and sharing its /api/v1/jobs prefix: the paths are distinct
+# ("/{job_id}/ratings" against "/{job_id}"), so ordering does not change routing
+# here, but keeping it adjacent means the two routers that answer under one
+# prefix are read together.
+app.include_router(ratings_router)

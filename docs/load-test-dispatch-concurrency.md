@@ -1,13 +1,20 @@
 # Dispatch Engine — Concurrency Load Test
 
-**Date:** 2026-09-24
+**Date:** 2026-09-24 · **re-measured at the reduced connection pool 2026-09-27 (§8.1)**
 **Target:** `POST /api/v1/jobs` (dispatch runs synchronously inside the request)
 **Tool:** k6 v2.2.0 for load generation, Python for seeding, response simulation and post-run analysis
 **Environment:** single uvicorn worker on `127.0.0.1:8010`, Windows 11, Python 3.12.10 → Supabase PostgreSQL 17.6 + PostGIS via the `aws-0-ap-south-1` **session-mode** pooler; Redis 7 in Docker Desktop
+**Connection pool:** the four runs of §2 ran at `pool_size=5, max_overflow=10` (**15**), which was the default at the time. **The app now runs `pool_size=3, max_overflow=2` (5)** — §9.1 explains the change and §8.1 measures the same baseline scenario at it. Where the two disagree, §8.1 is the current system.
+
+> **If you are quoting one throughput number from this report, quote §8.1's.** §2's headline
+> table describes a configuration that is no longer deployed. Nothing in §3, §4, §6 or §7 is
+> affected — the algorithm, the round-trip analysis, the ceiling *mechanism* and both bugs
+> reproduced identically at the new pool.
 
 Scripts: [`tests/load/`](../backend/tests/load/) — `seed_dispatch_load.py`, `dispatch.js`,
 `responder_dispatch_load.py`, `collect_dispatch_load.py`, `profile_dispatch.py`,
-`check_pool_exhaustion.py`. Raw artefacts in `tests/load/results/`.
+`check_pool_exhaustion.py`. Raw artefacts in `tests/load/results/`; the 2026-09-27 re-run is
+tagged `*_pool5` and sits alongside the originals rather than replacing them.
 
 ---
 
@@ -21,10 +28,14 @@ Scripts: [`tests/load/`](../backend/tests/load/) — `seed_dispatch_load.py`, `d
    `RTT × 32` within 10 % across a 1.6× change in network conditions.
 3. **Redis is not the bottleneck by three orders of magnitude.** 0.047 ms of Redis-side
    work per dispatch against ~950 ms of Postgres round trips.
-4. **Zero deadlocks in all four runs.** The three race fixes (ADR-015) hold under real
-   concurrent load, not just targeted trials.
-5. **The real ceiling is a connection limit, not a job rate** — and there are *two*
-   ceilings, both equal to 15, which is why the system has no headroom at all. See §6.
+4. **Zero deadlocks in every run, at both pool sizes.** The three race fixes (ADR-015) hold
+   under real concurrent load, not just targeted trials — including the 2026-09-27 run in
+   which 57 % of requests failed at the connection layer while all four invariants stayed at
+   0 (§8.1).
+5. **The real ceiling is a connection limit, not a job rate** — and at the time of these runs
+   there were *two* ceilings, both equal to 15, which is why the system had no headroom at
+   all. See §6. The pool has since been cut to 5 per worker, which moves the binding limit
+   off the pooler and into the app: see §8.1.
 6. **Two new bugs found**, one a genuine correctness defect (`MAX_CONCURRENT_JOBS` is never
    enforced at accept time) and one a visibility defect (a job stranded in `requested` by a
    Redis timeout). Both were flagged here and **both were fixed on 2026-09-25**, together
@@ -34,6 +45,12 @@ Scripts: [`tests/load/`](../backend/tests/load/) — `seed_dispatch_load.py`, `d
    numbers are real and both belong in the write-up: the spread is the candidate set
    changing as `MAX_CONCURRENT_JOBS` caps out the near partners, not the algorithm making
    worse choices. See §4.
+8. **Added 2026-09-27 — one worker's honest throughput is 2 creations/s, not 10.** Re-running
+   the baseline scenario at the current 5-connection pool settles the one number the
+   2026-09-25 config change invalidated. At the specified 10/s the worker accepts 3.14 jobs/s
+   and returns 500s for 57.1 % of requests after a full 30 s `pool_timeout` wait; 2/s runs
+   clean. Finding 1 survives intact — dispatch p50 moved from 858.3 ms to 871.9 ms and 100 %
+   of jobs matched while more than half the requests were failing. See §8.1.
 
 ---
 
@@ -42,6 +59,9 @@ Scripts: [`tests/load/`](../backend/tests/load/) — `seed_dispatch_load.py`, `d
 Four runs. Three are the specified scenarios; the fourth is a calibration run added
 because the specified mixed scenario failed, which bounds the ceiling from above but not
 from below — without a rate that runs clean, §8 could only have quoted a range.
+
+**All four ran at the old 15-connection pool.** §8.1 re-runs the baseline column at the
+current 5-connection pool; read the two together, not one instead of the other.
 
 ### 2.1 Headline table
 
@@ -62,6 +82,11 @@ from below — without a rate that runs clean, §8 could only have quoted a rang
 | Eligible partners used | 2 of 11 | 2 of 11 | 6 of 11 | **11 of 11** |
 | **Deadlock delta** | **0** | **0** | **0** | **0** |
 | Failure mode | — | app `QueuePool` timeout | Supavisor `EMAXCONNSESSION` | Supavisor `EMAXCONNSESSION` |
+
+> **Pool=15 (2026-09-24).** The baseline column re-measured at the current pool of 5 reads
+> **3.14 /s accepted, 621 errors (57.1 %), DB-clock p50 871.9 ms, end-to-end p50 17009 ms** —
+> §8.1. The dispatch-latency rows barely move; the throughput and error rows change
+> completely.
 
 Two latencies are reported because they answer different questions and neither is a
 substitute for the other. **Dispatch latency (DB clock)** is
@@ -108,7 +133,9 @@ re-raises the same text wrapped, so line counts are exactly double failure count
 ## 3. Dispatch latency, and where it goes
 
 The core evaluation metric is **p50 858 ms / p95 1430 ms / p99 2598 ms** under the specified
-baseline load of 10 concurrent creations per second.
+baseline load of 10 concurrent creations per second. *(Re-measured at the 5-connection pool on
+2026-09-27: p50 **871.9 ms**, p95 2034.7, p99 2762.5 — see §8.1. The algorithm's own latency is
+insensitive to the pool size; only the queueing in front of it changes.)*
 
 That is slow for what it computes, and the reason is not computation. Profiling
 (`profile_dispatch.py`, using SQLAlchemy cursor events and `pg_stat_statements`) shows
@@ -125,6 +152,12 @@ Within 10 % across a 1.6× change in RTT. Independent corroboration from the tra
 counters: baseline logged 5985 rollbacks over 1201 jobs (4.98 per dispatch) and the spike
 6375 over 1275 (exactly 5.00) — matching the 5 no-op `ROLLBACK`s per request the profiler
 counted.
+
+A third, later corroboration: re-profiling on 2026-09-27 for §8.1 measured **16 statements
+client-timed against 32.1 counted by `pg_stat_database`** — the same 16 unattributed round
+trips, costing **506.2 ms of a 1198.3 ms handler**. The finding is stable across three weeks
+and two network conditions, and it is the reason a dispatch holds its connection for ~1.2 s
+rather than the ~860 ms §3's headline suggests.
 
 **This is the single highest-value optimisation available**, and it is a code change rather
 than a capacity purchase: the same work in fewer round trips would cut p50 roughly in
@@ -227,6 +260,17 @@ one that has to apply this filter**, and a number quoted without it should be tr
 unverified. Same class of error as the three false zeros in §10: a metric that silently
 absorbs its own infrastructure failures reports good news it has not earned.
 
+**Applied 2026-09-27, result: the adjustment is empty.** §8.1's three runs are the first
+traffic measured on post-2026-09-25 code, so the filter was run against them. `no_match_found`
+was **0** in all three — 469 of 469 jobs in the 10/s run reached `matching`, and likewise at
+3/s and 2/s — so there are no `Dispatch unavailable:` rows to subtract and **§8.1's 100 %
+matched and 72.3 % divergence are unadjusted because the adjustment has nothing in it.** That
+is stated rather than skipped: "the filter returned zero" and "the filter was never applied"
+look identical in a final number, and only one of them is defensible. The reason it is zero is
+also worth keeping — Redis was healthy throughout (isolated GEOSEARCH p50 0.43 ms), and a
+worker accepting 3 jobs/s cannot hold enough jobs concurrently to exhaust 11 eligible
+partners the way §5's mixed run did.
+
 ---
 
 ## 5. Throughput and behaviour under surge
@@ -234,7 +278,8 @@ absorbs its own infrastructure failures reports good news it has not earned.
 **Baseline (10/s, 2 min): clean.** 1201 jobs, 9.97/s accepted, zero errors, zero dropped
 iterations, 99.9 % matched. The predicted 15-connection wall was *not* hit, because sessions
 release their connection between the 8 `BEGIN`/`COMMIT` cycles rather than holding one for
-the whole request.
+the whole request. *(At the current pool of 5 this same scenario is the opposite of clean —
+57.1 % errors, 3.14/s. The clean rate is now 2/s. §8.1.)*
 
 **Spike (10→100/s): congestion collapse.** The system accepted **8.58 jobs/s — fewer than
 baseline's 9.97/s while being offered ten times the load.** It did less work by trying to do
@@ -297,10 +342,23 @@ requests got an immediate **500**. Same root cause, two symptoms, and which one 
 depends on whether anything else is connected — a second uvicorn worker, a migration, a
 monitoring probe, an admin session.
 
-**Resolved 2026-09-25.** Row 1 of that table is now 3 + 2 overflow = **5 per worker**, so
-the two limits are no longer the same number and the app no longer consumes the entire
-shared budget on its own. Which limit binds first is now unambiguous: the app's own pool
-always does, and it queues rather than 500s. §9.1 has the decision and its cost.
+**Resolved 2026-09-25, and re-measured 2026-09-27.** Row 1 of that table is now 3 + 2
+overflow = **5 per worker**, so the two limits are no longer the same number and the app no
+longer consumes the entire shared budget on its own. Which limit binds first is now
+unambiguous, and §8.1 confirms it empirically: in a 10/s run at the new pool, **all 621
+failures carry the app's `QueuePool` message and none carry `EMAXCONNSESSION`** — one worker
+can no longer reach the pooler at all.
+
+One clause of that closure was wrong, though, and §8.1 corrects it: *"it queues rather than
+500s"* holds only for a bounded burst. Under a sustained arrival rate above the service rate
+the queue never drains, every waiter eventually hits the 30 s `pool_timeout`, and the
+`TimeoutError` is unhandled — so the observed behaviour is **a 30-second wait followed by a
+500**, which is row 3 of §9's table made concrete. The failure mode did not become gentler
+when the pool shrank; it became the app's own, and it arrives later.
+
+The section heading remains "two limits, both 15" because that is what was measured on
+2026-09-24 and it is the mechanism worth understanding. In the deployed configuration the
+values are 5 and 15.
 
 ---
 
@@ -432,6 +490,11 @@ Adarsh's partner client will hit this the moment it tries to build an offer scre
 
 ## 8. The practical concurrent-load ceiling
 
+> **⚠️ The per-worker throughput figures in this section were measured at the old pool of 15
+> and were superseded on 2026-09-27. The current single-worker numbers are in §8.1. This box
+> is left as it was measured; read it as "what one worker did at `pool_size=5,
+> max_overflow=10`", which is a configuration the app no longer runs.**
+
 > **On a single uvicorn worker against Supabase's ap-south-1 session-mode pooler, Sahayak's
 > dispatch engine sustains 10 job creations per second indefinitely with zero errors, a p95
 > dispatch latency of 1.43 s (p50 858 ms) and 99.9 % of jobs matched. That figure holds only
@@ -445,10 +508,11 @@ Adarsh's partner client will hit this the moment it tries to build an offer scre
 > latency stayed near 1 s at p50 and match quality was identical at 10/s and at 100/s — so
 > every ceiling measured here is a connection-capacity ceiling, not an algorithmic one.**
 
-Practical reading for the MVP: **10 jobs/s create-only, ~4 jobs/s under realistic mixed
-traffic**, which at a plausible 20-minute average job duration is on the order of 4800
-concurrent live jobs — far beyond anything this project's pilot scope requires. The ceiling
-is real but it is not close.
+Practical reading **at pool=15**: 10 jobs/s create-only, ~4 jobs/s under realistic mixed
+traffic. The last clause of the box is the part that survived the config change unchanged,
+and it is the one that matters: **every ceiling in this report is a connection-capacity
+ceiling, not an algorithmic one.** §8.1 re-measures the capacity; it does not revise the
+algorithm.
 
 Two honest caveats on that 4/s figure. The load harness holds one of the fifteen pooler
 slots itself, so some of the 3.7 % error rate at 4/s is attributable to the harness rather
@@ -458,13 +522,121 @@ genuinely saturated at 22 concurrent held jobs; that is a property of the test d
 size, not a system limit, and it is why the calibration run's partner spread is the most
 realistic one in this report.
 
-**A third caveat, added 2026-09-25.** Every figure in the box above was measured with the
-app pool at 15 — i.e. with one worker holding the entire pooler budget. The pool has since
-been reduced to 5 per worker (§9.1). The *system* ceiling of 15 concurrent database-using
-requests is unchanged, but it now takes three workers to reach it, and a single worker
-should be expected to sustain roughly 5–6 creations/s rather than 10. The per-worker number
-in this box should be read as "what one worker did at pool=15", not as the current
-single-worker figure; §9.1 states what was measured and what is predicted.
+**A third caveat, added 2026-09-25, settled 2026-09-27.** Every figure in the box above was
+measured with the app pool at 15 — i.e. with one worker holding the entire pooler budget. The
+pool has since been reduced to 5 per worker (§9.1). When that change was made, this caveat
+predicted a single worker would sustain "roughly 5–6 creations/s rather than 10". **That
+prediction was wrong in both directions and has been replaced by a measurement** — see §8.1.
+The per-worker number in the box above should be read as "what one worker did at pool=15",
+never as the current single-worker figure.
+
+### 8.1 Re-measured 2026-09-27 at the current pool of 5 — the real single-worker ceiling
+
+> **On a single uvicorn worker with `pool_size=3, max_overflow=2` (5 connections), the same
+> baseline scenario — 10 job creations/s for 2 minutes — does not degrade gracefully. It
+> accepts **3.14 jobs/s** and **fails 57.1 % of requests** (621 of 1088), every failure an
+> HTTP 500 from the app's own `QueuePool` checkout timing out after 30 s. The modal user
+> experience at that offered rate is a 30-second wait followed by a 500: client-observed p50
+> is **17.0 s** and `http_req_duration` p50 is exactly **30.00 s**. The rate one worker
+> sustains **cleanly** — zero errors, p50 1.5 s — is **2 creations/s**; at 3/s errors appear
+> (3.0 %) and p95 reaches 18.9 s. Throughout all of this the dispatch algorithm was
+> untouched: DB-clock dispatch p50 **871.9 ms** against 858.3 ms at pool=15, **100 % of jobs
+> matched**, all four invariants 0, and **0 deadlocks** — in a run where more than half the
+> requests failed.**
+
+Same scenario, same 18-partner dataset, same seeded placements (14 in-radius, 4 out, 8 m max
+placement error, 11 eligible), separate `RUN_ID`s so no 2026-09-24 artefact was overwritten:
+
+| | pool 15 (2026-09-24) | **pool 5 (2026-09-27)** |
+|---|---|---|
+| offered rate | 10 creations/s, 2 min | 10 creations/s, 2 min |
+| k6 iterations issued | 1201 | 1088 (+111 dropped by the generator) |
+| jobs created | 1201 | 467 (469 rows in DB) |
+| **jobs accepted /s** | **9.97** | **3.14** |
+| **errors** | **0** | **621 = 57.1 %** |
+| failure mode | — | app `QueuePool` timeout; **0** Supavisor `EMAXCONNSESSION` |
+| client p50 / p95 / max | 1422 / 3609 / — ms | **17009 / 31252 / 33642 ms** |
+| `http_req_duration` p50 | 1422 ms | **30002 ms** (= `pool_timeout`) |
+| **DB-clock dispatch p50** | **858.3 ms** | **871.9 ms** |
+| DB-clock p95 / p99 / max | 1430.1 / 2598.1 / 4755.0 ms | 2034.7 / 2762.5 / 3151.2 ms |
+| matched | 99.9 % | **100.0 %** |
+| differed from pure-nearest | 73.1 % | 72.3 % |
+| eligible partners used | 2 of 11 | 2 of 11 |
+| deadlocks / invariant violations | 0 / all 0 | 0 / all 0 |
+
+The 3.14/s is a **saturated ceiling, not a transient**. Per 15-second bucket the accepted
+rate was 3.60, 3.73, 3.00, 3.73, 3.93, 2.53, 3.67, 2.93, 1.67, 2.47 /s — flat from the first
+bucket to the last. Nothing warmed up and nothing collapsed further; the worker found its
+service rate immediately and held it.
+
+**Calibration — the rate that is actually clean.** Two further runs, each `--mark`-bracketed:
+
+| offered rate | created | accepted /s | errors | client p50 / p95 | DB-clock p50 | ceiling log lines |
+|---|---|---|---|---|---|---|
+| 10/s | 467 | 3.14 | **621 (57.1 %)** | 17009 / 31252 ms | 871.9 ms | 1242 |
+| 3/s | 263 | 2.93 | 8 (3.0 %) | 3839 / 18876 ms | 833.0 ms | 16 |
+| **2/s** | **181** | **2.01** | **0** | **1506 / 5146 ms** | **835.9 ms** | **0** |
+
+At 2/s the p99 is 6.7 s and the max 8.9 s, so even the tail stays inside a plausible mobile
+timeout. The smoke scenario (2/s, 15 s) also came back unchanged at p50 1268.4 ms against
+1190 ms at pool=15 — **below 5 concurrent requests the pool size is invisible**, which is the
+other half of why this change was safe for the regression suite (§9.1's sampler table).
+
+**Why the 5–6/s prediction was wrong, in two independent ways.** Both matter more than the
+number itself, because both are reusable mistakes:
+
+1. **It used the wrong service time.** The prediction fed Little's law with 860 ms, which is
+   §3's `requested_at → offered_at` dispatch window. That is not the connection-hold time —
+   it excludes request parsing, auth, JWT verification, response serialisation, and the
+   `BEGIN`/`COMMIT` round trips that bracket the work. Profiling the handler in-process
+   (`tests/load/profile_dispatch.py`, median of 8, no HTTP hop) measures the real hold at
+   **1198.3 ms**: 655.0 ms across 16 client-timed statements (54.7 %), 3.0 ms in 2 Redis
+   commands (0.2 %), 540.3 ms in Python (45.1 %) — of which reconciliation against
+   `pg_stat_database` statement counts attributes **~506.2 ms to 16.1 unattributed round
+   trips** (transaction control and `pool_pre_ping`). So ~1.16 s of the 1.20 s is Postgres
+   round-trip latency to ap-south-1, and **the connection is held for all of it.** Corrected,
+   Little's law gives 5 ÷ 1.198 s ≈ **4.2/s**, not 5.8/s. The measured 3.14/s is lower still
+   because under load the hold itself stretches (5 ÷ 3.14 = 1.59 s effective) — contention
+   between 261 concurrent coroutines on one event loop, plus a pre-ping per checkout.
+2. **It predicted queueing where the failure is actually erroring.** The caveat said the
+   surplus would queue "on a 30 s checkout timeout rather than erroring". That is true of a
+   *bounded burst* and false of a *constant arrival rate above capacity*: offered 10/s against
+   a service rate of ~3/s, the checkout queue grows without bound, so waiters reach
+   `pool_timeout` and raise
+   `sqlalchemy.exc.TimeoutError: QueuePool limit of size 3 overflow 2 reached, connection
+   timed out, timeout 30.00`, which nothing catches → HTTP 500. **`pool_timeout` does not
+   absorb sustained overload; it converts it into 500s after a 30-second delay** — the worst
+   of both, as row 3 of §9's table already warned in the abstract.
+
+**The ceiling moved from the pooler into the app.** §6 described two limits that both happened
+to be 15 — the app's QueuePool and Supavisor's `EMAXCONNSESSION` — and at pool=15 a single
+worker could reach either. At pool=5 that symmetry is gone: all 621 failures are the app's own
+`QueuePool` message and there are **zero** `EMAXCONNSESSION`, `too many connections` or
+`max clients reached` lines in the server log. One worker can no longer touch the pooler cap,
+which is exactly what the §9.1 change was for; §6's mechanism is still correct, but its "both
+15" framing describes the old configuration only.
+
+**Two reading notes on the raw artefacts**, so nobody mis-cites them later:
+
+- The collector reports **"1242 connection-ceiling messages"** for the 10/s run. That is a
+  *line* count, not a failure count: each timeout logs the `TimeoutError` line twice — once in
+  the structlog `unhandled_exception` event and once in `Exception in ASGI application`.
+  621 failures, 1242 lines. The same factor of 2 applies to the 3/s run (16 lines = 8
+  failures).
+- **§4.1's `Dispatch unavailable:%` exclusion is a no-op for every run in this section**, and
+  that is stated rather than silently skipped: 469 of 469 jobs reached `matching` and
+  `no_match_found` was **0** in all three runs, so there is nothing to exclude and the 100 %
+  / 72.3 % match figures above are unadjusted because the adjustment is empty. Unlike §5's
+  mixed run, the test fleet never saturated here — a worker that only accepts 3 jobs/s cannot
+  generate enough concurrent held jobs to exhaust 11 eligible partners.
+
+**What this does and does not change.** It does not change the deployment decision (§9.1),
+which was about headroom and horizontal scaling, not about single-worker peak. It does not
+change the algorithm's numbers. What it changes is **which figure may be quoted as the
+system's throughput**: for the app as it is configured today, that figure is **2 creations/s
+clean per worker, 3.14/s saturated**, and the ~10/s in §8's box is a historical measurement of
+a configuration that is no longer deployed. Pilot load is a few jobs per *minute*, so 2/s
+remains roughly two orders of magnitude of headroom — but 2/s is the honest number.
 
 ---
 
@@ -534,25 +706,43 @@ connection limit shared with every other client of the same database.
 
 **Where the assumption does *not* hold, stated plainly.** It is true for the regression
 suite and for pilot-scale traffic. It is **not** true for §8's headline 10 creations/s. That
-figure was measured at `pool_size=5, max_overflow=10`, and the arithmetic says it will not
-survive at 5: a dispatch spends roughly 860 ms of its life holding a connection, so
-10 creations/s demands about **8.6 connections continuously** (Little's law). A 5-connection
-pool cannot supply that, so a single worker's create-only throughput should fall to
-roughly **5–6/s**, with the surplus queueing on a 30 s checkout timeout rather than
-erroring.
+figure was measured at `pool_size=5, max_overflow=10`, and shrinking the pool to 5 costs most
+of it.
 
-That is a prediction from the measured service time, **not a measurement** — settling it
-means re-running the k6 baseline scenario at the new pool size, which was not done as part
-of this change. It is flagged rather than buried because it is the one number in this report
-the config change invalidates.
+**Measured 2026-09-27, replacing the prediction this section originally carried.** The
+baseline scenario was re-run at `pool_size=3, max_overflow=2`; full numbers are in §8.1. One
+worker accepts **3.14 jobs/s** at an offered 10/s while failing **57.1 %** of requests, and
+sustains **2/s** cleanly with zero errors. The prediction made here on 2026-09-25 — "roughly
+5–6/s, with the surplus queueing on a 30 s checkout timeout rather than erroring" — was wrong
+twice over: it used §3's 860 ms dispatch window as the connection-hold time when the measured
+hold is **1198.3 ms** (profiled: 655.0 ms in 16 statements, ~506.2 ms in transaction-control
+and pre-ping round trips, 540.3 ms in Python, 3.0 ms in Redis), and it assumed a 30 s
+`pool_timeout` would absorb the surplus when in fact a *sustained* arrival rate above capacity
+grows the checkout queue without bound, so waiters hit the timeout and return 500s. Corrected
+Little's law gives 5 ÷ 1.198 s ≈ 4.2/s as the ceiling and 3.14/s was measured, the gap being
+hold-time stretch under contention.
 
-It is still the right trade, for a reason that is easy to miss: the *system* ceiling has not
-moved. The binding limit was always the 15 shared pooler slots, and before this change one
-worker consumed all 15, so the only way to serve more than ~10/s — a second worker — produced
-immediate 500s instead of more throughput. At 5 per worker, three workers fit inside the same
-budget and reach the same ceiling horizontally. The change trades single-worker peak
-throughput, which no pilot-scale deployment needs, for the ability to scale out at all.
-Pilot load is on the order of a few jobs per *minute*; both figures are far above it.
+The estimate was wrong by roughly 2× on the number and qualitatively wrong on the failure
+mode, which is the more expensive error of the two: a system that queues under overload and
+one that returns 500s after 30 s need different operational answers. **This is why the section
+flagged it as a prediction rather than stating it as a result**, and it is the argument for
+re-measuring anything derived from a service time rather than measured end to end.
+
+The trade itself still stands, and §8.1 does not disturb it: the algorithm did not degrade at
+any load tested (DB-clock p50 871.9 ms vs 858.3 ms, 100 % matched, invariants 0, deadlocks 0),
+and the *system* ceiling has not moved. The binding limit was always the 15 shared pooler
+slots, and before this change one worker consumed all 15, so the only way to serve more than
+~10/s — a second worker — produced immediate 500s instead of more throughput. At 5 per worker,
+three workers fit inside the same budget and reach the same ceiling horizontally. The change
+trades single-worker peak throughput, which no pilot-scale deployment needs, for the ability
+to scale out at all. Pilot load is on the order of a few jobs per *minute*; 2/s clean is still
+two orders of magnitude above it.
+
+What §8.1 *does* add to the trade is a cost that was previously only guessed at: the
+single-worker figure fell further than expected, and it fails loudly rather than slowly. If
+the pilot ever needed more than ~2 creations/s from one process, the answer is a second
+worker (which now fits) or transaction-mode pooling (§9, Future Scope) — not a larger pool,
+which would re-create the zero-headroom condition this change removed.
 
 ---
 
@@ -582,10 +772,28 @@ recording because each looked like good news:
 3. That same scan sat behind a JSON-parse filter, so it could never have matched the raw
    traceback lines the message actually appears in.
 
+**A fourth tooling caution, from the 2026-09-27 re-run: the ceiling-message count is a *line*
+count, not a failure count.** The collector reported "1242 connection-ceiling messages" for a
+run with 621 failures, because each unhandled `TimeoutError` prints the matching line twice —
+once inside the structlog `unhandled_exception` event and once inside uvicorn's `Exception in
+ASGI application` traceback. Divide by two before comparing it to an HTTP error count, or
+cross-check against k6's own counter as §8.1 does. The same factor applies to the 3/s run
+(16 lines, 8 failures).
+
+**Log hygiene for re-runs.** Because the scan has no upper time bound (see the limitation
+below), the 128 MB log left by the 2026-09-24 runs was moved aside to
+`sahayak-load-uvicorn.log.2026-09-24.bak` before the 2026-09-27 runs rather than appended to.
+Reading a stale log is the same class of error as the three false zeros, inverted: it reports
+bad news the run did not earn.
+
 **Limitations, stated rather than buried.**
 
 - The spike's offered load was capped by the generator (2090 dropped iterations), so the
-  collapse point is bounded, not precisely measured.
+  collapse point is bounded, not precisely measured. The same applies, more mildly, to the
+  2026-09-27 10/s run: k6 dropped 111 iterations it could not start, so the offered rate
+  there was marginally below the nominal 10/s. This does not affect the accepted-rate figure
+  (3.14/s), which is counted from database rows, or the error percentage, which is counted
+  over requests actually issued.
 - Redis isolation timings are taken post-run on an unloaded Redis. They bound Redis's
   contribution from below, which is sufficient to answer "is Redis the bottleneck" (no, by
   ~2000×) but not "what did Redis cost at peak".
@@ -594,7 +802,15 @@ recording because each looked like good news:
   where the responder kept up, is the more realistic picture of fleet dynamics, and is why
   it and not the 10/s run shows true capacity saturation.
 - The log scan has no upper time bound: it reads everything after the `--mark`. Reports are
-  therefore valid only when generated immediately after their run, which is how all four
-  here were produced. A report cannot be regenerated later against the same log.
+  therefore valid only when generated immediately after their run, which is how all seven
+  runs here were produced. A report cannot be regenerated later against the same log.
+- **The 2026-09-27 runs are create-only.** The mixed scenario was not re-run at pool=5, so
+  §5's "~4 jobs/s under realistic mixed traffic" has no pool=5 counterpart. Given that
+  create-only fell from 9.97 to 3.14/s, the mixed figure at pool=5 must be lower than 4/s,
+  but *how much* lower is not measured and should not be estimated — the 5–6/s prediction
+  §8.1 just retired was exactly this kind of arithmetic. If a mixed number at the current
+  pool is ever needed, it has to be run.
 - Single uvicorn worker, single client machine, ~30 ms RTT to the database. On Render the
-  RTT will differ and, per §3, latency moves roughly linearly with it.
+  RTT will differ and, per §3, latency moves roughly linearly with it — which also means the
+  2 creations/s clean rate is RTT-dependent, since the connection-hold time it derives from
+  is ~97 % round-trip latency.

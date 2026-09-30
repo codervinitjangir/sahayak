@@ -1,0 +1,53 @@
+-- 004_drop_rating_trigger.sql
+--
+-- Remove trg_update_partner_rating and the function behind it. The rating
+-- aggregate is maintained by app/services/rating_service.py instead.
+--
+-- The trigger did not work, and could not be made to work without holding a
+-- second copy of a rule the application already owns. It resolved the partner
+-- being rated with:
+--
+--     SELECT partner_id FROM job_assignments
+--      WHERE job_id = NEW.job_id AND status = 'accepted' LIMIT 1
+--
+-- A rating is only legal once the job has completed, and completing a job moves
+-- that assignment off 'accepted' and onto 'completed'
+-- (job_service.TERMINAL_ASSIGNMENT_STATUS, added with ADR-012). So at the only
+-- moment the trigger can fire, the subquery returns NULL, `WHERE id = NULL`
+-- matches zero rows, and the UPDATE reports success having changed nothing.
+-- partners.rating_avg would have stayed 0.0 for every partner forever, which
+-- means ADR-009's rating_score — one of the dispatch algorithm's four weighted
+-- inputs — would have been a constant with no error anywhere to say so.
+--
+-- Measured before this migration was written, on the live database, by
+-- inserting the same 5-star rating twice against assignments differing only in
+-- status:
+--
+--     assignment='accepted'    rating_avg 0.0 -> 5.0   trigger fired
+--     assignment='completed'   rating_avg 0.0 -> 0.0   trigger did not fire
+--
+-- This is exactly the defect ADR-012 fixed in the application layer: matching on
+-- 'accepted' alone makes the partner who has just finished a job a stranger to
+-- it. The fix there was RESPONSIBLE_ASSIGNMENT_STATUSES
+-- ('accepted','completed','cancelled') in job_repository. The trigger was never
+-- updated to match, because it is written in a different language, lives in a
+-- different file, and no test in the suite can see it.
+--
+-- Which is the argument for dropping it rather than patching the status list:
+-- "who is responsible for this job" is one rule, and it already has one home.
+-- A second definition in plpgsql has now demonstrated, at a cost of one silent
+-- wrong number, that it does not get updated when the first one changes. See
+-- ADR-018 for the full reasoning, including why the service recomputes the
+-- average from the ratings table rather than incrementing it the way this
+-- trigger did.
+--
+-- Safe to run: `ratings` is empty (0 rows at the time of writing) and nothing in
+-- the application has ever inserted into it, so no aggregate computed by this
+-- trigger exists to be preserved. Dropping it cannot change the value of any
+-- column already written.
+--
+-- Re-runnable, as the directory requires: both statements are IF EXISTS.
+
+DROP TRIGGER IF EXISTS trg_update_partner_rating ON ratings;
+
+DROP FUNCTION IF EXISTS update_partner_rating();

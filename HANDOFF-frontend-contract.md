@@ -22,6 +22,7 @@
 | **`409 PARTNER_AT_CAPACITY` on accept** | **New, 2026-09-25 — action needed on the partner side when you build it.** A full mechanic's accept is now refused, and the refusal must not look like "offer gone". §11.1. |
 | **Partner offer screen** | **Unblocked, 2026-09-27.** `GET /api/v1/partners/me/offers` now exists — this was the last backend gap in the partner flow, and it's where `assignment_id` comes from. Shape is decided; build against §10. No owner phone or map pin on an offer card (ADR-017). |
 | **`no_match_found` with no offers** | **Confirm only.** Already legal, now more frequent. If your job screen renders an empty offers list without crashing or spinning forever, you're done. §11.2. |
+| **Ratings** | **New, 2026-09-29 — one-character fix in `web/`.** `POST /api/v1/jobs/{id}/ratings` is live, two-way. Your `submitRating()` posts to `/rating` (singular) and 404s; the body is already right. Branch the form on `can_rate` from the `GET`, not on your own rules. §12. |
 
 
 ---
@@ -248,7 +249,7 @@ Once registered, the same token resolves on every route with no further setup �
 
 ### 2.6 Endpoints you call that don't exist yet
 
-**Updated 2026-09-23.** Two entries have come off this list since it was written — cancel shipped on the 22nd and the vehicle endpoints on the 23rd — so read the live set first:
+**Updated 2026-09-29.** Three entries have come off this list since it was written — cancel shipped on the 22nd, the vehicle endpoints on the 23rd, and ratings on the 29th — so read the live set first:
 
 - `POST /api/v1/jobs`, `GET /api/v1/jobs/{id}` — §2.1, §2.5b
 - `POST /api/v1/users`, `POST /api/v1/users/{id}/link-auth` — owner signup, §2.5c
@@ -256,12 +257,14 @@ Once registered, the same token resolves on every route with no further setup �
 - `POST /api/v1/jobs/{id}/cancel` — owner cancel, §7
 - `POST /api/v1/vehicles`, `GET /api/v1/vehicles`, `GET /api/v1/vehicles/{id}` — §8
 - `POST /api/v1/job-assignments/{assignment_id}/respond` — partner accepts or rejects an offer
+- `GET /api/v1/partners/me/offers` — partner offer list, §10
+- `POST` and `GET /api/v1/jobs/{id}/ratings` — §12
 - the partner endpoints in §4
 
 `jobs.service.ts` will still 404 on these. Not bugs on your side — just not built:
 
 - `GET /jobs` (list) and `GET /jobs/me`
-- `POST /jobs/{id}/rating`
+- `POST /jobs/{id}/rating` — **singular, and this one is now a typo rather than a gap.** The route shipped as `/ratings`. §12.1.
 - `GET /services`, `GET /services/categories`
 - `PATCH /jobs/{id}/accept`, `PATCH /jobs/{id}/complete` — note these two are superseded, not pending. Acceptance is `POST /api/v1/job-assignments/{assignment_id}/respond` with `{"action": "accept"}` — keyed on the **assignment** id, not the job id, because what a partner answers is a specific offer. Completion is `POST /api/v1/jobs/{id}/status`, §6.
 - `PATCH`/`DELETE` on a vehicle — §8.6
@@ -360,6 +363,8 @@ Service-code selection and the registration form can come later. Documents, equi
 | `PRICE_FINAL_REQUIRED` | 400 | `status: "completed"` with no `price_final` (§6). |
 | `FIELD_NOT_APPLICABLE` | 400 | A body field that doesn't belong with that status — `price_final` on a non-completion, `cancellation_reason` on a non-cancellation (§6). |
 | `JOB_ALREADY_TERMINAL` | 409 | Owner tried to cancel a job that's already `completed` or `cancelled` (§7). Not the same as `INVALID_STATUS_TRANSITION` — different remedy: stop showing the cancel button, don't retry with another value. |
+| `JOB_NOT_RATEABLE` | 409 | Rating a job that isn't `completed` (§12). Cancelled counts — there was no service to judge. Don't show the rating form until `can_rate` is true. |
+| `RATING_ALREADY_SUBMITTED` | 409 | This side of this job has already been rated (§12). Usually a double-tap. Treat it as success on the client — their rating is stored — and re-read the ratings list. |
 
 The 401 message is deliberately vague — "Token has expired." or "Authentication required." and nothing more. The specific reason (bad signature, wrong audience, wrong issuer, non-UUID subject) goes to the server log under `auth_token_rejected`, not to the client. If you need to know why a token was rejected, quote the `X-Request-ID` and I'll read it out of the log.
 
@@ -1188,3 +1193,188 @@ Verified by 49 assertions against the real database and 21 unit tests
 `backend/tests/unit/test_dispatch_capacity.py`), including a control run with both fixes
 reverted that reproduces the original defects — 12 accepts landing on a cap of 2, and a job
 left silently in `requested`.
+
+---
+
+## 12. Ratings — `POST` and `GET /api/v1/jobs/{job_id}/ratings` (new, 2026-09-29)
+
+Two-way: the owner rates the mechanic, the mechanic rates the owner. **Same two endpoints for
+both roles** — no partner-specific route. The server works out which side you are from your
+token.
+
+There is one thing in `web/` that this breaks, and one field you should branch on. Both are
+below.
+
+### 12.1 The one change needed in `web/` — the path is plural
+
+`web/src/services/jobs.service.ts:78` posts to:
+
+```
+POST /jobs/${jobId}/rating
+```
+
+The shipped route is `/ratings`. Singular 404s. One character:
+
+```ts
+// web/src/services/jobs.service.ts — submitRating()
+- await apiClient<void>(`/jobs/${jobId}/rating`, {
++ await apiClient<void>(`/jobs/${jobId}/ratings`, {
+```
+
+**Your request body is already correct** — `{ rating, comment }` is exactly what the endpoint
+wants, so nothing else in that function changes. Worth saying explicitly because this was a
+call into a route that did not exist at all until today; it was never returning 200, so if
+you have a `.catch()` swallowing it, that's why it looked fine.
+
+The return type is not `void`, though — you get the stored rating back (§12.3), which is what
+you want for rendering it without a re-fetch.
+
+### 12.2 `POST` — submit one side's rating
+
+```
+POST /api/v1/jobs/{job_id}/ratings
+Authorization: Bearer <supabase access token>
+
+{
+  "rating": 5,                              // required, whole number 1-5
+  "comment": "Arrived in 12 minutes, sorted it on the spot."   // optional
+}
+```
+
+`201` with the stored row:
+
+```json
+{
+  "data": {
+    "id": "6b1f...",
+    "job_id": "9a3c...",
+    "rated_by": "user",
+    "rating": 5,
+    "comment": "Arrived in 12 minutes, sorted it on the spot.",
+    "created_at": "2026-09-29T11:42:08.317Z"
+  },
+  "meta": { "request_id": "..." }
+}
+```
+
+Three things about the body:
+
+- **Do not send `rated_by`.** It isn't optional-and-ignored, it's `extra="forbid"` → **422**.
+  Same rule as `JobStatusUpdateRequest` and `VehicleCreateRequest` (§2.5). `rated_by` says
+  which side of the transaction is speaking, which is an identity claim, so it comes from the
+  token. If the body could carry it, an owner could post the mechanic's review of themselves
+  and use up the one slot the mechanic had to reply.
+- **Do not send `job_id`.** It's in the path, and 422 for the same reason.
+- `rating` is an integer. `4.5` is a 422, not a rounded 4 — the column has a `CHECK` for whole
+  stars, so a half-star UI has nothing to store.
+- A whitespace-only `comment` is stored as `null`, so an untouched textarea and an omitted
+  field come back identically. You don't need to strip it yourself.
+
+### 12.3 `GET` — every rating on a job, plus whether to show the form
+
+```
+GET /api/v1/jobs/{job_id}/ratings
+```
+
+`200`:
+
+```json
+{
+  "data": {
+    "job_id": "9a3c...",
+    "job_status": "completed",
+    "ratings": [
+      { "id": "6b1f...", "job_id": "9a3c...", "rated_by": "user",
+        "rating": 5, "comment": "Sorted it on the spot.",
+        "created_at": "2026-09-29T11:42:08.317Z" },
+      { "id": "7c2e...", "job_id": "9a3c...", "rated_by": "partner",
+        "rating": 4, "comment": null,
+        "created_at": "2026-09-29T11:48:55.002Z" }
+    ],
+    "can_rate": false
+  },
+  "meta": { "request_id": "..." }
+}
+```
+
+- `ratings` is a **list, 0 to 2 entries**, not a pair of named fields. Each item names its own
+  direction via `rated_by`: `"user"` is the owner's verdict on the mechanic, `"partner"` is
+  the mechanic's verdict on the owner. Read the direction off the item; don't rely on array
+  order.
+- **Both parties see both ratings**, including the one written about them. Deliberate: with
+  exactly two participants, hiding the author changes nothing — each side already knows who
+  the other is — and it means a disagreement about a job is a conversation about the same
+  facts.
+- Neither party's name or id is in a rating item. If you want to label them, you already know
+  who the two participants are from the job.
+
+### 12.4 `can_rate` is the field you branch on — don't re-derive it
+
+Show the rating form when `can_rate` is `true`. Nothing else.
+
+It is computed server-side on purpose, from the same rule that decides whether to *accept* a
+rating. To re-derive it in the client you would have to know that the job must be `completed`,
+that each side gets exactly one rating, and which side you are. Those three facts drift the
+moment one of them changes on the server, and the way it fails is a form that submits into a
+409.
+
+`can_rate` is **per side, not per job**: after the owner rates, the owner's `GET` says
+`false` and the mechanic's `GET` on the same job still says `true`. Two clients reading the
+same endpoint correctly get different answers, so don't cache it across roles or treat it as
+part of the job.
+
+### 12.5 Errors
+
+| Code | HTTP | What to do |
+|---|---|---|
+| `JOB_NOT_FOUND` | 404 | Also what you get for a job that isn't yours — same as everywhere else (§8.5). Don't try to tell them apart. |
+| `FORBIDDEN` | 403 | You're a party to nothing on this job. For a mechanic this also covers "someone else took it". Client bug — don't log them out. |
+| `JOB_NOT_RATEABLE` | 409 | The job isn't `completed`. Don't retry; you shouldn't have shown the form — `can_rate` was `false`. Cancelled jobs are included: there was no service to judge. |
+| `RATING_ALREADY_SUBMITTED` | 409 | This side already rated this job. **Treat it as success** — their rating is stored — and re-read the list. It's almost always a double-tap on a slow connection. |
+| `VALIDATION_ERROR` | 422 | `rating` out of 1-5 or non-integer, comment over 1000 chars, or a forbidden field (`rated_by`, `job_id`). `details[]` names it. |
+
+`RATING_ALREADY_SUBMITTED` deserves the emphasis. It comes from a unique constraint, not from
+a pre-check, which is what makes it correct under a double-tap: both requests get past any
+check you could do first, and without the constraint the second would be a 500. So when you
+see it, the user's rating did land — show the thank-you screen, not an error.
+
+### 12.6 What this does on the server, and what it doesn't
+
+Worth knowing because one part of it is visible to you and one part is not:
+
+- **Visible, and it changes a field you already receive:** an owner's rating now moves
+  `partners.rating_avg`, which is what `current_assignment.partner_rating` on
+  `GET /jobs/{id}` has always been reading. That field has been returning **`0.0` for every
+  mechanic since the system started**, because nothing could write the column — so if you ever
+  looked at it and assumed the endpoint was stubbed, it wasn't, the number was just genuinely
+  zero. From today it's a real average. It's a `Decimal` serialised as a JSON number with one
+  decimal place (`4.5`), nullable, and withheld along with name and phone when the caller isn't
+  the owner or the assigned partner (§2.5b).
+- **Also visible:** the same column feeds the matching algorithm's rating term. Until today
+  every mechanic scored identically on that dimension and matching was effectively distance +
+  load + skill only. Ratings are now load-bearing rather than decorative (ADR-018 for the full
+  story, including the trigger that was supposed to maintain this and never could).
+- **Not built, and not coming soon:** there is no owner-side aggregate. A mechanic's rating of
+  an owner is stored and returned by the `GET` above, but `users` has no `rating_avg` column
+  and nothing reads it. So don't build a "your rating as a customer" display — there's no
+  number behind it yet.
+- **One thing in your code will throw, and it's adjacent enough to mention:**
+  `web/src/pages/owner/JobTrackingPage.tsx:183` reads `job.partner.rating_avg.toFixed(1)` and
+  `job.partner.rating_count`. There is no `job.partner` on the response — it's
+  `job.current_assignment`, with flat `partner_*` fields, which is §2.2's point and unchanged
+  by this task. Mapped across, `rating_avg` → `current_assignment.partner_rating`, and
+  `rating_count` **has no equivalent on this endpoint at all** — it exists in the database and
+  feeds the algorithm, and it is in exactly one response shape, `POST /api/v1/partners`
+  (a mechanic's own signup, where it is always `0` because they're new), which is no use to
+  an owner tracking a job. So `★ 4.5 (12 jobs)` can't be rendered today — the stars can, the
+  `(12 jobs)` can't. Say the word and I'll add the count to `CurrentAssignmentResponse`; it's
+  a one-line change and now there's finally a real number to put in it. Also note
+  `.toFixed()` will throw on `null` — `partner_rating` is nullable whenever the partner is
+  withheld or unresolved, so guard it either way.
+
+### 12.7 Verified by
+
+43 unit tests (`backend/tests/unit/test_rating_service.py`) and **44 of 44** live assertions
+against the real database and real Supabase tokens
+(`backend/tests/integration/check_ratings.py`), plus a control run that restores the old
+broken behaviour and fails on exactly the aggregate assertions.

@@ -98,6 +98,30 @@ class ErrorCode:
     # remedy is specific: stop offering a cancel button for this job.
     JOB_ALREADY_TERMINAL = "JOB_ALREADY_TERMINAL"
 
+    # Ratings
+    #
+    # The job is not in a state where rating it means anything. Only a
+    # 'completed' job can be rated: there is no service to judge before the work
+    # is done, and a cancelled job had no work in it.
+    #
+    # Its own code rather than INVALID_STATUS_TRANSITION, which the lifecycle
+    # endpoint owns. That one answers "you cannot reach *that* status from here"
+    # and belongs to a caller who named a target status; a rater names none, so
+    # the only thing that can be wrong is the job's own state. The client
+    # remedies also differ: this one means "do not show the rating form yet",
+    # which is a UI decision made before the request rather than after it.
+    JOB_NOT_RATEABLE = "JOB_NOT_RATEABLE"
+    # This side of this job has already been rated. 409 rather than 200-idempotent
+    # because a rating is a judgement, not a state to converge on: silently
+    # accepting the second one would either overwrite the first without saying so
+    # or discard the second without saying so, and both look like a working
+    # submit button to whoever pressed it.
+    #
+    # Reached from the UNIQUE (job_id, rated_by) constraint rather than from a
+    # preceding SELECT, which is what makes it correct when the same person taps
+    # submit twice on a bad connection. See ADR-018.
+    RATING_ALREADY_SUBMITTED = "RATING_ALREADY_SUBMITTED"
+
     # Dispatch
     #
     # The job has already left 'requested', so dispatch has run for it. Its own

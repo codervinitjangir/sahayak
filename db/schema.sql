@@ -213,24 +213,20 @@ CREATE TABLE IF NOT EXISTS ratings (
     UNIQUE (job_id, rated_by)
 );
 
--- Trigger to keep partners.rating_avg denormalized and correct
-CREATE OR REPLACE FUNCTION update_partner_rating() RETURNS TRIGGER AS $$
-BEGIN
-    IF NEW.rated_by = 'user' THEN
-        UPDATE partners
-        SET rating_count = rating_count + 1,
-            rating_avg = ((rating_avg * rating_count) + NEW.rating) / (rating_count + 1)
-        WHERE id = (SELECT partner_id FROM job_assignments 
-                     WHERE job_id = NEW.job_id AND status = 'accepted' LIMIT 1);
-    END IF;
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-DROP TRIGGER IF EXISTS trg_update_partner_rating ON ratings;
-CREATE TRIGGER trg_update_partner_rating
-AFTER INSERT ON ratings
-FOR EACH ROW EXECUTE FUNCTION update_partner_rating();
+-- partners.rating_avg / rating_count are maintained by
+-- app/services/rating_service.py, not by a trigger.
+--
+-- A trigger (trg_update_partner_rating) used to live here and was removed by
+-- db/migrations/004. It resolved the rated partner through
+-- `job_assignments.status = 'accepted'`, but a job must be completed before it
+-- can be rated and completing it moves that assignment to 'completed' — so the
+-- trigger's subquery returned NULL at the only moment it could fire, matched
+-- zero rows, and silently left every partner's rating at 0.0.
+--
+-- The aggregate is now recomputed from this table on each insert by the service,
+-- using the one definition of "the partner responsible for this job" that the
+-- application already owns (job_repository.RESPONSIBLE_ASSIGNMENT_STATUSES).
+-- See ADR-018.
 
 -- ============================
 -- 14. PAYMENTS
