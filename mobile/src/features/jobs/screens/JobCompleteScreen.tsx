@@ -22,8 +22,9 @@ import Avatar from "../../../components/ui/Avatar";
 import RatingStars from "../../../components/ui/RatingStars";
 import Button from "../../../components/ui/Button";
 import Card from "../../../components/ui/Card";
-import { MOCK_PARTNER } from "../../../services/api";
-import type { OwnerStackParamList } from "../../../types";
+import { MOCK_PARTNER, MOCK_VEHICLES } from "../../../services/api";
+import { useJobStore } from "../../../store/jobStore";
+import type { OwnerStackParamList, Job } from "../../../types";
 
 type Nav = NativeStackNavigationProp<OwnerStackParamList, "JobComplete">;
 type Route = RouteProp<OwnerStackParamList, "JobComplete">;
@@ -32,7 +33,9 @@ const TIP_OPTIONS = [0, 20, 50, 100];
 
 export default function JobCompleteScreen() {
   const nav = useNavigation<Nav>();
+  const route = useRoute<Route>();
   const partner = MOCK_PARTNER;
+  const { activeJob, addCompletedJob } = useJobStore();
 
   const [rating, setRating] = useState(0);
   const [tip, setTip] = useState(0);
@@ -57,16 +60,37 @@ export default function JobCompleteScreen() {
     ]).start();
   }, []);
 
+  const totalAmount = (activeJob?.estimatedPrice ?? 299) + tip;
+
   const handleDone = () => {
     if (rating === 0) {
       Alert.alert("Rate the service", "Please give a rating before finishing.");
       return;
     }
     setSubmitted(true);
+    const completedJob: Job = {
+      id: route.params?.jobId || "job_" + Date.now(),
+      ownerId: "usr_001",
+      partnerId: partner.id,
+      vehicleId: activeJob?.vehicleId ?? "veh_001",
+      vehicle: activeJob?.vehicle ?? MOCK_VEHICLES[0],
+      serviceType: activeJob?.serviceType ?? "battery",
+      status: "complete",
+      pickupLocation: activeJob?.pickupLocation ?? {
+        latitude: 12.9716,
+        longitude: 77.5946,
+        address: "MG Road, Bengaluru",
+      },
+      estimatedPrice: activeJob?.estimatedPrice ?? 299,
+      finalPrice: totalAmount,
+      rating,
+      tip,
+      createdAt: activeJob?.createdAt ?? new Date().toISOString(),
+      completedAt: new Date().toISOString(),
+    };
+    addCompletedJob(completedJob);
     setTimeout(() => nav.popToTop(), 1500);
   };
-
-  const totalAmount = 299 + tip;
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
@@ -81,7 +105,7 @@ export default function JobCompleteScreen() {
           <Animated.View style={[styles.successCircle, { transform: [{ scale: scaleAnim }] }]}>
             <Ionicons name="checkmark" size={48} color={Colors.textWhite} />
           </Animated.View>
-          <Text style={styles.successTitle}>Service Complete!</Text>
+          <Text style={styles.successTitle}>Rescue Complete!</Text>
           <Text style={styles.successSubtitle}>
             Your vehicle is back on the road 🎉
           </Text>
@@ -93,7 +117,7 @@ export default function JobCompleteScreen() {
             <Avatar name={partner.name} size={52} />
             <View style={styles.partnerInfo}>
               <Text style={styles.partnerName}>{partner.name}</Text>
-              <Text style={styles.partnerSub}>Mechanic · {partner.totalJobs} jobs done</Text>
+              <Text style={styles.partnerSub}>Mechanic · {partner.totalJobs} rescues done</Text>
             </View>
             <View style={styles.partnerBadge}>
               <Ionicons name="shield-checkmark" size={14} color={Colors.info} />
@@ -106,7 +130,7 @@ export default function JobCompleteScreen() {
         <Card style={styles.costCard}>
           <Text style={styles.sectionTitle}>Payment Summary</Text>
           {[
-            { label: "Jump Start Service", amount: 299 },
+            { label: "Jump Start Rescue", amount: 299 },
             { label: "Platform Fee", amount: 0, note: "FREE" },
             { label: "Tip for Partner", amount: tip },
           ].map((row) => (
@@ -126,15 +150,15 @@ export default function JobCompleteScreen() {
           </View>
           <View style={[styles.paymentBadge]}>
             <Ionicons name="checkmark-circle" size={14} color={Colors.success} />
-            <Text style={styles.paymentBadgeText}>Cash on delivery</Text>
+            <Text style={styles.paymentBadgeText}>Cash to roadside partner</Text>
           </View>
         </Card>
 
         {/* ── Rating (Figma: rating-section) ── */}
         <Card style={styles.ratingCard}>
-          <Text style={styles.sectionTitle}>Rate the Service</Text>
+          <Text style={styles.sectionTitle}>Rate the Rescue</Text>
           <Text style={styles.ratingSubtitle}>
-            How was your experience with {partner.name}?
+            How was your rescue experience with {partner.name}?
           </Text>
           <View style={styles.starsRow}>
             <RatingStars value={rating} onChange={setRating} size={38} />

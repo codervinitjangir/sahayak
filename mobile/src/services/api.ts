@@ -213,6 +213,11 @@ export const authApi = {
   },
 };
 
+// ─── Idempotency Key Generator ────────────────────────────────────────────────
+export function createIdempotencyKey(): string {
+  return "idem_" + Date.now() + "_" + Math.random().toString(36).substring(2, 9);
+}
+
 export const jobsApi = {
   getMyJobs: async (): Promise<Job[]> => {
     return MOCK_JOBS;
@@ -222,7 +227,7 @@ export const jobsApi = {
     if (!job) throw new Error("Job not found");
     return job;
   },
-  createJob: async (payload: Partial<Job>): Promise<Job> => {
+  createJob: async (payload: Partial<Job>, _idempotencyKey?: string): Promise<Job> => {
     const newJob: Job = {
       id: "job_" + Date.now(),
       ownerId: "usr_001",
@@ -231,7 +236,8 @@ export const jobsApi = {
       status: "searching",
       pickupLocation: payload.pickupLocation!,
       notes: payload.notes,
-      estimatedPrice: 299,
+      estimatedPrice: payload.estimatedPrice ?? 299,
+      startCode: "4821",
       createdAt: new Date().toISOString(),
     };
     return newJob;
@@ -253,6 +259,9 @@ export const partnerApi = {
   getIncomingOffer: async (): Promise<IncomingOffer | null> => {
     return MOCK_INCOMING_OFFER;
   },
+  getOffers: async (): Promise<IncomingOffer[]> => {
+    return [MOCK_INCOMING_OFFER];
+  },
   acceptOffer: async (jobId: string) => {
     return { success: true, jobId };
   },
@@ -266,3 +275,4 @@ export const partnerApi = {
     return MOCK_PARTNER;
   },
 };
+

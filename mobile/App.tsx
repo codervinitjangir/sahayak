@@ -1,6 +1,5 @@
-// ─── Sahayak — Root App ────────────────────────────────────────────────────────
-import React from "react";
-import { View, Text, ActivityIndicator, StyleSheet, Platform } from "react-native";
+import React, { useState } from "react";
+import { View, Text, StyleSheet, Platform } from "react-native";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import {
@@ -11,8 +10,14 @@ import {
   Inter_700Bold,
 } from "@expo-google-fonts/inter";
 import { StatusBar } from "expo-status-bar";
+import { SafeAreaProvider } from "react-native-safe-area-context";
+import * as SplashScreen from "expo-splash-screen";
 import RootNavigator from "./src/navigation/RootNavigator";
+import AppLaunchSequence from "./src/components/splash/AppLaunchSequence";
 import { Colors } from "./src/constants/theme";
+
+// Keep native splash screen visible until our identical JS layer takes over
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -71,22 +76,27 @@ export default function App() {
     Inter_700Bold,
   });
 
-  if (!fontsLoaded && !fontError) {
-    return (
-      <View style={styles.loading}>
-        <ActivityIndicator size="large" color={Colors.primary} />
-      </View>
-    );
-  }
+  const [splashFinished, setSplashFinished] = useState(false);
 
   return (
     <GestureHandlerRootView style={styles.flex}>
-      <ErrorBoundary>
-        <QueryClientProvider client={queryClient}>
-          <StatusBar style="auto" />
-          <RootNavigator />
-        </QueryClientProvider>
-      </ErrorBoundary>
+      <SafeAreaProvider>
+        <ErrorBoundary>
+          <QueryClientProvider client={queryClient}>
+            <StatusBar style="auto" />
+            <RootNavigator />
+
+            {/* ── SAHAYAK OPENING LAUNCH SEQUENCE (REVEALS FIRST SCREEN AT 1.76s) ── */}
+            {!splashFinished && (
+              <AppLaunchSequence
+                isReady={fontsLoaded || !!fontError}
+                onAnimationComplete={() => setSplashFinished(true)}
+                debug={false}
+              />
+            )}
+          </QueryClientProvider>
+        </ErrorBoundary>
+      </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }

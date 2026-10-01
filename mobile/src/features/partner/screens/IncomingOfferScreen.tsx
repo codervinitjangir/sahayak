@@ -10,6 +10,7 @@ import {
   Animated,
   StatusBar,
   Platform,
+  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -73,8 +74,28 @@ export default function IncomingOfferScreen() {
 
   const handleAccept = async () => {
     setAccepting(true);
-    await new Promise((r) => setTimeout(r, 800));
-    nav.navigate("ActiveJob", { jobId: route.params.jobId });
+    try {
+      await new Promise((r) => setTimeout(r, 800));
+      nav.navigate("ActiveJob", { jobId: route.params.jobId });
+    } catch (err: any) {
+      const code = err?.response?.data?.error?.code;
+      if (code === "PARTNER_AT_CAPACITY") {
+        Alert.alert(
+          "Limit Reached",
+          "You're at your job limit — finish a job to take this one."
+        );
+      } else if (code === "ASSIGNMENT_ALREADY_ANSWERED") {
+        Alert.alert(
+          "Offer Expired",
+          "This job is no longer available.",
+          [{ text: "OK", onPress: () => nav.goBack() }]
+        );
+      } else {
+        Alert.alert("Unable to Accept", "Could not accept this offer. Please try again.");
+      }
+    } finally {
+      setAccepting(false);
+    }
   };
 
   const handleDecline = () => nav.goBack();
@@ -101,7 +122,7 @@ export default function IncomingOfferScreen() {
         />
       </View>
 
-      {/* ── Alert Header (Figma: offer-alert-header — bg #FFF7ED) ── */}
+      {/* ── Alert Header (Figma: offer-alert-header — bg #FFFCF0) ── */}
       <View style={styles.alertHeader}>
         <View style={styles.alertLeft}>
           <View style={styles.alertIconWrap}>

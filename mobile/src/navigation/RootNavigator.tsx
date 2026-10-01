@@ -11,6 +11,7 @@ import { useAuthStore } from "../store/authStore";
 import { Colors, Typography, Radius, Shadows } from "../constants/theme";
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
+import SplashScreen from "../features/auth/screens/SplashScreen";
 import LoginScreen from "../features/auth/screens/LoginScreen";
 
 // ── Owner ─────────────────────────────────────────────────────────────────────
@@ -44,170 +45,30 @@ const OwnerStack = createNativeStackNavigator<OwnerStackParamList>();
 const PartnerStack = createNativeStackNavigator<PartnerStackParamList>();
 const Tab = createBottomTabNavigator();
 
-// ─── Custom Tab Bar ───────────────────────────────────────────────────────────
-function CustomTabBar({ state, descriptors, navigation }: any) {
-  return (
-    <View style={tabStyles.bar}>
-      {state.routes.map((route: any, index: number) => {
-        const { options } = descriptors[route.key];
-        const isFocused = state.index === index;
-        const icon = options.tabBarIcon?.({ focused: isFocused, color: "", size: 24 });
 
-        return (
-          <View key={route.key} style={tabStyles.tab}>
-            {index === 1 ? (
-              // SOS center button
-              <View style={tabStyles.sosWrap}>
-                <View style={tabStyles.sosBtn}>
-                  <Ionicons name="flash" size={28} color={Colors.textWhite} />
-                </View>
-                <Text style={[tabStyles.label, { color: Colors.primary }]}>SOS</Text>
-              </View>
-            ) : (
-              <View
-                style={tabStyles.tabInner}
-                // @ts-ignore
-                onStartShouldSetResponder={() => true}
-                onResponderRelease={() => {
-                  navigation.navigate(route.name);
-                }}
-              >
-                {options.tabBarIcon?.({
-                  focused: isFocused,
-                  color: isFocused ? Colors.primary : Colors.textMuted,
-                  size: 24,
-                })}
-                <Text
-                  style={[
-                    tabStyles.label,
-                    { color: isFocused ? Colors.primary : Colors.textMuted },
-                  ]}
-                >
-                  {options.tabBarLabel ?? route.name}
-                </Text>
-              </View>
-            )}
-          </View>
-        );
-      })}
-    </View>
-  );
-}
 
-const tabStyles = StyleSheet.create({
-  bar: {
-    flexDirection: "row",
-    backgroundColor: Colors.surfaceWhite,
-    paddingTop: 8,
-    paddingBottom: Platform.OS === "ios" ? 28 : 12,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
-    ...(Shadows.sheet as object),
-  },
-  tab: {
-    flex: 1,
-    alignItems: "center",
-  },
-  tabInner: {
-    alignItems: "center",
-    gap: 3,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-  },
-  label: {
-    fontSize: 10,
-    fontFamily: Typography.fontFamily.medium,
-    marginTop: 2,
-  },
-  sosWrap: { alignItems: "center", marginTop: -24 },
-  sosBtn: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: Colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 4,
-    borderColor: Colors.surfaceWhite,
-    ...(Shadows.button as object),
-  },
-});
+// ── Owner Continuous Map & Sheet Flow ──────────────────────────────────────
+import OwnerHelpFlowScreen from "../features/jobs/screens/OwnerHelpFlowScreen";
 
-// ─── Owner Tab Navigator ──────────────────────────────────────────────────────
-function OwnerTabs() {
-  return (
-    <Tab.Navigator
-      tabBar={(props) => <CustomTabBar {...props} />}
-      screenOptions={{ headerShown: false }}
-    >
-      <Tab.Screen
-        name="Home"
-        component={HomeScreen}
-        options={{
-          tabBarLabel: "Home",
-          tabBarIcon: ({ color, size, focused }: any) => (
-            <Ionicons
-              name={focused ? "home" : "home-outline"}
-              size={size}
-              color={color}
-            />
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="SOS"
-        component={HomeScreen}
-        options={{
-          tabBarLabel: "SOS",
-          tabBarIcon: ({ color, size }: any) => (
-            <Ionicons name="flash" size={size} color={Colors.textWhite} />
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="Profile"
-        component={ProfileScreen}
-        options={{
-          tabBarLabel: "Profile",
-          tabBarIcon: ({ color, size, focused }: any) => (
-            <Ionicons
-              name={focused ? "person" : "person-outline"}
-              size={size}
-              color={color}
-            />
-          ),
-        }}
-      />
-    </Tab.Navigator>
-  );
-}
-
-// ─── Owner Stack ──────────────────────────────────────────────────────────────
+// ─── Owner Stack Navigator (Continuous Map-and-Sheet Canvas) ───────────────────
 function OwnerNavigator() {
   return (
-    <OwnerStack.Navigator screenOptions={{ headerShown: false }}>
-      <OwnerStack.Screen name="OwnerHome" component={OwnerTabs} />
-      <OwnerStack.Screen name="ServiceSelect" component={ServiceSelectScreen} />
-      <OwnerStack.Screen
-        name="PickupLocation"
-        component={PickupLocationScreen}
-        options={{ animation: "slide_from_bottom" }}
-      />
-      <OwnerStack.Screen
-        name="FindingPartner"
-        component={FindingPartnerScreen}
-        options={{ animation: "fade", gestureEnabled: false }}
-      />
-      <OwnerStack.Screen
-        name="PartnerMatched"
-        component={PartnerMatchedScreen}
-        options={{ animation: "slide_from_bottom" }}
-      />
+    <OwnerStack.Navigator
+      screenOptions={{ headerShown: false }}
+      initialRouteName="OwnerHome"
+    >
+      <OwnerStack.Screen name="OwnerHome" component={HomeScreen} />
+      <OwnerStack.Screen name="OwnerFlow" component={OwnerHelpFlowScreen} />
+      <OwnerStack.Screen name="ServiceSelect" component={OwnerHelpFlowScreen} />
+      <OwnerStack.Screen name="PickupLocation" component={OwnerHelpFlowScreen} />
+      <OwnerStack.Screen name="FindingPartner" component={OwnerHelpFlowScreen} />
+      <OwnerStack.Screen name="PartnerMatched" component={OwnerHelpFlowScreen} />
       <OwnerStack.Screen
         name="JobComplete"
         component={JobCompleteScreen}
         options={{ animation: "slide_from_bottom", gestureEnabled: false }}
       />
+      <OwnerStack.Screen name="Profile" component={ProfileScreen} />
     </OwnerStack.Navigator>
   );
 }
@@ -283,20 +144,13 @@ function PartnerNavigator() {
 
 // ─── Root Navigator ───────────────────────────────────────────────────────────
 export default function RootNavigator() {
-  const { isAuthenticated, user } = useAuthStore();
+  const { user } = useAuthStore();
 
   return (
     <NavigationContainer>
-      {!isAuthenticated ? (
-        // ── Auth flow ──
-        <AuthStack.Navigator screenOptions={{ headerShown: false }}>
-          <AuthStack.Screen name="Login" component={LoginScreen} />
-        </AuthStack.Navigator>
-      ) : user?.role === "partner" ? (
-        // ── Partner flow ──
+      {user?.role === "partner" ? (
         <PartnerNavigator />
       ) : (
-        // ── Owner flow ──
         <OwnerNavigator />
       )}
     </NavigationContainer>

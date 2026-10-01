@@ -42,7 +42,7 @@ export default function PartnerHomeScreen() {
 
   const statsCards = [
     { label: "Today's Earnings", value: `₹${partner.earningsToday}`, icon: "wallet", color: Colors.success, bg: Colors.successLight },
-    { label: "Jobs Today", value: "5", icon: "briefcase", color: Colors.info, bg: Colors.infoLight },
+    { label: "Rescues Today", value: "5", icon: "briefcase", color: Colors.info, bg: Colors.infoLight },
     { label: "Rating", value: `${partner.rating}⭐`, icon: "star", color: Colors.primary, bg: Colors.primaryLight },
     { label: "Total Earned", value: `₹${(partner.earningsTotal! / 1000).toFixed(1)}K`, icon: "trending-up", color: Colors.secondary, bg: Colors.borderLight },
   ];
@@ -88,8 +88,8 @@ export default function PartnerHomeScreen() {
               </Text>
               <Text style={styles.toggleSubtitle}>
                 {isOnline
-                  ? "Accepting job requests"
-                  : "Toggle to start receiving jobs"}
+                  ? "Accepting roadside rescue requests"
+                  : "Toggle to start receiving rescues"}
               </Text>
             </View>
             <Switch
@@ -132,7 +132,7 @@ export default function PartnerHomeScreen() {
                 <Ionicons name="flash" size={20} color={Colors.primary} />
               </View>
               <View>
-                <Text style={styles.incomingTitle}>New Job Available!</Text>
+                <Text style={styles.incomingTitle}>New Rescue Available!</Text>
                 <Text style={styles.incomingSubtitle}>Battery Jump Start · 2.1 km away · ₹299</Text>
               </View>
             </View>
@@ -159,7 +159,7 @@ export default function PartnerHomeScreen() {
         {/* ── Job History (Figma: history-container) ── */}
         <View style={[styles.section, { marginBottom: Spacing["3xl"] }]}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Recent Jobs</Text>
+            <Text style={styles.sectionTitle}>Recent Rescues</Text>
             <TouchableOpacity>
               <Text style={styles.seeAll}>See All</Text>
             </TouchableOpacity>

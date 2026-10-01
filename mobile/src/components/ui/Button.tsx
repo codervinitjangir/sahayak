@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { Colors, Typography, Spacing, Radius, Shadows } from "../../constants/theme";
 
-type ButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "outline";
+type ButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "outline" | "brand";
 type ButtonSize = "sm" | "md" | "lg";
 
 interface ButtonProps {
@@ -35,11 +35,17 @@ const sizeConfig: Record<ButtonSize, { height: number; fontSize: number; px: num
 };
 
 const variantStyles = {
+  brand: {
+    bg: Colors.primary,       // Blinkit Yellow CTA
+    text: Colors.secondary,   // Black text on yellow
+    border: "transparent",
+    shadow: false,
+  },
   primary: {
-    bg: Colors.primary,
+    bg: Colors.secondary,     // Blinkit Black CTA
     text: Colors.textWhite,
     border: "transparent",
-    shadow: true,
+    shadow: false,
   },
   secondary: {
     bg: Colors.secondary,
@@ -61,8 +67,8 @@ const variantStyles = {
   },
   outline: {
     bg: "transparent",
-    text: Colors.primary,
-    border: Colors.primary,
+    text: Colors.secondary,
+    border: Colors.secondary,
     shadow: false,
   },
 };
@@ -148,8 +154,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   label: {
-    fontFamily: Typography.fontFamily.semiBold,
-    letterSpacing: Typography.letterSpacing.wide,
+    fontFamily: Typography.fontFamily.bold,
+    fontWeight: "700",
+    letterSpacing: -0.2,
   },
   iconLeft: { marginRight: Spacing.sm },
   iconRight: { marginLeft: Spacing.sm },
