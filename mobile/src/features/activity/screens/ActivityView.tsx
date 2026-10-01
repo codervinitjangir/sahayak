@@ -1,4 +1,7 @@
-// ─── Sahayak — Activity Screen (Blinkit Exact Theme & Spacing) ────────────────
+// ─── Sahayak — Activity Screen (Rescues) ──────────────────────────────────────
+// Redesigned with the clean, flat grouped-card design language of AccountView.
+// Replaces cluttered AI boxes with clean, structured white cards, dividers, and badges.
+
 import React, { useState } from "react";
 import {
   View,
@@ -41,6 +44,9 @@ interface ActivityItem {
   invoiceId: string;
   basePrice: number;
   tax: number;
+  iconName: keyof typeof Ionicons.glyphMap;
+  iconBg: string;
+  iconColor: string;
 }
 
 const PAST_ACTIVITIES: ActivityItem[] = [
@@ -62,6 +68,9 @@ const PAST_ACTIVITIES: ActivityItem[] = [
     invoiceId: "SHK-2026-98421",
     basePrice: 220,
     tax: 29,
+    iconName: "flash",
+    iconBg: "#FEF6D8",
+    iconColor: "#C2850C",
   },
   {
     id: "act_02",
@@ -81,6 +90,9 @@ const PAST_ACTIVITIES: ActivityItem[] = [
     invoiceId: "SHK-2026-87112",
     basePrice: 175,
     tax: 24,
+    iconName: "disc",
+    iconBg: "#E6F4EA",
+    iconColor: "#0C831F",
   },
   {
     id: "act_03",
@@ -101,6 +113,9 @@ const PAST_ACTIVITIES: ActivityItem[] = [
     invoiceId: "SHK-2026-72409",
     basePrice: 480,
     tax: 69,
+    iconName: "car-sport",
+    iconBg: "#F0F2F5",
+    iconColor: "#1C1C1C",
   },
 ];
 
@@ -131,144 +146,189 @@ export default function ActivityView({
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* ── 1. SEGMENTED TABS (CLEAN PILL STYLE) ── */}
-        <View style={styles.segmentedContainer}>
-          <TouchableOpacity
-            style={[styles.segmentBtn, selectedTab === "past" && styles.segmentBtnActive]}
-            onPress={() => setSelectedTab("past")}
-            activeOpacity={0.8}
-          >
-            <Text
-              style={[
-                styles.segmentText,
-                selectedTab === "past" && styles.segmentTextActive,
-              ]}
-            >
-              Past rescues ({filteredActivities.length})
-            </Text>
-          </TouchableOpacity>
+        {/* ── 1. THREE SUMMARY PILL CARDS (MATCHING ACCOUNT VIEW 3-CARD ROW) ── */}
+        <View style={styles.cardsRowWrapper}>
+          <View style={styles.threeCardItem}>
+            <View style={styles.threeCardIconBox}>
+              <Ionicons name="shield-checkmark" size={24} color="#0C831F" />
+            </View>
+            <Text style={styles.threeCardTitle}>3 Rescues</Text>
+            <Text style={styles.threeCardSub}>All successful</Text>
+          </View>
+
+          <View style={styles.threeCardItem}>
+            <View style={styles.threeCardIconBox}>
+              <Ionicons name="wallet-outline" size={24} color="#1C1C1C" />
+            </View>
+            <Text style={styles.threeCardTitle}>₹450 Saved</Text>
+            <Text style={styles.threeCardSub}>RSA benefits</Text>
+          </View>
 
           <TouchableOpacity
-            style={[
-              styles.segmentBtn,
-              selectedTab === "upcoming" && styles.segmentBtnActive,
-            ]}
-            onPress={() => setSelectedTab("upcoming")}
+            style={styles.threeCardItem}
+            onPress={() => {
+              Alert.alert(
+                "24/7 Roadside Emergency Desk 🇮🇳",
+                "Toll-Free Helpline: 1800-SAHAYAK (1800-724-2925)\nWhatsApp Help: +91 80 4921 5500\n\nVerified technicians & towing fleet on standby across India."
+              );
+            }}
             activeOpacity={0.8}
           >
-            <Text
-              style={[
-                styles.segmentText,
-                selectedTab === "upcoming" && styles.segmentTextActive,
-              ]}
-            >
-              Active rescue (0)
-            </Text>
+            <View style={styles.threeCardIconBox}>
+              <Ionicons name="call-outline" size={24} color="#C2850C" />
+            </View>
+            <Text style={styles.threeCardTitle}>Need Help?</Text>
+            <Text style={styles.threeCardSub}>24/7 Desk</Text>
           </TouchableOpacity>
         </View>
 
-        {/* ── 3. UPCOMING / ACTIVE TAB (EMPTY STATE IN BLINKIT WHITE CARD) ── */}
-        {selectedTab === "upcoming" && (
-          <View style={styles.emptyCard}>
-            <View style={styles.emptyIconCircle}>
-              <Ionicons name="shield-checkmark" size={32} color="#0C831F" />
-            </View>
-            <Text style={styles.emptyTitle}>No active rescue request</Text>
-            <Text style={styles.emptySub}>
-              All registered vehicles are currently safe. Help is on standby 24/7 if you ever face a breakdown.
-            </Text>
+        {/* ── 2. SEGMENTED TABS (CLEAN CAPSULE MATCHING ACCOUNT VIEW) ── */}
+        <View style={styles.sectionMargin}>
+          <View style={styles.segmentedContainer}>
+            <TouchableOpacity
+              style={[styles.segmentBtn, selectedTab === "past" && styles.segmentBtnActive]}
+              onPress={() => setSelectedTab("past")}
+              activeOpacity={0.8}
+            >
+              <Text
+                style={[
+                  styles.segmentText,
+                  selectedTab === "past" && styles.segmentTextActive,
+                ]}
+              >
+                Past rescues ({filteredActivities.length})
+              </Text>
+            </TouchableOpacity>
 
             <TouchableOpacity
-              style={styles.emergencyCtaBtn}
-              onPress={() => onLaunchService("towing", "Flatbed Tow Truck")}
-              activeOpacity={0.88}
+              style={[
+                styles.segmentBtn,
+                selectedTab === "upcoming" && styles.segmentBtnActive,
+              ]}
+              onPress={() => setSelectedTab("upcoming")}
+              activeOpacity={0.8}
             >
-              <Ionicons name="car-sport" size={16} color="#FFFFFF" />
-              <Text style={styles.emergencyCtaText}>Request Roadside Assist</Text>
+              <Text
+                style={[
+                  styles.segmentText,
+                  selectedTab === "upcoming" && styles.segmentTextActive,
+                ]}
+              >
+                Active rescue (0)
+              </Text>
             </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* ── 3. UPCOMING / ACTIVE TAB (EMPTY STATE IN CLEAN WHITE CARD) ── */}
+        {selectedTab === "upcoming" && (
+          <View style={styles.sectionMargin}>
+            <View style={styles.emptyCard}>
+              <View style={styles.emptyIconCircle}>
+                <Ionicons name="shield-checkmark" size={28} color="#0C831F" />
+              </View>
+              <Text style={styles.emptyTitle}>No active rescue in progress</Text>
+              <Text style={styles.emptySub}>
+                All registered vehicles are currently safe. Help is on standby 24/7 if you ever face a breakdown.
+              </Text>
+
+              <TouchableOpacity
+                style={styles.emergencyCtaBtn}
+                onPress={() => onLaunchService("towing", "Flatbed Tow Truck")}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="flash" size={15} color="#1C1C1C" />
+                <Text style={styles.emergencyCtaText}>Request Instant Help</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
 
-        {/* ── 4. PAST RESCUES LIST (CLEAN 16PX WHITE CARDS) ── */}
+        {/* ── 4. PAST RESCUES LIST (CLEAN GROUPED CARDS MATCHING ACCOUNT VIEW) ── */}
         {selectedTab === "past" && (
-          <View style={styles.activityList}>
+          <View style={styles.sectionMargin}>
+            <Text style={styles.sectionGroupTitle}>Rescue History</Text>
+
             {filteredActivities.map((item) => (
               <View key={item.id} style={styles.activityCard}>
-                {/* Top Badge & Time */}
+                {/* Header Row: Service Icon + Title + Status + Price */}
                 <View style={styles.cardHeaderRow}>
-                  <View style={styles.statusBadge}>
-                    <Ionicons name="checkmark-circle" size={12} color="#0C831F" />
-                    <Text style={styles.statusBadgeText}>Completed</Text>
+                  <View style={[styles.serviceIconCircle, { backgroundColor: item.iconBg }]}>
+                    <Ionicons name={item.iconName} size={18} color={item.iconColor} />
                   </View>
-                  <Text style={styles.dateTimeText}>{item.date}</Text>
-                </View>
 
-                {/* Service & Price */}
-                <View style={styles.serviceTitleRow}>
-                  <View style={{ flex: 1, paddingRight: 8 }}>
+                  <View style={{ flex: 1 }}>
                     <Text style={styles.serviceTitle}>{item.serviceTitle}</Text>
                     <Text style={styles.vehiclePlate}>
                       {item.vehicle} · {item.plate}
                     </Text>
                   </View>
-                  <Text style={styles.priceAmount}>₹{item.price}</Text>
+
+                  <View style={styles.headerRight}>
+                    <Text style={styles.priceAmount}>₹{item.price}</Text>
+                    <View style={styles.statusChip}>
+                      <Ionicons name="checkmark-circle" size={11} color="#0C831F" />
+                      <Text style={styles.statusChipText}>Completed</Text>
+                    </View>
+                  </View>
                 </View>
 
-                {/* Location Points */}
-                <View style={styles.locationContainer}>
-                  <View style={styles.locRow}>
-                    <View style={styles.pickupDot} />
-                    <Text style={styles.locText} numberOfLines={1}>
+                <View style={styles.cardDivider} />
+
+                {/* Location & Trip Details */}
+                <View style={styles.detailsSection}>
+                  <View style={styles.detailRow}>
+                    <Ionicons name="location-sharp" size={15} color="#5E6470" />
+                    <Text style={styles.detailText} numberOfLines={1}>
                       {item.location}
                     </Text>
                   </View>
                   {item.destination && (
-                    <View style={[styles.locRow, { marginTop: 6 }]}>
-                      <View style={styles.destDot} />
-                      <Text style={styles.locText} numberOfLines={1}>
+                    <View style={[styles.detailRow, { marginTop: 4 }]}>
+                      <Ionicons name="flag-sharp" size={15} color="#0C831F" />
+                      <Text style={styles.detailText} numberOfLines={1}>
                         {item.destination}
                       </Text>
                     </View>
                   )}
+                  <View style={[styles.detailRow, { marginTop: 4 }]}>
+                    <Ionicons name="time-outline" size={15} color="#8C93A3" />
+                    <Text style={styles.dateText}>{item.date}</Text>
+                  </View>
                 </View>
 
-                {/* Partner Details */}
-                <View style={styles.partnerInfoRow}>
-                  <View style={styles.partnerAvatarCircle}>
-                    <Text style={styles.partnerInitials}>
-                      {item.partnerName.charAt(0)}
-                    </Text>
-                  </View>
-                  <View style={{ flex: 1 }}>
+                <View style={styles.cardDivider} />
+
+                {/* Partner Details & Bottom Actions */}
+                <View style={styles.cardBottomRow}>
+                  <View style={styles.partnerInfo}>
+                    <Ionicons name="person-circle-outline" size={18} color="#1C1C1C" />
                     <Text style={styles.partnerNameText}>{item.partnerName}</Text>
-                    <Text style={styles.partnerVehicleText}>{item.partnerVehicle}</Text>
+                    <View style={styles.starBadge}>
+                      <Ionicons name="star" size={10} color="#F8CB46" />
+                      <Text style={styles.starText}>{item.rating.toFixed(1)}</Text>
+                    </View>
                   </View>
 
-                  <View style={styles.ratingBadge}>
-                    <Ionicons name="star" size={12} color="#F8CB46" />
-                    <Text style={styles.ratingText}>{item.rating.toFixed(1)}</Text>
+                  <View style={styles.actionButtons}>
+                    <TouchableOpacity
+                      style={styles.invoiceBtn}
+                      onPress={() => setReceiptItem(item)}
+                      activeOpacity={0.75}
+                    >
+                      <Ionicons name="receipt-outline" size={14} color="#1C1C1C" />
+                      <Text style={styles.invoiceBtnText}>Invoice</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={styles.rebookBtn}
+                      onPress={() => onLaunchService(item.serviceType, item.serviceTitle)}
+                      activeOpacity={0.85}
+                    >
+                      <Ionicons name="repeat" size={13} color="#FFFFFF" />
+                      <Text style={styles.rebookBtnText}>Book Again</Text>
+                    </TouchableOpacity>
                   </View>
-                </View>
-
-                {/* Action Buttons: Tax Invoice & Rebook */}
-                <View style={styles.cardActionsRow}>
-                  <TouchableOpacity
-                    style={styles.receiptBtn}
-                    onPress={() => setReceiptItem(item)}
-                    activeOpacity={0.75}
-                  >
-                    <Ionicons name="receipt-outline" size={15} color="#1C1C1C" />
-                    <Text style={styles.receiptBtnText}>Tax Invoice</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={styles.rebookBtn}
-                    onPress={() => onLaunchService(item.serviceType, item.serviceTitle)}
-                    activeOpacity={0.85}
-                  >
-                    <Ionicons name="repeat" size={15} color="#FFFFFF" />
-                    <Text style={styles.rebookBtnText}>Book Again</Text>
-                  </TouchableOpacity>
                 </View>
               </View>
             ))}
@@ -388,152 +448,161 @@ const styles = StyleSheet.create({
     backgroundColor: "#F5F6F8",
   },
   scrollContent: {
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 100,
+    paddingBottom: 110,
   },
 
-  // 1. Header
-  headerRow: {
+  // 1. Three Summary Pill Cards (Exact Account View threeCardItem Match)
+  cardsRowWrapper: {
     flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 14,
+    paddingHorizontal: 16,
+    gap: 10,
+    marginTop: 14,
   },
-  screenTitle: {
-    fontSize: 22,
+  threeCardItem: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 6,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#EFF1F5",
+    elevation: 1,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 3,
+  },
+  threeCardIconBox: {
+    width: 36,
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 4,
+  },
+  threeCardTitle: {
+    fontSize: 12.5,
+    fontFamily: Typography.fontFamily.bold,
+    fontWeight: "700",
+    color: "#1C1C1C",
+    textAlign: "center",
+  },
+  threeCardSub: {
+    fontSize: 10.5,
+    fontFamily: Typography.fontFamily.regular,
+    color: "#64748B",
+    marginTop: 1,
+    textAlign: "center",
+  },
+
+  // Section Margins
+  sectionMargin: {
+    paddingHorizontal: 16,
+    marginTop: 14,
+  },
+  sectionGroupTitle: {
+    fontSize: 16,
     fontFamily: Typography.fontFamily.bold,
     fontWeight: "800",
     color: "#1C1C1C",
-    letterSpacing: -0.4,
-  },
-  screenSubtitle: {
-    fontSize: 13.5,
-    fontFamily: Typography.fontFamily.medium,
-    fontWeight: "500",
-    color: "#5E6470",
-    marginTop: 3,
-  },
-  sosButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#1C1C1C",
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: "#E23744",
-    gap: 4,
-    elevation: 2,
-  },
-  sosButtonText: {
-    fontSize: 12,
-    fontFamily: Typography.fontFamily.bold,
-    color: "#E23744",
-    letterSpacing: 0.5,
+    marginBottom: 8,
+    letterSpacing: -0.2,
   },
 
-  // 2. Segmented Tabs
+  // 2. Segmented Pill Tabs
   segmentedContainer: {
     flexDirection: "row",
-    backgroundColor: "#E2E5EB",
-    borderRadius: 16,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
     padding: 3,
-    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: "#EFF1F5",
   },
   segmentBtn: {
     flex: 1,
-    paddingVertical: 8,
-    borderRadius: 13,
+    paddingVertical: 9,
+    borderRadius: 11,
     alignItems: "center",
     justifyContent: "center",
   },
   segmentBtnActive: {
-    backgroundColor: "#FFFFFF",
-    elevation: 1,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 3,
+    backgroundColor: "#1C1C1C",
   },
   segmentText: {
-    fontSize: 13,
+    fontSize: 12.5,
     fontFamily: Typography.fontFamily.medium,
     fontWeight: "500",
     color: "#5E6470",
   },
   segmentTextActive: {
-    fontFamily: Typography.fontFamily.bold,
+    color: "#FFFFFF",
     fontWeight: "700",
-    color: "#1C1C1C",
   },
 
   // 3. Empty State Card
   emptyCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 16,
+    padding: 24,
+    alignItems: "center",
     borderWidth: 1,
     borderColor: "#EFF1F5",
-    paddingVertical: 36,
-    paddingHorizontal: 20,
-    alignItems: "center",
     elevation: 1,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.03,
     shadowRadius: 3,
-    marginTop: 10,
   },
   emptyIconCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     backgroundColor: "#E6F4EA",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 14,
+    marginBottom: 12,
   },
   emptyTitle: {
-    fontSize: 17,
+    fontSize: 15,
     fontFamily: Typography.fontFamily.bold,
-    fontWeight: "800",
+    fontWeight: "700",
     color: "#1C1C1C",
-    marginBottom: 6,
+    textAlign: "center",
   },
   emptySub: {
-    fontSize: 13,
+    fontSize: 12.5,
     fontFamily: Typography.fontFamily.regular,
-    color: "#5E6470",
+    color: "#64748B",
     textAlign: "center",
-    lineHeight: 18,
-    marginBottom: 20,
+    marginTop: 4,
+    lineHeight: 17,
   },
   emergencyCtaBtn: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#1C1C1C",
+    backgroundColor: "#F8CB46",
     paddingHorizontal: 18,
-    paddingVertical: 12,
-    borderRadius: 20,
-    gap: 8,
+    paddingVertical: 10,
+    borderRadius: 12,
+    marginTop: 16,
+    gap: 6,
   },
   emergencyCtaText: {
-    fontSize: 13.5,
+    fontSize: 13,
     fontFamily: Typography.fontFamily.bold,
     fontWeight: "700",
-    color: "#FFFFFF",
+    color: "#1C1C1C",
   },
 
-  // 4. Activity List
-  activityList: {
-    gap: 12,
-  },
+  // 4. Past Rescues List (Grouped Cards matching Account View)
   activityCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 16,
     borderWidth: 1,
     borderColor: "#EFF1F5",
-    padding: 14,
+    overflow: "hidden",
+    marginBottom: 12,
     elevation: 1,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
@@ -543,177 +612,151 @@ const styles = StyleSheet.create({
   cardHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 8,
+    padding: 14,
+    gap: 12,
   },
-  statusBadge: {
-    flexDirection: "row",
+  serviceIconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
     alignItems: "center",
-    backgroundColor: "#E6F4EA",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    gap: 4,
-  },
-  statusBadgeText: {
-    fontSize: 11,
-    fontFamily: Typography.fontFamily.bold,
-    fontWeight: "700",
-    color: "#0C831F",
-  },
-  dateTimeText: {
-    fontSize: 12,
-    fontFamily: Typography.fontFamily.regular,
-    color: "#64748B",
-  },
-
-  serviceTitleRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    marginBottom: 10,
+    justifyContent: "center",
   },
   serviceTitle: {
-    fontSize: 15.5,
+    fontSize: 14,
     fontFamily: Typography.fontFamily.bold,
     fontWeight: "700",
     color: "#1C1C1C",
-    letterSpacing: -0.2,
   },
   vehiclePlate: {
     fontSize: 12,
-    fontFamily: Typography.fontFamily.regular,
+    fontFamily: Typography.fontFamily.medium,
     color: "#5E6470",
     marginTop: 2,
   },
+  headerRight: {
+    alignItems: "flex-end",
+    gap: 4,
+  },
   priceAmount: {
-    fontSize: 16.5,
+    fontSize: 15,
     fontFamily: Typography.fontFamily.bold,
     fontWeight: "800",
     color: "#1C1C1C",
   },
-
-  locationContainer: {
-    backgroundColor: "#F5F6F8",
-    borderRadius: 12,
-    padding: 10,
-    marginBottom: 12,
+  statusChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#E6F4EA",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    gap: 3,
   },
-  locRow: {
+  statusChipText: {
+    fontSize: 10,
+    fontFamily: Typography.fontFamily.bold,
+    fontWeight: "700",
+    color: "#0C831F",
+  },
+  cardDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: "#F0F2F5",
+    marginHorizontal: 14,
+  },
+  detailsSection: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  detailRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  detailText: {
+    flex: 1,
+    fontSize: 12,
+    fontFamily: Typography.fontFamily.regular,
+    color: "#475569",
+  },
+  dateText: {
+    fontSize: 11.5,
+    fontFamily: Typography.fontFamily.medium,
+    color: "#8C93A3",
+  },
+  cardBottomRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: "#FAFBFD",
+  },
+  partnerInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  partnerNameText: {
+    fontSize: 12,
+    fontFamily: Typography.fontFamily.medium,
+    fontWeight: "600",
+    color: "#1C1C1C",
+  },
+  starBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    backgroundColor: "#FEF6D8",
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 3,
+  },
+  starText: {
+    fontSize: 9.5,
+    fontFamily: Typography.fontFamily.bold,
+    fontWeight: "800",
+    color: "#1C1C1C",
+  },
+  actionButtons: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
   },
-  pickupDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "#0C831F",
-  },
-  destDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "#E23744",
-  },
-  locText: {
-    fontSize: 12,
-    fontFamily: Typography.fontFamily.regular,
-    color: "#1C1C1C",
-    flex: 1,
-  },
-
-  partnerInfoRow: {
+  invoiceBtn: {
     flexDirection: "row",
     alignItems: "center",
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "#F0F2F5",
-    paddingTop: 10,
-    marginBottom: 12,
-    gap: 10,
-  },
-  partnerAvatarCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "#1C1C1C",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  partnerInitials: {
-    fontSize: 13,
-    fontFamily: Typography.fontFamily.bold,
-    fontWeight: "700",
-    color: "#FFFFFF",
-  },
-  partnerNameText: {
-    fontSize: 13,
-    fontFamily: Typography.fontFamily.bold,
-    fontWeight: "700",
-    color: "#1C1C1C",
-  },
-  partnerVehicleText: {
-    fontSize: 11,
-    fontFamily: Typography.fontFamily.regular,
-    color: "#64748B",
-  },
-  ratingBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FEF6D8",
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 6,
-    gap: 3,
-  },
-  ratingText: {
-    fontSize: 11,
-    fontFamily: Typography.fontFamily.bold,
-    fontWeight: "700",
-    color: "#1C1C1C",
-  },
-
-  cardActionsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  receiptBtn: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#F5F6F8",
-    paddingVertical: 9,
-    borderRadius: 20,
+    gap: 4,
+    backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#EFF1F5",
-    gap: 6,
+    borderColor: "#E2E8F0",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
   },
-  receiptBtnText: {
-    fontSize: 12.5,
+  invoiceBtnText: {
+    fontSize: 11.5,
     fontFamily: Typography.fontFamily.semiBold,
     fontWeight: "600",
     color: "#1C1C1C",
   },
   rebookBtn: {
-    flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    gap: 4,
     backgroundColor: "#1C1C1C",
-    paddingVertical: 9,
-    borderRadius: 20,
-    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
   },
   rebookBtnText: {
-    fontSize: 12.5,
+    fontSize: 11.5,
     fontFamily: Typography.fontFamily.bold,
     fontWeight: "700",
     color: "#FFFFFF",
   },
 
-  // 5. Official Receipt Modal
+  // 5. Receipt Modal Styles
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",
@@ -724,16 +767,13 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 20,
-    maxHeight: "85%",
+    paddingBottom: 36,
   },
   receiptHeader: {
     flexDirection: "row",
-    alignItems: "center",
     justifyContent: "space-between",
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#F0F2F5",
-    paddingBottom: 14,
-    marginBottom: 14,
+    alignItems: "flex-start",
+    marginBottom: 16,
   },
   receiptBrand: {
     fontSize: 18,
@@ -742,7 +782,7 @@ const styles = StyleSheet.create({
     color: "#1C1C1C",
   },
   receiptSub: {
-    fontSize: 11.5,
+    fontSize: 11,
     fontFamily: Typography.fontFamily.regular,
     color: "#64748B",
     marginTop: 2,
@@ -751,26 +791,26 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   invoiceMetaCard: {
-    backgroundColor: "#F5F6F8",
+    backgroundColor: "#F8FAFC",
     borderRadius: 12,
     padding: 12,
     marginBottom: 16,
-    gap: 6,
     borderWidth: 1,
     borderColor: "#EFF1F5",
   },
   metaRow: {
     flexDirection: "row",
     justifyContent: "space-between",
+    paddingVertical: 3,
   },
   metaLabel: {
     fontSize: 12,
-    fontFamily: Typography.fontFamily.regular,
+    fontFamily: Typography.fontFamily.medium,
     color: "#64748B",
   },
   metaVal: {
     fontSize: 12,
-    fontFamily: Typography.fontFamily.semiBold,
+    fontFamily: Typography.fontFamily.bold,
     fontWeight: "600",
     color: "#1C1C1C",
   },
@@ -779,25 +819,23 @@ const styles = StyleSheet.create({
     fontFamily: Typography.fontFamily.bold,
     fontWeight: "700",
     color: "#1C1C1C",
-    marginBottom: 10,
+    marginBottom: 8,
   },
   billTable: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: "#EFF1F5",
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 20,
-    backgroundColor: "#FFFFFF",
+    padding: 14,
   },
   billRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 6,
+    paddingVertical: 4,
   },
   billItemTitle: {
     fontSize: 13,
-    fontFamily: Typography.fontFamily.bold,
-    fontWeight: "700",
+    fontFamily: Typography.fontFamily.medium,
     color: "#1C1C1C",
   },
   billItemSub: {
@@ -806,21 +844,19 @@ const styles = StyleSheet.create({
     color: "#64748B",
   },
   billItemPrice: {
-    fontSize: 12.5,
-    fontFamily: Typography.fontFamily.semiBold,
-    fontWeight: "600",
+    fontSize: 13,
+    fontFamily: Typography.fontFamily.medium,
     color: "#1C1C1C",
   },
   billDivider: {
     height: StyleSheet.hairlineWidth,
-    backgroundColor: "#F0F2F5",
-    marginVertical: 8,
+    backgroundColor: "#E2E8F0",
+    marginVertical: 10,
   },
   totalRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 6,
+    paddingVertical: 2,
   },
   totalLabel: {
     fontSize: 14,
@@ -829,27 +865,32 @@ const styles = StyleSheet.create({
     color: "#1C1C1C",
   },
   totalAmount: {
-    fontSize: 18,
+    fontSize: 16,
     fontFamily: Typography.fontFamily.bold,
     fontWeight: "800",
-    color: "#0C831F",
+    color: "#1C1C1C",
   },
   paymentMethodRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    marginTop: 4,
+    marginTop: 10,
+    paddingTop: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "#F1F5F9",
   },
   paymentMethodText: {
     fontSize: 11.5,
     fontFamily: Typography.fontFamily.medium,
-    color: "#5E6470",
+    color: "#64748B",
   },
   doneBtn: {
     backgroundColor: "#1C1C1C",
-    paddingVertical: 13,
-    borderRadius: 20,
+    borderRadius: 14,
+    paddingVertical: 14,
     alignItems: "center",
+    justifyContent: "center",
+    marginTop: 16,
   },
   doneBtnText: {
     fontSize: 14,
