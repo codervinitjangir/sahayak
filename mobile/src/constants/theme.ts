@@ -1,66 +1,71 @@
 // ─── Sahayak Design System — Theme Tokens ─────────────────────────────────────
-// Derived from Figma file eowkt2mOmYt8QdZTSc1ubO
-// Inspired by: GoMechanic, ReadyAssist, AchoDrive, Urgently
+// Unified Blinkit Brand Palette: Yellow #F8CB46, Black #1C1C1C, Green #0C831F
 
 import { Platform } from "react-native";
 
 // ─── Colors ───────────────────────────────────────────────────────────────────
 export const Colors = {
-  // Brand — Sahayak Amber (matches Figma CTA #F59E0B)
-  primary: "#F59E0B",
-  primaryDark: "#D97706",
-  primaryDeep: "#B45309",
-  primaryLight: "#FEF3C7",
-  primaryMuted: "#FFFBEB",
+  // Blinkit Brand Yellow — Primary accent
+  brand700: "#F8CB46",
+  brand700Dark: "#E5B933",
+  brand700Light: "#FEF6D8",
+  brand700Muted: "#FFFCF0",
 
-  // Trust — Deep Navy (reliability, authority)
-  secondary: "#1E293B",
-  secondaryMid: "#334155",
-  secondaryLight: "#475569",
+  // Brand — Blinkit Yellow (primary CTA, buttons, highlights)
+  primary: "#F8CB46",
+  primaryDark: "#E5B933",
+  primaryDeep: "#D4A520",
+  primaryLight: "#FEF6D8",
+  primaryMuted: "#FFFCF0",
 
-  // Surfaces (from Figma fills)
-  surface: "#F8FAFC",       // fill_85065e9e — main background
-  surfaceWhite: "#FFFFFF",  // fill_658ab2fa — card/sheet white
+  // Blinkit Black — Deep charcoal (text, buttons, dark elements)
+  secondary: "#1C1C1C",
+  secondaryMid: "#2A2A2A",
+  secondaryLight: "#3D3D3D",
+
+  // Surfaces
+  surface: "#F5F6F8",       // main background
+  surfaceWhite: "#FFFFFF",  // card/sheet white
   surfaceCard: "#FFFFFF",
 
-  // Borders (from Figma strokes)
-  border: "#E5E7EB",        // fill_b8e4da24
-  borderLight: "#F1F5F9",
+  // Borders
+  border: "#EFF1F5",
+  borderLight: "#F5F6F8",
 
-  // Semantic
-  success: "#10B981",
-  successLight: "#D1FAE5",
-  error: "#EF4444",
-  errorLight: "#FEE2E2",
-  warning: "#F59E0B",
-  warningLight: "#FEF3C7",
-  info: "#3B82F6",
-  infoLight: "#DBEAFE",
+  // Semantic — using Blinkit Green for success, Yellow for warning, muted variants for others
+  success: "#0C831F",
+  successLight: "#E6F4EA",
+  error: "#E23744",
+  errorLight: "#FDECEA",
+  warning: "#F8CB46",
+  warningLight: "#FEF6D8",
+  info: "#1C1C1C",
+  infoLight: "#F0F0F0",
 
   // Partner Online/Offline
-  online: "#10B981",
+  online: "#0C831F",
   offline: "#94A3B8",
 
   // Text hierarchy
-  textPrimary: "#1E293B",
-  textSecondary: "#64748B",
-  textMuted: "#94A3B8",
+  textPrimary: "#1C1C1C",
+  textSecondary: "#5E6470",
+  textMuted: "#8C93A3",
   textWhite: "#FFFFFF",
-  textAmber: "#F59E0B",
+  textAmber: "#F8CB46",
 
   // Map overlays
   mapOverlay: "rgba(255,255,255,0.97)",
   mapShadow: "rgba(0,0,0,0.08)",
 
-  // Partner offer alert (warm orange tint — from Figma #FFF7ED)
-  offerAlertBg: "#FFF7ED",
-  offerAlertBorder: "#FED7AA",
+  // Partner offer alert
+  offerAlertBg: "#FFFCF0",
+  offerAlertBorder: "#FEF6D8",
 
-  // Status colors
-  statusPending: "#F59E0B",
-  statusActive: "#3B82F6",
-  statusComplete: "#10B981",
-  statusCancelled: "#EF4444",
+  // Status colors — Blinkit palette only
+  statusPending: "#F8CB46",
+  statusActive: "#1C1C1C",
+  statusComplete: "#0C831F",
+  statusCancelled: "#E23744",
 
   // Transparent helpers
   overlay: "rgba(0,0,0,0.4)",
@@ -68,12 +73,12 @@ export const Colors = {
 
   // Skeleton/shimmer
   shimmerBase: "#E2E8F0",
-  shimmerHighlight: "#F8FAFC",
+  shimmerHighlight: "#F5F6F8",
 } as const;
 
-// ─── Typography ───────────────────────────────────────────────────────────────
+// ─── Typography (Uber Design System Scale) ──────────────────────────────────
 export const Typography = {
-  // Font families
+  // Font families (Inter mapped to Uber Move weights)
   fontFamily: {
     regular: "Inter_400Regular",
     medium: "Inter_500Medium",
@@ -81,36 +86,115 @@ export const Typography = {
     bold: "Inter_700Bold",
   },
 
-  // Font sizes
+  // Font sizes matching Uber's exact scale
   fontSize: {
-    xs: 11,
-    sm: 12,
-    base: 14,
-    md: 15,
-    lg: 16,
-    xl: 18,
-    "2xl": 20,
-    "3xl": 24,
-    "4xl": 28,
-    "5xl": 32,
+    xs: 11,    // micro badges, tags, chips
+    sm: 13,    // secondary text, captions, subtitles (Uber standard)
+    base: 14,  // standard body regular
+    md: 16,    // body bold, place names, item titles (Uber standard)
+    lg: 18,    // card headers, prominent actions (Uber standard)
+    xl: 20,    // modal headers, sub-section titles
+    "2xl": 22, // Uber section titles ("For you", "Everything in minutes")
+    "3xl": 26, // screen titles, greetings
+    "4xl": 32, // display / hero headings
+    "5xl": 36, // splash / large hero
   },
 
   // Line heights
   lineHeight: {
     tight: 1.2,
     snug: 1.35,
-    normal: 1.5,
-    relaxed: 1.625,
+    normal: 1.45,
+    relaxed: 1.6,
   },
 
-  // Letter spacing
+  // Letter spacing (Uber's signature tight grotesque character spacing)
   letterSpacing: {
+    display: -0.8,
+    title: -0.5,
+    card: -0.3,
+    body: -0.15,
+    caption: 0,
+    badge: 0.15,
     tighter: -0.5,
     tight: -0.25,
     normal: 0,
     wide: 0.25,
     wider: 0.5,
     widest: 1,
+  },
+
+  // Uber Character Presets
+  uber: {
+    display: {
+      fontSize: 32,
+      fontFamily: "Inter_700Bold",
+      fontWeight: "700" as const,
+      letterSpacing: -0.8,
+      color: "#1C1C1C",
+      lineHeight: 38,
+    },
+    screenTitle: {
+      fontSize: 26,
+      fontFamily: "Inter_700Bold",
+      fontWeight: "700" as const,
+      letterSpacing: -0.6,
+      color: "#1C1C1C",
+      lineHeight: 32,
+    },
+    sectionTitle: {
+      fontSize: 22,
+      fontFamily: "Inter_700Bold",
+      fontWeight: "700" as const,
+      letterSpacing: -0.4,
+      color: "#1C1C1C",
+      lineHeight: 28,
+    },
+    cardTitle: {
+      fontSize: 18,
+      fontFamily: "Inter_700Bold",
+      fontWeight: "700" as const,
+      letterSpacing: -0.3,
+      color: "#1C1C1C",
+      lineHeight: 24,
+    },
+    itemTitle: {
+      fontSize: 16,
+      fontFamily: "Inter_600SemiBold",
+      fontWeight: "600" as const,
+      letterSpacing: -0.2,
+      color: "#1C1C1C",
+      lineHeight: 22,
+    },
+    body: {
+      fontSize: 14,
+      fontFamily: "Inter_400Regular",
+      letterSpacing: -0.15,
+      color: "#5E6470",
+      lineHeight: 20,
+    },
+    bodyMedium: {
+      fontSize: 14,
+      fontFamily: "Inter_500Medium",
+      fontWeight: "500" as const,
+      letterSpacing: -0.15,
+      color: "#1C1C1C",
+      lineHeight: 20,
+    },
+    caption: {
+      fontSize: 12,
+      fontFamily: "Inter_400Regular",
+      letterSpacing: 0,
+      color: "#5E6470",
+      lineHeight: 16,
+    },
+    badge: {
+      fontSize: 11,
+      fontFamily: "Inter_700Bold",
+      fontWeight: "700" as const,
+      letterSpacing: 0.15,
+      lineHeight: 14,
+    },
   },
 } as const;
 
@@ -147,7 +231,7 @@ export const Radius = {
 
 // ─── Shadows ──────────────────────────────────────────────────────────────────
 export const Shadows = {
-  // Bottom sheet shadow (from Figma effect_c95be0f5: boxShadow: 0px -8px 24px rgba(0,0,0,0.08))
+  // Bottom sheet shadow
   sheet: Platform.select({
     ios: {
       shadowColor: "#000",
@@ -173,10 +257,10 @@ export const Shadows = {
     },
   }),
 
-  // Button shadow (amber glow)
+  // Button shadow (yellow glow)
   button: Platform.select({
     ios: {
-      shadowColor: "#F59E0B",
+      shadowColor: "#F8CB46",
       shadowOffset: { width: 0, height: 4 },
       shadowOpacity: 0.3,
       shadowRadius: 12,
@@ -224,38 +308,38 @@ export const ServiceConfig: Record<
   towing: {
     label: "Towing",
     icon: "car-outline",
-    color: "#3B82F6",
-    bg: "#DBEAFE",
+    color: "#1C1C1C",
+    bg: "#F0F0F0",
   },
   battery: {
     label: "Battery",
     icon: "battery-charging-outline",
-    color: "#F59E0B",
-    bg: "#FEF3C7",
+    color: "#F8CB46",
+    bg: "#FEF6D8",
   },
   tyre: {
     label: "Tyre",
     icon: "disc-outline",
-    color: "#10B981",
-    bg: "#D1FAE5",
+    color: "#0C831F",
+    bg: "#E6F4EA",
   },
   fuel: {
     label: "Fuel",
     icon: "water-outline",
-    color: "#EF4444",
-    bg: "#FEE2E2",
+    color: "#1C1C1C",
+    bg: "#F0F0F0",
   },
   lockout: {
     label: "Lockout",
     icon: "key-outline",
-    color: "#8B5CF6",
-    bg: "#EDE9FE",
+    color: "#F8CB46",
+    bg: "#FEF6D8",
   },
   mechanic: {
     label: "Mechanic",
     icon: "construct-outline",
-    color: "#F97316",
-    bg: "#FFEDD5",
+    color: "#0C831F",
+    bg: "#E6F4EA",
   },
 };
 
@@ -269,4 +353,5 @@ export const JobStatusConfig = {
   in_progress: { label: "In Progress", color: Colors.info, bg: Colors.infoLight },
   complete: { label: "Complete", color: Colors.success, bg: Colors.successLight },
   cancelled: { label: "Cancelled", color: Colors.error, bg: Colors.errorLight },
+  no_match_found: { label: "No Match", color: Colors.warning, bg: Colors.warningLight },
 } as const;

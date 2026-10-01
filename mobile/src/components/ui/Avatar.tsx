@@ -22,8 +22,8 @@ function getInitials(name: string): string {
 
 function getAvatarColor(name: string): string {
   const colors = [
-    "#F59E0B", "#10B981", "#3B82F6", "#8B5CF6",
-    "#EF4444", "#F97316", "#06B6D4", "#EC4899",
+    "#F8CB46", "#0C831F", "#1C1C1C", "#F8CB46",
+    "#E23744", "#0C831F", "#1C1C1C", "#0C831F",
   ];
   let hash = 0;
   for (const c of name) hash = c.charCodeAt(0) + ((hash << 5) - hash);

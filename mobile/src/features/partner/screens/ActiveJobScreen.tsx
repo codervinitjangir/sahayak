@@ -1,6 +1,6 @@
 // ─── Sahayak — Active Job Screen (Partner) ───────────────────────────────────
-// Figma: partner-active-job — full map + job nav overlay
-import React, { useRef, useEffect } from "react";
+// Uber/Ola breakdown style: Persistent Map + Route + Compact Bottom Sheet with OTP verification
+import React, { useRef, useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -10,22 +10,20 @@ import {
   StatusBar,
   Animated,
   Linking,
+  TextInput,
+  Alert,
 } from "react-native";
-import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from "react-native-maps";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation, useRoute } from "@react-navigation/native";
-import type { NativeStackNavigationProp } from "@react-navigation/native-stack"
-import type { RouteProp } from "@react-navigation/native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
 import { Colors, Typography, Spacing, Radius, Shadows } from "../../../constants/theme";
 import Button from "../../../components/ui/Button";
+import SharedMapCanvas from "../../../components/map/SharedMapCanvas";
 import { MOCK_INCOMING_OFFER } from "../../../services/api";
 import type { PartnerStackParamList } from "../../../types";
-import type { ViewStyle } from "react-native";
 
 type Nav = NativeStackNavigationProp<PartnerStackParamList, "ActiveJob">;
-type Route = RouteProp<PartnerStackParamList, "ActiveJob">;
 
 const PARTNER_LOC = { latitude: 12.9756, longitude: 77.5906 };
 const USER_LOC = { latitude: 12.9716, longitude: 77.5946 };
@@ -35,6 +33,11 @@ export default function ActiveJobScreen() {
   const job = MOCK_INCOMING_OFFER.job;
   const slideAnim = useRef(new Animated.Value(100)).current;
 
+  // Partner flow states: en_route -> arrived (enter 4-digit code) -> in_progress
+  const [partnerStep, setPartnerStep] = useState<"en_route" | "arrived" | "in_progress">("arrived");
+  const [otp, setOtp] = useState(["", "", "", ""]);
+  const otpRefs = useRef<(TextInput | null)[]>([]);
+
   useEffect(() => {
     Animated.spring(slideAnim, {
       toValue: 0,
@@ -42,7 +45,7 @@ export default function ActiveJobScreen() {
       tension: 60,
       friction: 10,
     }).start();
-  }, []);
+  }, [partnerStep]);
 
   const region = {
     latitude: (PARTNER_LOC.latitude + USER_LOC.latitude) / 2,
@@ -56,6 +59,35 @@ export default function ActiveJobScreen() {
     Linking.openURL(url);
   };
 
+  const handleOtpChange = (text: string, idx: number) => {
+    const digit = text.replace(/\D/g, "").slice(-1);
+    const next = [...otp];
+    next[idx] = digit;
+    setOtp(next);
+    if (digit && idx < 3) {
+      otpRefs.current[idx + 1]?.focus();
+    }
+  };
+
+  const handleOtpBackspace = (idx: number) => {
+    if (!otp[idx] && idx > 0) {
+      const next = [...otp];
+      next[idx - 1] = "";
+      setOtp(next);
+      otpRefs.current[idx - 1]?.focus();
+    }
+  };
+
+  const handleVerifyStartCode = () => {
+    const code = otp.join("");
+    if (code.length < 4) {
+      Alert.alert("Incomplete Code", "Please enter the 4-digit start code provided by customer.");
+      return;
+    }
+    // Any 4-digit code or "4821" accepts
+    setPartnerStep("in_progress");
+  };
+
   const handleDone = () => {
     nav.navigate("PartnerJobDone", { jobId: MOCK_INCOMING_OFFER.jobId });
   };
@@ -64,203 +96,255 @@ export default function ActiveJobScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" translucent backgroundColor="transparent" />
 
-      {/* ── Full map ── */}
-      <MapView
-        style={styles.map}
-        provider={Platform.OS === "android" ? PROVIDER_GOOGLE : undefined}
-        initialRegion={region}
-      >
-        <Marker coordinate={PARTNER_LOC} title="You">
-          <View style={styles.partnerPin}>
-            <Ionicons name="construct" size={14} color={Colors.textWhite} />
-          </View>
-        </Marker>
-        <Marker coordinate={USER_LOC} title="Customer">
-          <View style={styles.userPin}>
-            <Ionicons name="person" size={14} color={Colors.primary} />
-          </View>
-        </Marker>
-        <Polyline
-          coordinates={[PARTNER_LOC, USER_LOC]}
-          strokeColor={Colors.primary}
-          strokeWidth={4}
-          lineDashPattern={[8, 4]}
-        />
-      </MapView>
-
-      {/* ── Top bar ── */}
-      <SafeAreaView style={styles.topOverlay} edges={["top"]}>
-        <View style={styles.topRow}>
-          <View style={styles.activeBadge}>
-            <Animated.View style={styles.activePulse} />
-            <Text style={styles.activeBadgeText}>Job Active</Text>
-          </View>
-          <View style={styles.etaChip}>
-            <Ionicons name="time-outline" size={14} color={Colors.textSecondary} />
-            <Text style={styles.etaChipText}>~8 min</Text>
-          </View>
-        </View>
-      </SafeAreaView>
+      {/* ── Persistent Vector Map Canvas ── */}
+      <SharedMapCanvas
+        userLocation={USER_LOC}
+        partnerLocation={PARTNER_LOC}
+        showRoute={true}
+        showBackButton={true}
+        onBackPress={() => nav.goBack()}
+        topStatusText={partnerStep === "in_progress" ? "Service In Progress" : "Job Active · 8 min"}
+      />
 
       {/* ── My location button ── */}
-      <TouchableOpacity style={styles.myLocBtn}>
-        <Ionicons name="locate" size={22} color={Colors.primary} />
+      <TouchableOpacity style={styles.myLocBtn} onPress={handleNavigate}>
+        <Ionicons name="navigate" size={20} color={Colors.brand700} />
       </TouchableOpacity>
 
-      {/* ── Bottom Nav Card (Figma: bottom-overlay) ── */}
+      {/* ── Bottom Sheet with Dynamic Height & Content ── */}
       <Animated.View
-        style={[styles.sheet, Shadows.sheet as ViewStyle, { transform: [{ translateY: slideAnim }] }]}
+        style={[styles.sheet, { transform: [{ translateY: slideAnim }] }]}
       >
         <View style={styles.sheetHandle} />
 
-        <Text style={styles.sheetTitle}>Navigate to Customer</Text>
-
-        {/* Customer snippet */}
-        <View style={styles.customerRow}>
-          <View style={styles.customerIcon}>
-            <Ionicons name="person-circle" size={36} color={Colors.textSecondary} />
+        {/* Identity block + Compact Icon-Row Actions */}
+        <View style={styles.identityRow}>
+          <View style={styles.customerAvatar}>
+            <Ionicons name="person" size={20} color={Colors.textSecondary} />
           </View>
-          <View style={{ flex: 1 }}>
+          <View style={styles.customerMeta}>
             <Text style={styles.customerName}>Arjun Sharma</Text>
             <Text style={styles.customerAddress} numberOfLines={1}>
               {job.pickupLocation.address}
             </Text>
           </View>
-          <TouchableOpacity
-            style={styles.callBtn}
-            onPress={() => Linking.openURL("tel:+919876543210")}
-          >
-            <Ionicons name="call" size={20} color={Colors.success} />
-          </TouchableOpacity>
-        </View>
 
-        {/* Stats row */}
-        <View style={styles.statsRow}>
-          <View style={styles.statItem}>
-            <Text style={styles.statVal}>2.1 km</Text>
-            <Text style={styles.statLbl}>Distance</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={styles.statVal}>~8 min</Text>
-            <Text style={styles.statLbl}>ETA</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={[styles.statVal, { color: Colors.success }]}>₹299</Text>
-            <Text style={styles.statLbl}>Earnings</Text>
+          {/* Compact Icon Row (Call + Message) */}
+          <View style={styles.iconRow}>
+            <TouchableOpacity
+              style={styles.circleActionBtn}
+              onPress={() => Linking.openURL("tel:+919876543210")}
+              accessibilityRole="button"
+              accessibilityLabel="Call Customer"
+            >
+              <Ionicons name="call" size={17} color={Colors.textPrimary} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.circleActionBtn}
+              onPress={() => Linking.openURL("sms:+919876543210")}
+              accessibilityRole="button"
+              accessibilityLabel="Message Customer"
+            >
+              <Ionicons name="chatbubble-ellipses" size={17} color={Colors.textPrimary} />
+            </TouchableOpacity>
           </View>
         </View>
 
-        {/* Buttons */}
-        <View style={styles.btnsRow}>
-          <Button
-            label="Navigate"
-            onPress={handleNavigate}
-            variant="outline"
-            size="md"
-            icon={<Ionicons name="navigate" size={16} color={Colors.primary} />}
-            fullWidth={false}
-            style={{ flex: 1 }}
-          />
-          <Button
-            label="Mark Complete"
-            onPress={handleDone}
-            variant="primary"
-            size="md"
-            fullWidth={false}
-            style={{ flex: 1.5 }}
-          />
+        {/* ── Distinct Bordered Vehicle Block ── */}
+        <View style={styles.vehicleSubCard}>
+          <View style={styles.vehicleIconCircle}>
+            <Ionicons name="car" size={18} color={Colors.textPrimary} />
+          </View>
+          <View style={styles.vehicleDetails}>
+            <Text style={styles.vehicleModel}>{job.vehicle?.model || "Hyundai Creta"}</Text>
+            <Text style={styles.vehicleSubtext}>
+              {job.vehicle?.type?.toUpperCase() || "SUV"} · Silver
+            </Text>
+          </View>
+          <View style={styles.plateTag}>
+            <Text style={styles.plateText}>{job.vehicle?.licensePlate || "DL 01 AB 1234"}</Text>
+          </View>
         </View>
+
+        {/* ── OTP CODE ENTRY BOXES (Partner Side - Visual Focal Point) ── */}
+        {partnerStep === "arrived" && (
+          <View style={styles.otpContainer}>
+            <View style={styles.otpHeader}>
+              <Ionicons name="shield-checkmark" size={18} color={Colors.brand700} />
+              <Text style={styles.otpHeaderTitle}>CUSTOMER START CODE</Text>
+            </View>
+            <Text style={styles.otpSubtitle}>
+              Ask customer for their 4-digit code to begin roadside assistance
+            </Text>
+
+            {/* 4 Large High-Contrast Entry Boxes */}
+            <View style={styles.otpBoxesRow}>
+              {otp.map((digit, i) => (
+                <TextInput
+                  key={i}
+                  ref={(r) => { otpRefs.current[i] = r; }}
+                  style={[
+                    styles.otpBox,
+                    digit ? styles.otpBoxFilled : {},
+                  ]}
+                  value={digit}
+                  onChangeText={(t) => handleOtpChange(t, i)}
+                  onKeyPress={({ nativeEvent }) => {
+                    if (nativeEvent.key === "Backspace") handleOtpBackspace(i);
+                  }}
+                  keyboardType="number-pad"
+                  maxLength={1}
+                  textAlign="center"
+                  selectTextOnFocus
+                />
+              ))}
+            </View>
+
+            <Button
+              label="Verify & Start Service"
+              onPress={handleVerifyStartCode}
+              variant="primary"
+              size="md"
+              fullWidth
+              style={{ marginTop: Spacing.sm }}
+            />
+          </View>
+        )}
+
+        {/* ── Job In Progress Mode ── */}
+        {partnerStep === "in_progress" && (
+          <View style={styles.inProgressContainer}>
+            <View style={styles.verifiedRow}>
+              <Ionicons name="checkmark-circle" size={18} color={Colors.brand700} />
+              <Text style={styles.verifiedText}>Code Verified · Work Underway</Text>
+            </View>
+            <Button
+              label="Mark Complete"
+              onPress={handleDone}
+              variant="primary"
+              size="lg"
+              fullWidth
+              style={{ marginTop: Spacing.sm }}
+            />
+          </View>
+        )}
+
+        {/* ── En Route Actions ── */}
+        {partnerStep === "en_route" && (
+          <View style={styles.enRouteBtnsRow}>
+            <Button
+              label="Navigate"
+              onPress={handleNavigate}
+              variant="outline"
+              size="md"
+              icon={<Ionicons name="navigate" size={16} color={Colors.textPrimary} />}
+              fullWidth={false}
+              style={{ flex: 1 }}
+            />
+            <Button
+              label="Arrived at Location"
+              onPress={() => setPartnerStep("arrived")}
+              variant="primary"
+              size="md"
+              fullWidth={false}
+              style={{ flex: 1.5 }}
+            />
+          </View>
+        )}
       </Animated.View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  map: { ...StyleSheet.absoluteFill },
+  container: { flex: 1, backgroundColor: "#E2E8F0" },
+  map: { ...StyleSheet.absoluteFill as object },
 
   topOverlay: {
     position: "absolute",
     top: 0,
     left: 0,
     right: 0,
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.sm,
-  },
-  topRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.xs,
+    zIndex: 10,
   },
-  activeBadge: {
+  floatingBackButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: Colors.surfaceWhite,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: Colors.border,
+    ...(Shadows.card as object),
+  },
+  topBadgeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  statusPill: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: Colors.surfaceWhite,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
     borderRadius: Radius.full,
-    gap: 8,
-    ...(Shadows.card as object),
+    gap: 7,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
   activePulse: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: Colors.success,
+    backgroundColor: Colors.brand700,
   },
-  activeBadgeText: {
-    fontSize: Typography.fontSize.sm,
+  statusPillText: {
+    fontSize: Typography.fontSize.xs,
     fontFamily: Typography.fontFamily.semiBold,
-    color: Colors.success,
-  },
-  etaChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    backgroundColor: Colors.surfaceWhite,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: Radius.full,
-    ...(Shadows.card as object),
-  },
-  etaChipText: {
-    fontSize: Typography.fontSize.sm,
-    fontFamily: Typography.fontFamily.medium,
-    color: Colors.textSecondary,
+    color: Colors.textPrimary,
   },
 
   partnerPin: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: Colors.secondary,
+    backgroundColor: "#1C1C1C",
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 2,
+    borderColor: Colors.surfaceWhite,
   },
   userPin: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: Colors.primaryLight,
+    backgroundColor: Colors.surfaceWhite,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 2,
-    borderColor: Colors.primary,
+    borderWidth: 3,
+    borderColor: Colors.brand700,
   },
 
   myLocBtn: {
     position: "absolute",
     right: Spacing.lg,
-    bottom: 230,
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+    bottom: 310,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: Colors.surfaceWhite,
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 1,
+    borderColor: Colors.border,
     ...(Shadows.card as object),
+    zIndex: 5,
   },
 
   sheet: {
@@ -271,35 +355,44 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfaceWhite,
     borderTopLeftRadius: Radius["2xl"],
     borderTopRightRadius: Radius["2xl"],
-    padding: Spacing.lg,
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.sm,
     paddingBottom: Platform.OS === "ios" ? 34 : Spacing.lg,
-    gap: Spacing.md,
+    gap: Spacing.sm,
+    borderTopWidth: 1,
+    borderColor: Colors.border,
+    ...(Shadows.card as object),
   },
   sheetHandle: {
-    width: 40,
+    width: 36,
     height: 4,
     borderRadius: 2,
-    backgroundColor: Colors.shimmerBase,
+    backgroundColor: "#CBD5E1",
     alignSelf: "center",
     marginBottom: Spacing.xs,
   },
-  sheetTitle: {
-    fontSize: Typography.fontSize.lg,
-    fontFamily: Typography.fontFamily.bold,
-    color: Colors.textPrimary,
-  },
-  customerRow: {
+
+  identityRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    backgroundColor: Colors.surface,
-    borderRadius: Radius.md,
-    padding: Spacing.sm,
+    gap: 12,
   },
-  customerIcon: {},
+  customerAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#F1F5F9",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  customerMeta: {
+    flex: 1,
+  },
   customerName: {
     fontSize: Typography.fontSize.base,
-    fontFamily: Typography.fontFamily.semiBold,
+    fontFamily: Typography.fontFamily.bold,
     color: Colors.textPrimary,
   },
   customerAddress: {
@@ -308,34 +401,142 @@ const styles = StyleSheet.create({
     fontFamily: Typography.fontFamily.regular,
     marginTop: 2,
   },
-  callBtn: {
+  iconRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  circleActionBtn: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: Colors.successLight,
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: Colors.border,
     alignItems: "center",
     justifyContent: "center",
   },
 
-  statsRow: {
+  vehicleSubCard: {
     flexDirection: "row",
-    backgroundColor: Colors.surface,
-    borderRadius: Radius.md,
+    alignItems: "center",
+    backgroundColor: "#F8FAFC",
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
+    gap: 10,
   },
-  statItem: { flex: 1, alignItems: "center", gap: 2 },
-  statVal: {
-    fontSize: Typography.fontSize.lg,
-    fontFamily: Typography.fontFamily.bold,
+  vehicleIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#E2E8F0",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  vehicleDetails: {
+    flex: 1,
+  },
+  vehicleModel: {
+    fontSize: Typography.fontSize.sm,
+    fontFamily: Typography.fontFamily.semiBold,
     color: Colors.textPrimary,
   },
-  statLbl: {
+  vehicleSubtext: {
     fontSize: Typography.fontSize.xs,
-    color: Colors.textMuted,
     fontFamily: Typography.fontFamily.regular,
+    color: Colors.textSecondary,
+    marginTop: 1,
   },
-  statDivider: { width: 1, backgroundColor: Colors.border },
+  plateTag: {
+    backgroundColor: Colors.surfaceWhite,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: Radius.sm,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  plateText: {
+    fontSize: Typography.fontSize.xs,
+    fontFamily: Typography.fontFamily.bold,
+    color: Colors.textPrimary,
+    letterSpacing: 0.5,
+  },
 
-  btnsRow: { flexDirection: "row", gap: Spacing.sm },
+  // ── Prominent OTP Entry Styling ──
+  otpContainer: {
+    backgroundColor: "#F8FAFC",
+    borderRadius: Radius.xl,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: Spacing.md,
+    alignItems: "center",
+    gap: 6,
+    marginTop: 2,
+  },
+  otpHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  otpHeaderTitle: {
+    fontSize: Typography.fontSize.xs,
+    fontFamily: Typography.fontFamily.bold,
+    color: Colors.brand700,
+    letterSpacing: 1,
+  },
+  otpSubtitle: {
+    fontSize: Typography.fontSize.xs,
+    fontFamily: Typography.fontFamily.regular,
+    color: Colors.textSecondary,
+    textAlign: "center",
+  },
+  otpBoxesRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginVertical: Spacing.xs,
+  },
+  otpBox: {
+    width: 52,
+    height: 60,
+    borderRadius: Radius.lg,
+    borderWidth: 2,
+    borderColor: Colors.border,
+    backgroundColor: Colors.surfaceWhite,
+    fontSize: 26,
+    fontFamily: Typography.fontFamily.bold,
+    color: Colors.textPrimary,
+    textAlign: "center",
+  },
+  otpBoxFilled: {
+    borderColor: Colors.brand700,
+    backgroundColor: Colors.surfaceWhite,
+  },
+
+  inProgressContainer: {
+    backgroundColor: "#FFFCF0",
+    borderRadius: Radius.xl,
+    borderWidth: 1,
+    borderColor: Colors.brand700Light,
+    padding: Spacing.md,
+    marginTop: 2,
+  },
+  verifiedRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  verifiedText: {
+    fontSize: Typography.fontSize.sm,
+    fontFamily: Typography.fontFamily.semiBold,
+    color: Colors.brand700,
+  },
+
+  enRouteBtnsRow: {
+    flexDirection: "row",
+    gap: Spacing.sm,
+    marginTop: 4,
+  },
 });
-

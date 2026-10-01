@@ -7,7 +7,7 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "splash": {
-      "backgroundColor": "#F59E0B"
+      "backgroundColor": "#38CF5A"
     },
     "ios": {
       "supportsTablet": true,
@@ -24,7 +24,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#F59E0B",
+        "backgroundColor": "#38CF5A",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -54,7 +54,8 @@
         {
           "locationAlwaysAndWhenInUsePermission": "Sahayak needs your location to find nearby service partners."
         }
-      ]
+      ],
+      "expo-splash-screen"
     ]
   }
 }

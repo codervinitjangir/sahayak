@@ -5,8 +5,10 @@ import type { Job } from "../../types";
 
 export const jobsApi = {
   /** Create a new roadside assistance job */
-  createJob: (payload: Omit<Job, "id" | "created_at" | "updated_at">) =>
-    apiClient.post<Job>("/jobs", payload).then((r) => r.data),
+  createJob: (payload: Omit<Job, "id" | "createdAt" | "updatedAt">, idempotencyKey?: string) =>
+    apiClient.post<Job>("/jobs", payload, {
+      headers: idempotencyKey ? { "Idempotency-Key": idempotencyKey } : undefined,
+    }).then((r) => r.data),
 
   /** Get job by ID */
   getJob: (jobId: string) =>

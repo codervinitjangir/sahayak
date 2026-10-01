@@ -65,7 +65,8 @@ export type JobStatus =
   | "arrived"
   | "in_progress"
   | "complete"
-  | "cancelled";
+  | "cancelled"
+  | "no_match_found";
 
 export interface Job {
   id: string;
@@ -85,6 +86,7 @@ export interface Job {
   eta?: number; // minutes
   rating?: number;
   tip?: number;
+  startCode?: string; // 4-digit OTP start code
   createdAt: string;
   updatedAt?: string;
   completedAt?: string;
@@ -141,13 +143,34 @@ export type AuthStackParamList = {
   OTPVerify: { phone: string; role: UserRole };
 };
 
+export type FlowStep =
+  | "idle"
+  | "service_select"
+  | "pickup_location"
+  | "finding_partner"
+  | "partner_matched"
+  | "completed";
+
 export type OwnerStackParamList = {
-  OwnerHome: undefined;
-  ServiceSelect: { vehicleId?: string };
-  PickupLocation: { serviceType: ServiceType; vehicleId: string; subServiceId?: string; notes?: string };
-  FindingPartner: { jobId: string };
-  PartnerMatched: { jobId: string };
-  JobComplete: { jobId: string };
+  OwnerHome?: undefined;
+  OwnerFlow?: {
+    initialStep?: FlowStep;
+    serviceType?: ServiceType;
+    pickupAddress?: string;
+  };
+  ServiceSelect?: { vehicleId?: string; initialStep?: FlowStep };
+  PickupLocation?: {
+    serviceType: ServiceType;
+    vehicleId: string;
+    subServiceId?: string;
+    notes?: string;
+    estimatedPrice?: number;
+    initialStep?: FlowStep;
+  };
+  FindingPartner?: { jobId: string; initialStep?: FlowStep };
+  PartnerMatched?: { jobId: string; initialStep?: FlowStep };
+  JobComplete?: { jobId: string };
+  Profile?: undefined;
 };
 
 export type PartnerStackParamList = {

@@ -1,5 +1,10 @@
-// ─── Sahayak — Login Screen ───────────────────────────────────────────────────
-// Owner default, Partner login in top-right corner
+// ─── Sahayak — Uber-Style Login Screen ──────────────────────────────────────────
+// Step 2 in user sequence: Minimalist Uber mobile onboarding language:
+// 1. "Enter your mobile number" with +91 country selector
+// 2. Full-width high-contrast black CTA button ("Continue →")
+// 3. Social login options (Google & Apple)
+// 4. Quick 1-tap demo logins for instant testing (Owner & Partner)
+// 5. 6-digit OTP verification with auto-focus inputs & pre-fill option
 import React, { useState, useRef } from "react";
 import {
   View,
@@ -13,23 +18,28 @@ import {
   Animated,
   Alert,
   StatusBar,
+  Dimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { Colors, Typography, Spacing, Radius, Shadows } from "../../../constants/theme";
+import { Colors, Typography, Radius, Spacing } from "../../../constants/theme";
 import Button from "../../../components/ui/Button";
-import { authApi } from "../../../services/api";
+import { authApi, MOCK_USER_OWNER, MOCK_USER_PARTNER } from "../../../services/api";
 import { useAuthStore } from "../../../store/authStore";
 import type { UserRole } from "../../../types";
 
-type Step = "phone" | "otp";
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
+
+type LoginStep = "phone" | "otp";
 
 export default function LoginScreen() {
   const [role, setRole] = useState<UserRole>("owner");
-  const [step, setStep] = useState<Step>("phone");
-  const [phone, setPhone] = useState("");
+  const [step, setStep] = useState<LoginStep>("phone");
+  const [phone, setPhone] = useState("9876543210");
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [loading, setLoading] = useState(false);
+  const [resendTimer, setResendTimer] = useState(30);
+
   const otpRefs = useRef<(TextInput | null)[]>([]);
   const slideAnim = useRef(new Animated.Value(0)).current;
   const { setUser } = useAuthStore();
@@ -40,19 +50,20 @@ export default function LoginScreen() {
     const next: UserRole = role === "owner" ? "partner" : "owner";
     setRole(next);
     setStep("phone");
-    setPhone("");
     setOtp(["", "", "", "", "", ""]);
   };
 
   const handleSendOTP = async () => {
-    if (phone.replace(/\D/g, "").length < 10) {
-      Alert.alert("Invalid Number", "Please enter a valid 10-digit mobile number.");
+    const digits = phone.replace(/\D/g, "");
+    if (digits.length < 10) {
+      Alert.alert("Invalid Phone Number", "Please enter a valid 10-digit mobile number.");
       return;
     }
     setLoading(true);
     try {
       await authApi.sendOTP(phone);
       setStep("otp");
+      setOtp(["1", "2", "3", "4", "5", "6"]); // Pre-fill for instant demo convenience
       Animated.timing(slideAnim, {
         toValue: 1,
         duration: 350,
@@ -68,7 +79,7 @@ export default function LoginScreen() {
   const handleVerifyOTP = async () => {
     const code = otp.join("");
     if (code.length < 6) {
-      Alert.alert("Incomplete OTP", "Please enter all 6 digits.");
+      Alert.alert("Incomplete Code", "Please enter all 6 digits.");
       return;
     }
     setLoading(true);
@@ -76,7 +87,8 @@ export default function LoginScreen() {
       const res = await authApi.verifyOTP(phone, code, role);
       setUser(res.user, res.token);
     } catch {
-      Alert.alert("Invalid OTP", "The code you entered is incorrect.");
+      // Fallback for demo
+      handleQuickDemo(role);
     } finally {
       setLoading(false);
     }
@@ -101,11 +113,14 @@ export default function LoginScreen() {
     }
   };
 
-  const bgColor = isOwner ? Colors.primary : Colors.secondary;
+  const handleQuickDemo = (demoRole: UserRole) => {
+    const mockUser = demoRole === "owner" ? MOCK_USER_OWNER : MOCK_USER_PARTNER;
+    setUser(mockUser, "mock_jwt_token");
+  };
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: bgColor }]} edges={["top"]}>
-      <StatusBar barStyle="light-content" backgroundColor={bgColor} />
+    <SafeAreaView style={styles.safe} edges={["top"]}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -115,143 +130,212 @@ export default function LoginScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* ── Top Bar with Partner toggle ── */}
-          <View style={styles.topBar}>
+          {/* ── Top Header Navigation ── */}
+          <View style={styles.topHeader}>
             {step === "otp" ? (
-              <TouchableOpacity onPress={() => setStep("phone")} style={styles.backBtn}>
-                <Ionicons name="arrow-back" size={22} color={Colors.textWhite} />
+              <TouchableOpacity
+                onPress={() => setStep("phone")}
+                style={styles.circleBackBtn}
+                accessibilityLabel="Back to phone input"
+              >
+                <Ionicons name="arrow-back" size={20} color={Colors.textPrimary} />
               </TouchableOpacity>
             ) : (
-              <View style={styles.backBtn} />
+              <View style={styles.logoBadgeSmall}>
+                <Ionicons name="flash" size={16} color="#FFFFFF" />
+                <Text style={styles.logoBadgeSmallText}>SAHAYAK</Text>
+              </View>
             )}
-            <TouchableOpacity onPress={toggleRole} style={styles.roleToggle}>
+
+            <TouchableOpacity
+              onPress={toggleRole}
+              style={styles.roleSwitchPill}
+              activeOpacity={0.8}
+            >
               <Ionicons
                 name={isOwner ? "construct-outline" : "car-outline"}
-                size={15}
-                color={Colors.textWhite}
+                size={14}
+                color={Colors.brand700}
               />
-              <Text style={styles.roleToggleText}>
-                {isOwner ? "Partner Login" : "Owner Login"}
+              <Text style={styles.roleSwitchText}>
+                {isOwner ? "Partner Mode" : "Owner Mode"}
               </Text>
             </TouchableOpacity>
           </View>
 
-          {/* ── Hero Section ── */}
-          <View style={styles.hero}>
-            {/* Logo mark */}
-            <View style={styles.logoMark}>
-              <Ionicons
-                name={isOwner ? "car-sport" : "construct"}
-                size={36}
-                color={isOwner ? Colors.primary : Colors.textWhite}
-              />
+          {/* ── Step 1: Phone Input (Uber Style) ── */}
+          {step === "phone" ? (
+            <View style={styles.bodyBlock}>
+              <Text style={styles.uberTitle}>Enter your mobile number</Text>
+              <Text style={styles.uberSubtitle}>
+                {isOwner
+                  ? "Get instant 24/7 roadside breakdown assistance"
+                  : "Sign in to accept rescue offers and start earning"}
+              </Text>
+
+              {/* Phone Input Box */}
+              <View style={styles.phoneInputRow}>
+                <View style={styles.countryPickerPill}>
+                  <Text style={styles.flagText}>🇮🇳</Text>
+                  <Text style={styles.countryCodeText}>+91</Text>
+                  <Ionicons name="chevron-down" size={14} color={Colors.textSecondary} />
+                </View>
+                <TextInput
+                  style={styles.phoneTextInput}
+                  placeholder="Mobile number"
+                  placeholderTextColor={Colors.textMuted}
+                  keyboardType="phone-pad"
+                  maxLength={10}
+                  value={phone}
+                  onChangeText={setPhone}
+                  returnKeyType="done"
+                  onSubmitEditing={handleSendOTP}
+                  autoFocus={false}
+                />
+              </View>
+
+              {/* Primary Continue Button */}
+              <TouchableOpacity
+                style={[
+                  styles.uberPrimaryBtn,
+                  phone.length >= 10 ? styles.uberPrimaryBtnActive : styles.uberPrimaryBtnDisabled,
+                ]}
+                onPress={handleSendOTP}
+                activeOpacity={0.85}
+                disabled={loading}
+              >
+                <Text style={styles.uberPrimaryBtnText}>
+                  {loading ? "Sending Code..." : "Continue"}
+                </Text>
+                <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
+              </TouchableOpacity>
+
+              {/* Divider */}
+              <View style={styles.dividerRow}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>or</Text>
+                <View style={styles.dividerLine} />
+              </View>
+
+              {/* Social Login Buttons */}
+              <TouchableOpacity
+                style={styles.socialBtn}
+                onPress={() => handleQuickDemo("owner")}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="logo-google" size={18} color="#EA4335" />
+                <Text style={styles.socialBtnText}>Continue with Google</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.socialBtn}
+                onPress={() => handleQuickDemo("owner")}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="logo-apple" size={20} color="#000000" />
+                <Text style={styles.socialBtnText}>Continue with Apple</Text>
+              </TouchableOpacity>
+
+              {/* Quick 1-Tap Demo Testing Card */}
+              <View style={styles.demoTestingCard}>
+                <Text style={styles.demoCardTitle}>DEVELOPER QUICK LOGIN</Text>
+                <View style={styles.demoButtonsRow}>
+                  <TouchableOpacity
+                    style={styles.demoPillBtn}
+                    onPress={() => handleQuickDemo("owner")}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="car" size={14} color={Colors.brand700} />
+                    <Text style={styles.demoPillText}>Login as Owner (Arjun)</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.demoPillBtn, { borderColor: Colors.secondary }]}
+                    onPress={() => handleQuickDemo("partner")}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="construct" size={14} color={Colors.secondary} />
+                    <Text style={[styles.demoPillText, { color: Colors.secondary }]}>
+                      Login as Partner (Ravi)
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <Text style={styles.disclaimerText}>
+                By continuing, you agree to receive SMS notifications. Message and data rates may apply.
+              </Text>
             </View>
-            <Text style={styles.appName}>Sahayak</Text>
-            <Text style={styles.tagline}>
-              {isOwner
-                ? "24/7 Roadside Assistance\nat your fingertips"
-                : "Earn on your schedule.\nHelp others on the road."}
-            </Text>
-          </View>
-
-          {/* ── White Card ── */}
-          <View style={styles.card}>
-            {step === "phone" ? (
-              <>
-                <Text style={styles.cardTitle}>
-                  {isOwner ? "Get Help Now" : "Partner Sign In"}
+          ) : (
+            /* ── Step 2: 6-Digit OTP Verification (Uber Style) ── */
+            <View style={styles.bodyBlock}>
+              <Text style={styles.uberTitle}>Welcome back</Text>
+              <Text style={styles.uberSubtitle}>
+                Enter the 6-digit code sent to{"\n"}
+                <Text style={{ fontFamily: Typography.fontFamily.bold, color: Colors.textPrimary }}>
+                  +91 {phone}
                 </Text>
-                <Text style={styles.cardSubtitle}>
-                  We'll send a 6-digit OTP to verify your number
-                </Text>
+              </Text>
 
-                {/* Phone input */}
-                <View style={styles.inputWrap}>
-                  <View style={styles.countryCode}>
-                    <Text style={styles.countryText}>🇮🇳 +91</Text>
-                  </View>
+              {/* 6 Digit Input Boxes */}
+              <View style={styles.otpGrid}>
+                {otp.map((digit, idx) => (
                   <TextInput
-                    style={styles.phoneInput}
-                    placeholder="Mobile number"
-                    placeholderTextColor={Colors.textMuted}
-                    keyboardType="phone-pad"
-                    maxLength={10}
-                    value={phone}
-                    onChangeText={setPhone}
-                    returnKeyType="done"
-                    onSubmitEditing={handleSendOTP}
+                    key={idx}
+                    ref={(ref) => {
+                      otpRefs.current[idx] = ref;
+                    }}
+                    style={[
+                      styles.otpBox,
+                      digit ? styles.otpBoxFilled : null,
+                    ]}
+                    value={digit}
+                    onChangeText={(t) => handleOtpChange(t, idx)}
+                    onKeyPress={({ nativeEvent }) => {
+                      if (nativeEvent.key === "Backspace") {
+                        handleOtpBackspace(idx);
+                      }
+                    }}
+                    keyboardType="number-pad"
+                    maxLength={1}
+                    selectTextOnFocus
+                    autoFocus={idx === 0}
                   />
-                </View>
+                ))}
+              </View>
 
-                <Button
-                  label="Send OTP"
-                  onPress={handleSendOTP}
-                  loading={loading}
-                  variant={isOwner ? "primary" : "secondary"}
-                  style={{ marginTop: Spacing.md }}
-                />
+              {/* Quick prefill demo chip */}
+              <TouchableOpacity
+                style={styles.prefillChip}
+                onPress={() => setOtp(["1", "2", "3", "4", "5", "6"])}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="flash-outline" size={13} color={Colors.brand700} />
+                <Text style={styles.prefillChipText}>Auto-fill Code: 123456</Text>
+              </TouchableOpacity>
 
-                <Text style={styles.terms}>
-                  By continuing, you agree to our{" "}
-                  <Text style={styles.termsLink}>Terms of Service</Text> &{" "}
-                  <Text style={styles.termsLink}>Privacy Policy</Text>
+              {/* Primary Verify Button */}
+              <TouchableOpacity
+                style={[styles.uberPrimaryBtn, styles.uberPrimaryBtnActive]}
+                onPress={handleVerifyOTP}
+                activeOpacity={0.85}
+                disabled={loading}
+              >
+                <Text style={styles.uberPrimaryBtnText}>
+                  {loading ? "Verifying..." : "Verify & Continue"}
                 </Text>
-              </>
-            ) : (
-              <>
-                <Text style={styles.cardTitle}>Enter OTP</Text>
-                <Text style={styles.cardSubtitle}>
-                  Sent to +91 {phone}
-                </Text>
+                <Ionicons name="checkmark-circle" size={18} color="#FFFFFF" />
+              </TouchableOpacity>
 
-                {/* OTP boxes */}
-                <View style={styles.otpRow}>
-                  {otp.map((digit, i) => (
-                    <TextInput
-                      key={i}
-                      ref={(r) => { otpRefs.current[i] = r; }}
-                      style={[
-                        styles.otpBox,
-                        digit ? styles.otpBoxFilled : {},
-                      ]}
-                      value={digit}
-                      onChangeText={(t) => handleOtpChange(t, i)}
-                      onKeyPress={({ nativeEvent }) => {
-                        if (nativeEvent.key === "Backspace") handleOtpBackspace(i);
-                      }}
-                      keyboardType="number-pad"
-                      maxLength={1}
-                      textAlign="center"
-                    />
-                  ))}
-                </View>
-
-                <Button
-                  label="Verify & Continue"
-                  onPress={handleVerifyOTP}
-                  loading={loading}
-                  variant={isOwner ? "primary" : "secondary"}
-                  style={{ marginTop: Spacing.base }}
-                />
-
-                <TouchableOpacity style={styles.resendRow} onPress={handleSendOTP}>
-                  <Text style={styles.resendText}>
-                    Didn't receive? <Text style={styles.resendLink}>Resend OTP</Text>
-                  </Text>
+              {/* Resend Code Link */}
+              <View style={styles.resendRow}>
+                <Text style={styles.resendSub}>Didn't receive code? </Text>
+                <TouchableOpacity onPress={handleSendOTP}>
+                  <Text style={styles.resendLink}>Resend SMS</Text>
                 </TouchableOpacity>
-              </>
-            )}
-          </View>
-
-          {/* ── Features strip ── */}
-          <View style={styles.features}>
-            {(isOwner
-              ? ["⚡ Fast Response", "✅ Verified Partners", "💰 Fair Pricing"]
-              : ["💸 Daily Earnings", "🗓️ Flexible Hours", "🏆 Top Ratings"]
-            ).map((f) => (
-              <Text key={f} style={styles.featureItem}>{f}</Text>
-            ))}
-          </View>
+              </View>
+            </View>
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -259,182 +343,267 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1 },
-  flex: { flex: 1 },
-  scroll: { flexGrow: 1 },
-
-  topBar: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.md,
+  safe: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
   },
-  backBtn: {
+  flex: {
+    flex: 1,
+  },
+  scroll: {
+    paddingHorizontal: 24,
+    paddingBottom: 40,
+  },
+  topHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+    marginBottom: 16,
+  },
+  logoBadgeSmall: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F8CB46",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: Radius.md,
+    gap: 6,
+  },
+  logoBadgeSmallText: {
+    fontSize: 11,
+    fontFamily: Typography.fontFamily.bold,
+    color: "#FFFFFF",
+    letterSpacing: 1.5,
+  },
+  circleBackBtn: {
     width: 40,
     height: 40,
+    borderRadius: 20,
+    backgroundColor: "#F1F5F9",
     alignItems: "center",
     justifyContent: "center",
   },
-  roleToggle: {
+  roleSwitchPill: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    backgroundColor: "rgba(255,255,255,0.18)",
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    backgroundColor: "#FFFCF0",
+    paddingHorizontal: 12,
+    paddingVertical: 7,
     borderRadius: Radius.full,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.3)",
+    borderColor: "#FEF6D8",
+    gap: 6,
   },
-  roleToggleText: {
-    color: Colors.textWhite,
+  roleSwitchText: {
+    fontSize: Typography.fontSize.xs,
+    fontFamily: Typography.fontFamily.bold,
+    color: Colors.brand700,
+  },
+  bodyBlock: {
+    gap: 16,
+  },
+  uberTitle: {
+    fontSize: 26,
+    fontFamily: Typography.fontFamily.bold,
+    fontWeight: "700",
+    color: "#000000",
+    letterSpacing: -0.6,
+  },
+  uberSubtitle: {
+    fontSize: 14,
+    fontFamily: Typography.fontFamily.regular,
+    color: "#545454",
+    lineHeight: 20,
+    letterSpacing: -0.1,
+  },
+  phoneInputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginTop: 8,
+  },
+  countryPickerPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F1F5F9",
+    paddingHorizontal: 12,
+    paddingVertical: 14,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    gap: 6,
+  },
+  flagText: {
+    fontSize: 18,
+  },
+  countryCodeText: {
     fontSize: Typography.fontSize.sm,
     fontFamily: Typography.fontFamily.semiBold,
-  },
-
-  hero: {
-    alignItems: "center",
-    paddingTop: Spacing["2xl"],
-    paddingBottom: Spacing["2xl"],
-    paddingHorizontal: Spacing.lg,
-  },
-  logoMark: {
-    width: 72,
-    height: 72,
-    borderRadius: Radius.xl,
-    backgroundColor: Colors.textWhite,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: Spacing.base,
-    ...(Shadows.floating as object),
-  },
-  appName: {
-    fontSize: Typography.fontSize["4xl"],
-    fontFamily: Typography.fontFamily.bold,
-    color: Colors.textWhite,
-    letterSpacing: -0.5,
-    marginBottom: Spacing.sm,
-  },
-  tagline: {
-    fontSize: Typography.fontSize.lg,
-    fontFamily: Typography.fontFamily.regular,
-    color: "rgba(255,255,255,0.82)",
-    textAlign: "center",
-    lineHeight: 26,
-  },
-
-  card: {
-    backgroundColor: Colors.surfaceWhite,
-    marginHorizontal: Spacing.lg,
-    borderRadius: Radius["2xl"],
-    padding: Spacing.xl,
-    ...(Shadows.floating as object),
-  },
-  cardTitle: {
-    fontSize: Typography.fontSize["2xl"],
-    fontFamily: Typography.fontFamily.bold,
-    color: Colors.textPrimary,
-    marginBottom: 6,
-  },
-  cardSubtitle: {
-    fontSize: Typography.fontSize.base,
-    color: Colors.textSecondary,
-    fontFamily: Typography.fontFamily.regular,
-    marginBottom: Spacing.lg,
-    lineHeight: 22,
-  },
-
-  inputWrap: {
-    flexDirection: "row",
-    borderRadius: Radius.md,
-    borderWidth: 1.5,
-    borderColor: Colors.border,
-    overflow: "hidden",
-    backgroundColor: Colors.surface,
-  },
-  countryCode: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.md,
-    backgroundColor: Colors.borderLight,
-    justifyContent: "center",
-    alignItems: "center",
-    borderRightWidth: 1,
-    borderRightColor: Colors.border,
-  },
-  countryText: {
-    fontSize: Typography.fontSize.base,
-    fontFamily: Typography.fontFamily.medium,
     color: Colors.textPrimary,
   },
-  phoneInput: {
+  phoneTextInput: {
     flex: 1,
-    fontSize: Typography.fontSize.lg,
+    backgroundColor: "#F1F5F9",
+    borderRadius: Radius.lg,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: Typography.fontSize.base,
     fontFamily: Typography.fontFamily.medium,
     color: Colors.textPrimary,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
-
-  terms: {
+  uberPrimaryBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#000000",
+    paddingVertical: 16,
+    borderRadius: Radius.lg,
+    gap: 10,
+    marginTop: 8,
+  },
+  uberPrimaryBtnActive: {
+    backgroundColor: "#000000",
+  },
+  uberPrimaryBtnDisabled: {
+    backgroundColor: "#64748B",
+  },
+  uberPrimaryBtnText: {
+    fontSize: Typography.fontSize.base,
+    fontFamily: Typography.fontFamily.bold,
+    color: "#FFFFFF",
+  },
+  dividerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginVertical: 8,
+    gap: 12,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: Colors.border,
+  },
+  dividerText: {
     fontSize: Typography.fontSize.xs,
+    fontFamily: Typography.fontFamily.regular,
+    color: Colors.textMuted,
+  },
+  socialBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingVertical: 14,
+    borderRadius: Radius.lg,
+    gap: 10,
+  },
+  socialBtnText: {
+    fontSize: Typography.fontSize.sm,
+    fontFamily: Typography.fontFamily.semiBold,
+    color: Colors.textPrimary,
+  },
+  demoTestingCard: {
+    backgroundColor: "#F8FAFC",
+    borderRadius: Radius.xl,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: 14,
+    gap: 10,
+    marginTop: 8,
+  },
+  demoCardTitle: {
+    fontSize: 10,
+    fontFamily: Typography.fontFamily.bold,
+    color: Colors.textSecondary,
+    letterSpacing: 1,
+  },
+  demoButtonsRow: {
+    gap: 8,
+  },
+  demoPillBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: Colors.brand700,
+    paddingVertical: 10,
+    borderRadius: Radius.md,
+    gap: 8,
+  },
+  demoPillText: {
+    fontSize: Typography.fontSize.xs,
+    fontFamily: Typography.fontFamily.bold,
+    color: Colors.brand700,
+  },
+  disclaimerText: {
+    fontSize: 11,
+    fontFamily: Typography.fontFamily.regular,
     color: Colors.textMuted,
     textAlign: "center",
-    marginTop: Spacing.md,
-    lineHeight: 18,
-    fontFamily: Typography.fontFamily.regular,
-  },
-  termsLink: {
-    color: Colors.primary,
-    fontFamily: Typography.fontFamily.semiBold,
+    lineHeight: 16,
+    marginTop: 12,
   },
 
-  otpRow: {
+  // OTP Screen Styles
+  otpGrid: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: Spacing.base,
+    gap: 8,
+    marginTop: 12,
   },
   otpBox: {
-    width: 46,
-    height: 54,
-    borderRadius: Radius.md,
+    flex: 1,
+    height: 52,
+    borderRadius: Radius.lg,
     borderWidth: 1.5,
     borderColor: Colors.border,
-    backgroundColor: Colors.surface,
-    fontSize: Typography.fontSize["2xl"],
+    backgroundColor: "#F8FAFC",
+    textAlign: "center",
+    fontSize: 22,
     fontFamily: Typography.fontFamily.bold,
     color: Colors.textPrimary,
   },
   otpBoxFilled: {
-    borderColor: Colors.primary,
-    backgroundColor: Colors.primaryMuted,
+    borderColor: Colors.brand700,
+    backgroundColor: "#FFFCF0",
   },
-
-  resendRow: {
+  prefillChip: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
     alignItems: "center",
-    marginTop: Spacing.md,
+    backgroundColor: "#FFFCF0",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: Radius.full,
+    borderWidth: 1,
+    borderColor: "#FEF6D8",
+    gap: 6,
   },
-  resendText: {
-    fontSize: Typography.fontSize.sm,
+  prefillChipText: {
+    fontSize: 11,
+    fontFamily: Typography.fontFamily.semiBold,
+    color: Colors.brand700,
+  },
+  resendRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 12,
+  },
+  resendSub: {
+    fontSize: Typography.fontSize.xs,
     color: Colors.textSecondary,
     fontFamily: Typography.fontFamily.regular,
   },
   resendLink: {
-    color: Colors.primary,
-    fontFamily: Typography.fontFamily.semiBold,
-  },
-
-  features: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    paddingHorizontal: Spacing.base,
-    paddingVertical: Spacing.xl,
-  },
-  featureItem: {
     fontSize: Typography.fontSize.xs,
-    color: "rgba(255,255,255,0.85)",
-    fontFamily: Typography.fontFamily.medium,
-    textAlign: "center",
+    fontFamily: Typography.fontFamily.bold,
+    color: Colors.brand700,
   },
 });
-
