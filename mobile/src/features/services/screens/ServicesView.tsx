@@ -1,4 +1,7 @@
-// ─── Sahayak — Services Screen (Blinkit Exact Theme & Spacing) ────────────────
+// ─── Sahayak — Services Screen ────────────────────────────────────────────────
+// Redesigned with the clean, flat grouped-card design language of AccountView.
+// Replaces AI slopes, slanted boxes, and conflicting badges with structured, unified cards.
+
 import React, { useState } from "react";
 import {
   View,
@@ -7,7 +10,6 @@ import {
   ScrollView,
   TouchableOpacity,
   Image,
-  TextInput,
   Alert,
   Dimensions,
 } from "react-native";
@@ -35,10 +37,12 @@ interface ServiceItem {
   price: string;
   eta: string;
   badge?: string;
-  badgeType?: "success" | "warning" | "info";
+  badgeColor?: string;
   description: string;
   image: any;
-  featured?: boolean;
+  iconName: keyof typeof Ionicons.glyphMap;
+  iconBg: string;
+  iconColor: string;
 }
 
 const SERVICES_CATALOG: ServiceItem[] = [
@@ -49,11 +53,13 @@ const SERVICES_CATALOG: ServiceItem[] = [
     title: "Flatbed Tow Truck",
     price: "₹499",
     eta: "8 min",
-    badge: "MOST POPULAR",
-    badgeType: "success",
+    badge: "POPULAR",
+    badgeColor: "#0C831F",
     description: "Hydraulic tilt-deck for cars, sedans & luxury SUVs",
     image: require("../../../../assets/minutes/hero_rescue_clean.png"),
-    featured: true,
+    iconName: "car-sport",
+    iconBg: "#F0F2F5",
+    iconColor: "#1C1C1C",
   },
   {
     id: "bike_towing",
@@ -62,10 +68,13 @@ const SERVICES_CATALOG: ServiceItem[] = [
     title: "2-Wheeler Towing",
     price: "₹299",
     eta: "6 min",
-    badge: "RAPID DISPATCH",
-    badgeType: "info",
+    badge: "FAST",
+    badgeColor: "#0C831F",
     description: "Specialized cradle tow truck for motorcycles & scooters",
     image: require("../../../../assets/for_you/bike.png"),
+    iconName: "bicycle",
+    iconBg: "#F0F2F5",
+    iconColor: "#1C1C1C",
   },
   {
     id: "jumpstart_boost",
@@ -74,10 +83,13 @@ const SERVICES_CATALOG: ServiceItem[] = [
     title: "Battery Jumpstart",
     price: "₹249",
     eta: "4 min",
-    badge: "FASTEST ARRIVAL",
-    badgeType: "warning",
-    description: "Heavy-duty booster pack & battery alternator health test",
+    badge: "FASTEST",
+    badgeColor: "#C2850C",
+    description: "Heavy-duty booster pack & alternator health test",
     image: require("../../../../assets/minutes/jumpstart.png"),
+    iconName: "flash",
+    iconBg: "#FEF6D8",
+    iconColor: "#C2850C",
   },
   {
     id: "flat_tyre_fix",
@@ -86,10 +98,13 @@ const SERVICES_CATALOG: ServiceItem[] = [
     title: "Flat Tyre / Puncture",
     price: "₹199",
     eta: "5 min",
-    badge: "BEST VALUE",
-    badgeType: "success",
+    badge: "VALUE",
+    badgeColor: "#0C831F",
     description: "On-site tubeless puncture repair or stepney wheel swap",
     image: require("../../../../assets/minutes/flat_tyre.png"),
+    iconName: "disc",
+    iconBg: "#E6F4EA",
+    iconColor: "#0C831F",
   },
   {
     id: "emergency_fuel",
@@ -100,6 +115,9 @@ const SERVICES_CATALOG: ServiceItem[] = [
     eta: "7 min",
     description: "5 Litres of Petrol or Diesel delivered in safe Jerrycan",
     image: require("../../../../assets/for_you/fuel.png"),
+    iconName: "water",
+    iconBg: "#F0F2F5",
+    iconColor: "#1C1C1C",
   },
   {
     id: "key_lockout",
@@ -110,6 +128,9 @@ const SERVICES_CATALOG: ServiceItem[] = [
     eta: "8 min",
     description: "Safe, non-destructive unlocking for keys locked inside",
     image: require("../../../../assets/for_you/lockout.png"),
+    iconName: "key",
+    iconBg: "#FEF6D8",
+    iconColor: "#C2850C",
   },
   {
     id: "ev_fast_boost",
@@ -119,9 +140,12 @@ const SERVICES_CATALOG: ServiceItem[] = [
     price: "₹349",
     eta: "10 min",
     badge: "EV RESCUE",
-    badgeType: "success",
-    description: "Mobile DC fast boost van providing 15-20 km emergency range",
+    badgeColor: "#0C831F",
+    description: "Mobile DC fast boost van providing 15-20 km range",
     image: require("../../../../assets/for_you/ev_boost.png"),
+    iconName: "battery-charging",
+    iconBg: "#E6F4EA",
+    iconColor: "#0C831F",
   },
   {
     id: "engine_diagnostics",
@@ -131,9 +155,12 @@ const SERVICES_CATALOG: ServiceItem[] = [
     price: "₹399",
     eta: "12 min",
     badge: "CERTIFIED",
-    badgeType: "info",
+    badgeColor: "#1C1C1C",
     description: "OBD-II scanner diagnosis & instant minor roadside fix",
     image: require("../../../../assets/for_you/mechanic.png"),
+    iconName: "construct",
+    iconBg: "#F0F2F5",
+    iconColor: "#1C1C1C",
   },
 ];
 
@@ -174,36 +201,34 @@ export default function ServicesView({
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        {/* ── 1. ACTIVE VEHICLE SELECTOR CARD (BLINKIT STYLE) ── */}
+        {/* ── 1. ACTIVE VEHICLE SELECTOR CARD (MATCHING ACCOUNT VIEW VEHICLE SELECT CARD) ── */}
         <TouchableOpacity
           style={styles.vehicleCard}
           onPress={onOpenVehicleModal}
-          activeOpacity={0.85}
+          activeOpacity={0.8}
         >
-          <View style={styles.vehicleCardLeft}>
-            <View style={styles.vehicleIconCircle}>
-              <Ionicons
-                name={selectedVehicle.type === "two-wheeler" ? "bicycle" : "car"}
-                size={20}
-                color="#1C1C1C"
-              />
-            </View>
-            <View>
-              <Text style={styles.vehicleTitle}>
-                {selectedVehicle.make} {selectedVehicle.model}
-              </Text>
-              <Text style={styles.vehicleMeta}>
-                {selectedVehicle.licensePlate} · {selectedVehicle.fuelType?.toUpperCase()}
-              </Text>
-            </View>
+          <View style={styles.vehicleIconCircle}>
+            <Ionicons
+              name={selectedVehicle.type === "two-wheeler" ? "bicycle" : "car-sport"}
+              size={20}
+              color="#1C1C1C"
+            />
           </View>
-
-          <View style={styles.switchPill}>
-            <Text style={styles.switchPillText}>Switch ▾</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.vehicleTitle}>
+              {selectedVehicle.make} {selectedVehicle.model}
+            </Text>
+            <Text style={styles.vehicleMeta}>
+              {selectedVehicle.licensePlate} · {selectedVehicle.fuelType?.toUpperCase()}
+            </Text>
+          </View>
+          <View style={styles.switchButton}>
+            <Text style={styles.switchButtonText}>Change</Text>
+            <Ionicons name="chevron-forward" size={14} color="#64748B" />
           </View>
         </TouchableOpacity>
 
-        {/* ── 2. CATEGORY FILTER PILLS ── */}
+        {/* ── 2. CATEGORY FILTER PILLS (CLEAN, FLAT, NO DIAGONAL SLOPES) ── */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -222,6 +247,7 @@ export default function ServicesView({
                   name={pill.icon}
                   size={14}
                   color={isActive ? "#FFFFFF" : "#5E6470"}
+                  style={{ marginRight: 6 }}
                 />
                 <Text
                   style={[styles.filterPillText, isActive && styles.filterPillTextActive]}
@@ -233,140 +259,123 @@ export default function ServicesView({
           })}
         </ScrollView>
 
-        {/* ── 5. SERVICES SECTION HEADING ── */}
-        <Text style={styles.sectionHeading}>
-          {activeFilter === "all" ? "Emergency breakdown services" : "Matching services"}
-        </Text>
+        {/* ── 3. SERVICES CATALOG (GROUPED WHITE CARDS MATCHING ACCOUNT VIEW) ── */}
+        <View style={styles.sectionMargin}>
+          <Text style={styles.sectionGroupTitle}>
+            {activeFilter === "all" ? "Available breakdown services" : `${activeFilter.toUpperCase()} services`}
+          </Text>
 
-        {/* ── 6. SERVICES CARDS LIST (CLEAN WHITE 16PX RADIUS BLINKIT CARDS) ── */}
-        <View style={styles.servicesList}>
-          {filteredServices.map((item) => (
-            <TouchableOpacity
-              key={item.id}
-              style={styles.serviceCard}
-              onPress={() => onLaunchService(item.service, item.title)}
-              activeOpacity={0.85}
-            >
-              <View style={styles.cardMainRow}>
-                <View style={{ flex: 1, paddingRight: 10 }}>
-                  {item.badge && (
-                    <View
-                      style={[
-                        styles.cardBadge,
-                        item.badgeType === "warning"
-                          ? styles.badgeWarning
-                          : item.badgeType === "info"
-                          ? styles.badgeInfo
-                          : styles.badgeSuccess,
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.cardBadgeText,
-                          item.badgeType === "warning"
-                            ? styles.badgeTextWarning
-                            : item.badgeType === "info"
-                            ? styles.badgeTextInfo
-                            : styles.badgeTextSuccess,
-                        ]}
-                      >
-                        {item.badge}
-                      </Text>
+          <View style={styles.groupedCard}>
+            {filteredServices.map((item, idx) => (
+              <View key={item.id}>
+                <TouchableOpacity
+                  style={styles.serviceRow}
+                  onPress={() => onLaunchService(item.service, item.title)}
+                  activeOpacity={0.7}
+                >
+                  {/* Clean Icon Box */}
+                  <View style={[styles.serviceIconBox, { backgroundColor: item.iconBg }]}>
+                    <Ionicons name={item.iconName} size={22} color={item.iconColor} />
+                  </View>
+
+                  {/* Main Details */}
+                  <View style={styles.serviceContent}>
+                    <View style={styles.titleRow}>
+                      <Text style={styles.serviceName}>{item.title}</Text>
+                      {item.badge && (
+                        <View style={[styles.cleanBadge, { borderColor: item.badgeColor }]}>
+                          <Text style={[styles.cleanBadgeText, { color: item.badgeColor }]}>
+                            {item.badge}
+                          </Text>
+                        </View>
+                      )}
                     </View>
-                  )}
 
-                  <Text style={styles.cardTitle}>{item.title}</Text>
-                  <Text style={styles.cardDesc} numberOfLines={2}>
-                    {item.description}
-                  </Text>
-                </View>
+                    <Text style={styles.serviceDesc} numberOfLines={1}>
+                      {item.description}
+                    </Text>
 
-                <View style={styles.cardImageWrapper}>
-                  <Image
-                    source={item.image}
-                    style={styles.cardImage}
-                    resizeMode="contain"
-                  />
-                </View>
+                    <View style={styles.metaRow}>
+                      <Ionicons name="time-outline" size={12} color="#0C831F" />
+                      <Text style={styles.etaText}>{item.eta} arrival</Text>
+                      <Text style={styles.bulletDot}>•</Text>
+                      <Text style={styles.guaranteeTag}>Fixed price</Text>
+                    </View>
+                  </View>
+
+                  {/* Price & Book Button */}
+                  <View style={styles.serviceRight}>
+                    <Text style={styles.priceText}>{item.price}</Text>
+                    <View style={styles.bookPill}>
+                      <Text style={styles.bookPillText}>Book</Text>
+                      <Ionicons name="chevron-forward" size={12} color="#1C1C1C" />
+                    </View>
+                  </View>
+                </TouchableOpacity>
+
+                {idx < filteredServices.length - 1 && <View style={styles.divider} />}
               </View>
-
-              <View style={styles.cardDivider} />
-
-              <View style={styles.cardBottomRow}>
-                <View style={styles.pricePill}>
-                  <Text style={styles.priceText}>{item.price}</Text>
-                </View>
-
-                <View style={styles.etaBox}>
-                  <Ionicons name="time-outline" size={13} color="#0C831F" />
-                  <Text style={styles.etaText}>{item.eta} arrival</Text>
-                </View>
-
-                <View style={styles.bookActionPill}>
-                  <Text style={styles.bookActionText}>Book Now</Text>
-                  <Ionicons name="chevron-forward" size={12} color="#1C1C1C" />
-                </View>
-              </View>
-            </TouchableOpacity>
-          ))}
+            ))}
+          </View>
         </View>
 
-        {/* ── 7. SAHAYAK RSA PASS PROMO CARD (BLINKIT PASS THEME) ── */}
-        <TouchableOpacity
-          style={styles.rsaPassCard}
-          onPress={() => {
-            Alert.alert(
-              "Sahayak RSA Pass 🛡️",
-              "Unlimited free towing up to 50 km, battery jumpstarts, flat tyre repair, and zero emergency platform fee.\n\nOnly ₹99/month. Billed annually or monthly."
-            );
-          }}
-          activeOpacity={0.9}
-        >
-          <View style={styles.rsaPassContent}>
-            <View style={styles.rsaPassBadge}>
-              <Ionicons name="shield-checkmark" size={13} color="#FFFFFF" />
-              <Text style={styles.rsaPassBadgeText}>ANNUAL PASS · ₹99/MO</Text>
+        {/* ── 4. SAHAYAK RSA PASS CARD (MATCHING ACCOUNT TOGGLE CARD PATTERN) ── */}
+        <View style={styles.sectionMargin}>
+          <TouchableOpacity
+            style={styles.rsaPassCard}
+            onPress={() => {
+              Alert.alert(
+                "Sahayak RSA Pass 🛡️",
+                "Unlimited free towing up to 50 km, battery jumpstarts, flat tyre repair, and zero emergency platform fee.\n\nOnly ₹99/month. Billed annually or monthly."
+              );
+            }}
+            activeOpacity={0.85}
+          >
+            <View style={styles.rsaIconCircle}>
+              <Ionicons name="shield-checkmark" size={22} color="#0C831F" />
             </View>
-            <Text style={styles.rsaPassTitle}>Unlimited Roadside Rescue</Text>
-            <Text style={styles.rsaPassSub}>
-              Zero towing charges up to 50 km, free battery boost & tyre repair 24/7 across India.
-            </Text>
-            <View style={styles.rsaPassBtn}>
-              <Text style={styles.rsaPassBtnText}>Activate RSA Pass ›</Text>
+
+            <View style={{ flex: 1 }}>
+              <View style={styles.rsaHeaderRow}>
+                <Text style={styles.rsaTitle}>Sahayak RSA Pass</Text>
+                <View style={styles.passTag}>
+                  <Text style={styles.passTagText}>₹99/MO</Text>
+                </View>
+              </View>
+              <Text style={styles.rsaSub}>
+                Zero towing charges up to 50 km, free battery boost & tyre puncture repair across India.
+              </Text>
+              <Text style={styles.knowMoreLink}>Activate Annual Pass ›</Text>
             </View>
+
+            <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
+          </TouchableOpacity>
+        </View>
+
+        {/* ── 5. THREE TRUST GUARANTEES (EXACT MATCH TO ACCOUNT 3-CARD ROW) ── */}
+        <View style={styles.cardsRowWrapper}>
+          <View style={styles.threeCardItem}>
+            <View style={styles.threeCardIconBox}>
+              <Ionicons name="speedometer-outline" size={24} color="#0C831F" />
+            </View>
+            <Text style={styles.threeCardTitle}>15-Min ETA</Text>
+            <Text style={styles.threeCardSub}>Live GPS fleet</Text>
           </View>
 
-          <Image
-            source={require("../../../../assets/for_you/rsa_pass.png")}
-            style={styles.rsaPassImage}
-            resizeMode="contain"
-          />
-        </TouchableOpacity>
-
-        {/* ── 8. THREE TRUST GUARANTEES (ACCOUNT 3-CARD ROW MATCH) ── */}
-        <View style={styles.guaranteeRow}>
-          <View style={styles.guaranteeCard}>
-            <View style={[styles.guaranteeIconCircle, { backgroundColor: "#E6F4EA" }]}>
-              <Ionicons name="speedometer-outline" size={20} color="#0C831F" />
+          <View style={styles.threeCardItem}>
+            <View style={styles.threeCardIconBox}>
+              <Ionicons name="shield-checkmark-outline" size={24} color="#1C1C1C" />
             </View>
-            <Text style={styles.guaranteeTitle}>15-Min ETA</Text>
-            <Text style={styles.guaranteeSub}>Live GPS fleet</Text>
+            <Text style={styles.threeCardTitle}>Fixed Rates</Text>
+            <Text style={styles.threeCardSub}>Zero surge</Text>
           </View>
 
-          <View style={styles.guaranteeCard}>
-            <View style={[styles.guaranteeIconCircle, { backgroundColor: "#F0F0F0" }]}>
-              <Ionicons name="shield-checkmark-outline" size={20} color="#1C1C1C" />
+          <View style={styles.threeCardItem}>
+            <View style={styles.threeCardIconBox}>
+              <Ionicons name="ribbon-outline" size={24} color="#C2850C" />
             </View>
-            <Text style={styles.guaranteeTitle}>Fixed Rates</Text>
-            <Text style={styles.guaranteeSub}>No roadside surge</Text>
-          </View>
-
-          <View style={styles.guaranteeCard}>
-            <View style={[styles.guaranteeIconCircle, { backgroundColor: "#FEF6D8" }]}>
-              <Ionicons name="ribbon-outline" size={20} color="#E5B933" />
-            </View>
-            <Text style={styles.guaranteeTitle}>Verified Pros</Text>
-            <Text style={styles.guaranteeSub}>Certified mechanics</Text>
+            <Text style={styles.threeCardTitle}>Verified Pros</Text>
+            <Text style={styles.threeCardSub}>Certified teams</Text>
           </View>
         </View>
       </ScrollView>
@@ -384,79 +393,33 @@ const styles = StyleSheet.create({
     backgroundColor: "#F5F6F8",
   },
   scrollContent: {
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 100,
+    paddingBottom: 110,
   },
 
-  // 1. Header Row
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 14,
-  },
-  screenTitle: {
-    fontSize: 22,
-    fontFamily: Typography.fontFamily.bold,
-    fontWeight: "800",
-    color: "#1C1C1C",
-    letterSpacing: -0.4,
-  },
-  screenSubtitle: {
-    fontSize: 13.5,
-    fontFamily: Typography.fontFamily.medium,
-    fontWeight: "500",
-    color: "#5E6470",
-    marginTop: 3,
-  },
-  sosButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#1C1C1C",
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: "#E23744",
-    gap: 4,
-    elevation: 2,
-  },
-  sosButtonText: {
-    fontSize: 12,
-    fontFamily: Typography.fontFamily.bold,
-    color: "#E23744",
-    letterSpacing: 0.5,
-  },
-
-  // 2. Active Vehicle Selector Card
+  // 1. Active Vehicle Selector Card (Account View Match)
   vehicleCard: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
     backgroundColor: "#FFFFFF",
     borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    marginHorizontal: 16,
+    marginTop: 14,
     borderWidth: 1,
     borderColor: "#EFF1F5",
-    marginBottom: 12,
     elevation: 1,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.03,
     shadowRadius: 3,
-  },
-  vehicleCardLeft: {
-    flexDirection: "row",
-    alignItems: "center",
     gap: 12,
   },
   vehicleIconCircle: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: "#F5F6F8",
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#FEF6D8",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -467,58 +430,29 @@ const styles = StyleSheet.create({
     color: "#1C1C1C",
   },
   vehicleMeta: {
-    fontSize: 11.5,
-    fontFamily: Typography.fontFamily.regular,
+    fontSize: 12,
+    fontFamily: Typography.fontFamily.medium,
     color: "#5E6470",
     marginTop: 2,
   },
-  switchPill: {
-    backgroundColor: "#F5F6F8",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: "#EFF1F5",
-  },
-  switchPillText: {
-    fontSize: 11.5,
-    fontFamily: Typography.fontFamily.bold,
-    fontWeight: "700",
-    color: "#1C1C1C",
-  },
-
-  // 3. Search Bar
-  searchContainer: {
+  switchButton: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-    gap: 10,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: "#EFF1F5",
-    elevation: 1,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.03,
-    shadowRadius: 3,
+    gap: 2,
   },
-  searchInput: {
-    flex: 1,
-    fontSize: 13.5,
-    fontFamily: Typography.fontFamily.medium,
-    fontWeight: "500",
+  switchButtonText: {
+    fontSize: 12.5,
+    fontFamily: Typography.fontFamily.semiBold,
+    fontWeight: "600",
     color: "#1C1C1C",
-    padding: 0,
   },
 
-  // 4. Filters Horizontal Scroll
+  // 2. Filter Pills
   filtersScroll: {
-    gap: 8,
+    paddingHorizontal: 16,
+    paddingTop: 12,
     paddingBottom: 4,
-    marginBottom: 16,
+    gap: 8,
   },
   filterPill: {
     flexDirection: "row",
@@ -529,12 +463,6 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
     borderColor: "#EFF1F5",
-    gap: 6,
-    elevation: 1,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.03,
-    shadowRadius: 3,
   },
   filterPillActive: {
     backgroundColor: "#1C1C1C",
@@ -542,228 +470,211 @@ const styles = StyleSheet.create({
   },
   filterPillText: {
     fontSize: 12.5,
-    fontFamily: Typography.fontFamily.semiBold,
-    fontWeight: "600",
+    fontFamily: Typography.fontFamily.medium,
+    fontWeight: "500",
     color: "#5E6470",
   },
   filterPillTextActive: {
     color: "#FFFFFF",
+    fontWeight: "700",
   },
 
-  // 5. Section Heading
-  sectionHeading: {
+  // Section Margins
+  sectionMargin: {
+    paddingHorizontal: 16,
+    marginTop: 16,
+  },
+  sectionGroupTitle: {
     fontSize: 16,
     fontFamily: Typography.fontFamily.bold,
     fontWeight: "800",
     color: "#1C1C1C",
+    marginBottom: 8,
     letterSpacing: -0.2,
-    marginBottom: 10,
   },
 
-  // 6. Services Cards List
-  servicesList: {
-    gap: 10,
-  },
-  serviceCard: {
+  // 3. Grouped Card & Service Rows (Account View Match)
+  groupedCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 16,
     borderWidth: 1,
     borderColor: "#EFF1F5",
-    padding: 14,
+    overflow: "hidden",
     elevation: 1,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.03,
     shadowRadius: 3,
   },
-  cardMainRow: {
+  serviceRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    gap: 12,
   },
-  cardBadge: {
-    alignSelf: "flex-start",
-    paddingHorizontal: 7,
-    paddingVertical: 2.5,
-    borderRadius: 6,
-    marginBottom: 6,
-  },
-  badgeSuccess: {
-    backgroundColor: "#E6F4EA",
-  },
-  badgeWarning: {
-    backgroundColor: "#FEF6D8",
-  },
-  badgeInfo: {
-    backgroundColor: "#F0F0F0",
-  },
-  cardBadgeText: {
-    fontSize: 9.5,
-    fontFamily: Typography.fontFamily.bold,
-    fontWeight: "800",
-    letterSpacing: 0.3,
-  },
-  badgeTextSuccess: {
-    color: "#0C831F",
-  },
-  badgeTextWarning: {
-    color: "#1C1C1C",
-  },
-  badgeTextInfo: {
-    color: "#1C1C1C",
-  },
-  cardTitle: {
-    fontSize: 15.5,
-    fontFamily: Typography.fontFamily.bold,
-    fontWeight: "700",
-    color: "#1C1C1C",
-    letterSpacing: -0.2,
-    marginBottom: 4,
-  },
-  cardDesc: {
-    fontSize: 12,
-    fontFamily: Typography.fontFamily.regular,
-    color: "#64748B",
-    lineHeight: 16,
-  },
-  cardImageWrapper: {
-    width: 68,
-    height: 54,
+  serviceIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
   },
-  cardImage: {
-    width: 64,
-    height: 52,
+  serviceContent: {
+    flex: 1,
   },
-  cardDivider: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: "#F0F2F5",
-    marginVertical: 10,
-  },
-  cardBottomRow: {
+  titleRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    gap: 6,
   },
-  pricePill: {
+  serviceName: {
+    fontSize: 14,
+    fontFamily: Typography.fontFamily.bold,
+    fontWeight: "700",
+    color: "#1C1C1C",
+  },
+  cleanBadge: {
+    borderWidth: 1,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
+  cleanBadgeText: {
+    fontSize: 9.5,
+    fontFamily: Typography.fontFamily.bold,
+    fontWeight: "800",
+    letterSpacing: 0.2,
+  },
+  serviceDesc: {
+    fontSize: 12,
+    fontFamily: Typography.fontFamily.regular,
+    color: "#5E6470",
+    marginTop: 2,
+    lineHeight: 16,
+  },
+  metaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 4,
+    gap: 4,
+  },
+  etaText: {
+    fontSize: 11.5,
+    fontFamily: Typography.fontFamily.bold,
+    fontWeight: "700",
+    color: "#0C831F",
+  },
+  bulletDot: {
+    fontSize: 10,
+    color: "#94A3B8",
+  },
+  guaranteeTag: {
+    fontSize: 11,
+    fontFamily: Typography.fontFamily.medium,
+    color: "#64748B",
+  },
+  serviceRight: {
+    alignItems: "flex-end",
+    gap: 6,
+  },
+  priceText: {
+    fontSize: 15,
+    fontFamily: Typography.fontFamily.bold,
+    fontWeight: "800",
+    color: "#1C1C1C",
+  },
+  bookPill: {
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: "#F5F6F8",
     paddingHorizontal: 9,
     paddingVertical: 4,
     borderRadius: 8,
+    gap: 2,
   },
-  priceText: {
-    fontSize: 13,
+  bookPillText: {
+    fontSize: 11.5,
     fontFamily: Typography.fontFamily.bold,
     fontWeight: "700",
     color: "#1C1C1C",
   },
-  etaBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  etaText: {
-    fontSize: 12,
-    fontFamily: Typography.fontFamily.semiBold,
-    fontWeight: "600",
-    color: "#0C831F",
-  },
-  bookActionPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#F5F6F8",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: "#EFF1F5",
-    gap: 3,
-  },
-  bookActionText: {
-    fontSize: 12,
-    fontFamily: Typography.fontFamily.bold,
-    fontWeight: "700",
-    color: "#1C1C1C",
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: "#F0F2F5",
+    marginLeft: 68,
   },
 
-  // 7. Sahayak RSA Pass Promo Card
+  // 4. RSA Pass Card (Account Toggle Card Match)
   rsaPassCard: {
-    marginTop: 18,
-    backgroundColor: "#0C831F",
+    backgroundColor: "#FFFFFF",
     borderRadius: 16,
     padding: 16,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    borderWidth: 1,
+    borderColor: "#EFF1F5",
     elevation: 1,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
+    shadowOpacity: 0.03,
+    shadowRadius: 3,
+    gap: 12,
   },
-  rsaPassContent: {
-    flex: 1,
-    paddingRight: 10,
+  rsaIconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#E6F4EA",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  rsaPassBadge: {
+  rsaHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.2)",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 20,
-    alignSelf: "flex-start",
-    gap: 4,
-    marginBottom: 8,
+    gap: 8,
   },
-  rsaPassBadgeText: {
+  rsaTitle: {
+    fontSize: 14,
+    fontFamily: Typography.fontFamily.bold,
+    fontWeight: "700",
+    color: "#1C1C1C",
+  },
+  passTag: {
+    backgroundColor: "#FEF6D8",
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
+  passTagText: {
     fontSize: 10,
     fontFamily: Typography.fontFamily.bold,
     fontWeight: "800",
-    color: "#FFFFFF",
-    letterSpacing: 0.4,
+    color: "#1C1C1C",
   },
-  rsaPassTitle: {
-    fontSize: 16,
-    fontFamily: Typography.fontFamily.bold,
-    fontWeight: "800",
-    color: "#FFFFFF",
-    letterSpacing: -0.3,
-  },
-  rsaPassSub: {
+  rsaSub: {
     fontSize: 11.5,
     fontFamily: Typography.fontFamily.regular,
-    color: "rgba(255, 255, 255, 0.85)",
-    marginTop: 4,
+    color: "#64748B",
+    marginTop: 3,
     lineHeight: 16,
   },
-  rsaPassBtn: {
-    marginTop: 12,
-    backgroundColor: "#FFFFFF",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    alignSelf: "flex-start",
-  },
-  rsaPassBtnText: {
+  knowMoreLink: {
     fontSize: 12,
     fontFamily: Typography.fontFamily.bold,
     fontWeight: "700",
     color: "#0C831F",
-  },
-  rsaPassImage: {
-    width: 76,
-    height: 76,
+    marginTop: 5,
   },
 
-  // 8. Guarantees 3-Card Row
-  guaranteeRow: {
+  // 5. Three Trust Cards (Exact Account View threeCardItem Match)
+  cardsRowWrapper: {
     flexDirection: "row",
+    paddingHorizontal: 16,
     gap: 10,
-    marginTop: 18,
+    marginTop: 16,
   },
-  guaranteeCard: {
+  threeCardItem: {
     flex: 1,
     backgroundColor: "#FFFFFF",
     borderRadius: 16,
@@ -779,26 +690,25 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.03,
     shadowRadius: 3,
   },
-  guaranteeIconCircle: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+  threeCardIconBox: {
+    width: 36,
+    height: 36,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 6,
+    marginBottom: 4,
   },
-  guaranteeTitle: {
-    fontSize: 12,
+  threeCardTitle: {
+    fontSize: 12.5,
     fontFamily: Typography.fontFamily.bold,
     fontWeight: "700",
     color: "#1C1C1C",
     textAlign: "center",
   },
-  guaranteeSub: {
+  threeCardSub: {
     fontSize: 10.5,
     fontFamily: Typography.fontFamily.regular,
     color: "#64748B",
-    marginTop: 2,
+    marginTop: 1,
     textAlign: "center",
   },
 });
