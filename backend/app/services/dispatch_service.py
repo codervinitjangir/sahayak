@@ -57,6 +57,7 @@ from app.config.redis_client import (
 from app.models.job import Job, JobAssignment
 from app.repositories import dispatch_repository, job_repository
 from app.schemas.partner import PartnerOfferItem, PartnerOfferJob
+from app.services import notification_service
 from app.utils.errors import (
     ConflictError,
     DispatchUnavailableError,
@@ -626,7 +627,15 @@ async def _accept(
     try:
         await dispatch_repository.mark_assignment_accepted(db, assignment)
         await _transition(
-            db, job, STATUS_ASSIGNED, note="Partner accepted the job", commit=False
+            db,
+            job,
+            STATUS_ASSIGNED,
+            note="Partner accepted the job",
+            commit=False,
+            # The partner is the actor here, so the owner is who hears about
+            # it. This is the only _transition call in this module with an
+            # actor at all — the others are the dispatcher giving up.
+            actor_role="partner",
         )
         await db.commit()
     except SQLAlchemyError as exc:
@@ -891,17 +900,28 @@ async def _create_offer(
     Separate from _transition so the job's status change and the offer can share
     a transaction when they happen together (dispatch) and not when they do not
     (a retry after a rejection, where the status is already 'matching').
+
+    The partner's "you have an offer" notification is written here rather than
+    in _transition, because an offer is not a status change: the job stays in
+    'matching' across every offer it makes, and 'matching' is silent. One row
+    per offer actually extended, not per candidate scored — dispatch offers the
+    top candidate and only moves down the list on a rejection.
     """
+    job_id = job.id
+    partner_id = uuid.UUID(str(scored.candidate.partner_id))
     try:
         assignment = await dispatch_repository.create_assignment_row(
             db,
-            job_id=job.id,
-            partner_id=uuid.UUID(str(scored.candidate.partner_id)),
+            job_id=job_id,
+            partner_id=partner_id,
             distance_at_offer_m=scored.candidate.distance_m,
             matching_score=scored.score,
             score_components=scored.components,
             assignment_rank=assignment_rank,
             was_baseline_choice=scored.was_baseline_choice,
+        )
+        await notification_service.notify_offer(
+            db, job_id=job_id, partner_id=partner_id
         )
         await db.commit()
     except SQLAlchemyError as exc:
@@ -909,7 +929,7 @@ async def _create_offer(
         log_event(
             "dispatch_offer_failed",
             level=logging.ERROR,
-            job_id=str(job.id),
+            job_id=str(job_id),
             outcome="failure",
             error_type=type(exc).__name__,
         )
@@ -920,19 +940,47 @@ async def _create_offer(
 
 
 async def _transition(
-    db: AsyncSession, job: Job, status: str, *, note: str, commit: bool = True
+    db: AsyncSession,
+    job: Job,
+    status: str,
+    *,
+    note: str,
+    commit: bool = True,
+    actor_role: Optional[str] = None,
 ) -> None:
-    """Move a job to a new status and record it in the timeline, atomically.
+    """Move a job to a new status, record it in the timeline and notify, atomically.
 
-    The pairing is the point: these two writes are never allowed to come apart,
-    so they are never written apart. commit=False lets a caller fold this into a
+    The pairing is the point: these writes are never allowed to come apart, so
+    they are never written apart. commit=False lets a caller fold this into a
     larger transaction (accept, where the assignment changes too) without
     letting it skip the history row.
+
+    The notification joins that set rather than sitting beside it. It is the
+    same class of record as the history row — a fact about a status change,
+    written because the change happened — so it gets the same treatment,
+    including no savepoint of its own. See ADR-019.
+
+    `actor_role` says who caused the change, and decides who is told: the rule
+    is that the actor is never notified of their own action. Every caller in
+    this module is either the partner accepting ('partner') or the dispatcher
+    itself giving up (None, which resolves to the owner). There is no dispatch
+    path where an owner is the actor — owner cancellation lives in job_service,
+    which has its own seam.
     """
+    # Captured before the try, because `job` is expired by a rollback in the
+    # except block and reading `job.id` off an expired instance on an
+    # AsyncSession emits a lazy SELECT that raises MissingGreenlet — out of the
+    # error handler, replacing a mapped failure with an unrelated one. The old
+    # code read it after the rollback; adding a third write inside the try made
+    # that path likelier to run, so it is fixed rather than left.
+    job_id = job.id
     try:
         await dispatch_repository.set_job_status(db, job, status)
         await job_repository.create_status_history_row(
-            db, job_id=job.id, status=status, note=note
+            db, job_id=job_id, status=status, note=note
+        )
+        await notification_service.notify_job_status_change(
+            db, job=job, status=status, actor_role=actor_role
         )
         if commit:
             await db.commit()
@@ -941,7 +989,7 @@ async def _transition(
         log_event(
             "job_status_transition_failed",
             level=logging.ERROR,
-            job_id=str(job.id),
+            job_id=str(job_id),
             target_status=status,
             outcome="failure",
             error_type=type(exc).__name__,

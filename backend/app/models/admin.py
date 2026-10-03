@@ -16,6 +16,17 @@ class Admin(Base):
     name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     email: Mapped[Optional[str]] = mapped_column(String(150), unique=True, nullable=True)
     role: Mapped[str] = mapped_column(String(20), default="ops", nullable=False)
+    # Supabase Auth's `sub` claim, as on User and Partner. Nullable because the
+    # seeded ops rows hold no account yet, unique so a token cannot resolve to
+    # two admins.
+    #
+    # There is no link_admin_auth: unlike a user or partner profile, an admins
+    # row is a privilege grant, and it is provisioned by an UPDATE from whoever
+    # holds database access rather than claimed self-service. See
+    # db/migrations/007 and ADR-020.
+    auth_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), unique=True, nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

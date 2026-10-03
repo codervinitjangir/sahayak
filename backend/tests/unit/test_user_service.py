@@ -85,6 +85,7 @@ def stub_repos(monkeypatch):
         "existing_by_email": None,
         "linked_user": None,
         "linked_partner": None,
+        "linked_admin": None,
         "created": None,
         "raise_on_create": None,
     }
@@ -101,6 +102,9 @@ def stub_repos(monkeypatch):
     async def get_partner_by_auth_id(_db, _auth_id):
         return state["linked_partner"]
 
+    async def get_admin_by_auth_id(_db, _auth_id):
+        return state["linked_admin"]
+
     async def create_user_row(_db, **kwargs):
         if state["raise_on_create"] is not None:
             raise state["raise_on_create"]
@@ -112,6 +116,7 @@ def stub_repos(monkeypatch):
     monkeypatch.setattr(user_service.user_repository, "create_user_row", create_user_row)
     monkeypatch.setattr(user_service.auth_repository, "get_user_by_auth_id", get_user_by_auth_id)
     monkeypatch.setattr(user_service.auth_repository, "get_partner_by_auth_id", get_partner_by_auth_id)
+    monkeypatch.setattr(user_service.auth_repository, "get_admin_by_auth_id", get_admin_by_auth_id)
     return state
 
 
@@ -342,6 +347,7 @@ def stub_identity(monkeypatch):
 
     monkeypatch.setattr(auth_service.auth_repository, "get_user_by_auth_id", none_by_auth_id)
     monkeypatch.setattr(auth_service.auth_repository, "get_partner_by_auth_id", none_by_auth_id)
+    monkeypatch.setattr(auth_service.auth_repository, "get_admin_by_auth_id", none_by_auth_id)
 
 
 class TestIdentityResolutionSplit:

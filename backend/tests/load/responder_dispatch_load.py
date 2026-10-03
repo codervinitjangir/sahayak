@@ -18,17 +18,23 @@ a product feature inside a measurement task.
 
 WHY THE OFFERS ARE READ FROM POSTGRES AND NOT FROM THE API
 ----------------------------------------------------------
-A real partner client cannot do what this script does. Two gaps make it
-impossible today, and both are reported rather than worked around quietly:
+A real partner client no longer has to do what this script does, and this comment
+is kept rather than deleted because the reason changed on 2026-09-27.
 
-  * CurrentAssignmentResponse exposes partner_id but not assignment_id, and
-    POST /api/v1/job-assignments/{assignment_id}/respond needs the assignment_id;
-  * there is no "list my offers" endpoint at all.
+When this file was written there was no way for a partner to discover the
+assignment_id that POST /api/v1/job-assignments/{assignment_id}/respond needs:
+CurrentAssignmentResponse exposes partner_id but not assignment_id, and there was
+no "list my offers" route at all. `GET /api/v1/partners/me/offers` has since
+shipped and closes that gap — a partner client can now go from "I have been
+offered a job" to "here is the id I must answer" entirely over the API.
 
-So a partner has no API path from "I have been offered a job" to "here is the id
-I must answer". Every *response* below goes over real HTTP against the real
-server — only the discovery of which id to answer is done by querying the
-database, because the API cannot currently answer that question.
+The database read is deliberately kept here anyway. This script's job is to be a
+load *generator* with a known, instant view of what is outstanding; polling the
+offers endpoint would add a request per responder per tick to the very connection
+pool whose ceiling is under measurement, and would make the responder's own
+latency part of the number. Every *response* below still goes over real HTTP
+against the real server — only the discovery is short-circuited, and now by
+choice rather than by necessity.
 
 WHY ACCEPTED JOBS ARE DRIVEN TO COMPLETION
 ------------------------------------------

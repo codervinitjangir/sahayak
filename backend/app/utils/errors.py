@@ -155,6 +155,18 @@ class ErrorCode:
     PARTNER_NOT_FOUND = "PARTNER_NOT_FOUND"
     INVALID_CATEGORY_CODE = "INVALID_CATEGORY_CODE"
 
+    # Notifications
+    #
+    # No notification with this id is addressed to the caller. Deliberately one
+    # code for "does not exist" and "belongs to someone else", and a 404 for
+    # both, per principle 6 — a notification's existence is itself the fact it
+    # conveys, so a 403 on a foreign id would confirm that some other account
+    # was told something, which is the whole of the secret.
+    #
+    # Note what this code does *not* cover: marking an already-read notification
+    # read is a success returning `updated: 0`, not an error. See ADR-019.
+    NOTIFICATION_NOT_FOUND = "NOTIFICATION_NOT_FOUND"
+
     # Users
     USER_NOT_FOUND = "USER_NOT_FOUND"
     # Phone (or email) already belongs to a registered vehicle owner. Mirrors
@@ -164,6 +176,14 @@ class ErrorCode:
     # The number being registered is not the number the caller's token proves
     # they control. See register_user in app/services/user_service.py.
     PHONE_MISMATCH = "PHONE_MISMATCH"
+
+    # Admin analytics
+    # `from` is later than `to`. Refused rather than answered, because the
+    # honest answer to an inverted window is "no jobs", and a report full of
+    # zeros reads as a finding about the pilot rather than a typo in a query
+    # string. The one error in this feature: everything else it can be asked is
+    # either a valid window or a 403.
+    INVALID_DATE_RANGE = "INVALID_DATE_RANGE"
 
 
 # Codes for HTTPExceptions raised by FastAPI itself (unknown route, unsupported

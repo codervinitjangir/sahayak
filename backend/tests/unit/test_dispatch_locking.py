@@ -79,6 +79,14 @@ class FakeSession:
     def __init__(self) -> None:
         self.committed = False
         self.rolled_back = False
+        # Staged-but-not-flushed objects. An accept transitions the job to
+        # 'assigned', which notifies the owner in the same transaction
+        # (ADR-019), and the notification repository stages with add() and
+        # deliberately does not flush.
+        self.added: list = []
+
+    def add(self, obj) -> None:
+        self.added.append(obj)
 
     async def commit(self) -> None:
         self.committed = True

@@ -226,7 +226,7 @@ The general lesson is the one worth keeping: **a filter enforces an invariant at
 
 **Amendment, 2026-09-29 — until this date the smoothing above had no input to smooth.** `rating_score` reads `partners.rating_avg` and `partners.rating_count`, and nothing in the system could write either column: the Postgres trigger meant to maintain them resolved the rated partner through `job_assignments.status = 'accepted'`, which completing a job has already left. So `rating_count` was zero for every partner forever, every candidate took the `UNRATED_PARTNER_RATING_SCORE = 0.7` branch, and this ADR's entire rationale — that evidence should accumulate before it moves a score — described arithmetic that never ran on a real rating. Ranking was decided by distance, load and skill alone, at effective weights of 0.5 / 0.25 / 0.25 rather than the documented 0.4 / 0.2 / 0.2 / 0.2.
 
-**ADR-018** records who maintains those two columns now and why the aggregate is recomputed from source rather than incremented. The division of ownership between the two ADRs is deliberate: the formula, the prior and the cap live here; the writer, its lock and its storage exception live there. It also matters for reading any earlier dispatch measurement — no ranking observed before 2026-09-29 exercised this dimension.
+**ADR-018** records who maintains those two columns now and why the aggregate is recomputed from source rather than incremented. The division of ownership between the two ADRs is deliberate: the formula, the prior and the cap live here; the writer, its lock and its storage exception live there. It also matters for reading any earlier dispatch measurement — no ranking *produced by the application* before 2026-09-29 exercised this dimension, though the load-test harness did, by writing the columns itself (ADR-018's Consequence, corrected 2026-09-30). What that dimension is worth was measured on 2026-09-30 and is load-test report §4.2: without it this formula reduces exactly to `argmin(distance)`.
 
 ---
 
@@ -840,7 +840,9 @@ This is measured, not reasoned. A probe inserted ratings against a genuinely com
 
 ## Consequence
 
-ADR-009's rating dimension is live for the first time, so dispatch ranking now genuinely varies by reputation. Any dispatch measurement taken before 2026-09-29 — including the load-test figures — was taken with `rating_score` pinned at 0.7 for every candidate. The evaluation write-up must say so rather than comparing results across that line as though one algorithm produced both.
+ADR-009's rating dimension is live for the first time, so dispatch ranking now genuinely varies by reputation. Any dispatch ranking *produced by the application* before 2026-09-29 was computed with `rating_score` pinned at 0.7 for every candidate. The evaluation write-up must say so rather than comparing results across that line as though one algorithm produced both.
+
+**Corrected 2026-09-30 — this consequence originally read "including the load-test figures", and that clause was false.** `tests/load/seed_dispatch_load.py` sets `rating_avg` and `rating_count` with a direct `UPDATE`, precisely because no endpoint existed to set them; its own comment says so. The load harness was therefore the one place in the system where this dimension *did* work, and it worked by bypassing the writer that was broken. Every matching-accuracy figure in `docs/load-test-dispatch-concurrency.md` §4 and §8.1 is a rating-live figure. Production was the rating-blind system; the harness never was. The distinction is not cosmetic: it means a plain re-run of the load test after this fix measures no change, and the question "what was this dimension worth" needed a controlled experiment instead of a re-run. That experiment was run on 2026-09-30 and is §4.2 of the load-test report — the rating-blind arm diverges from a pure-nearest baseline on **0.0 %** of decisions against **70.0 %** with real ratings, i.e. with this dimension dead the weighted engine was not merely degraded but provably identical to the naive baseline ADR-009 exists to beat, for every candidate set in which load and skill are constant.
 
 **A stated gap.** The partner→owner direction is stored and returned but aggregated nowhere: `users` has no rating columns and nothing in dispatch reads an owner's reputation, so there is no truthful number to compute yet. The rows are kept because they are the evidence a later feature would be built from. This is recorded here rather than as a TODO in code, because a TODO would suggest someone is expected to remove it.
 
@@ -855,3 +857,232 @@ ADR-009's rating dimension is live for the first time, so dispatch ranking now g
 Live: **44 of 44** assertions in `tests/integration/check_ratings.py`, against real Postgres and real Supabase tokens, in QA phone namespace `+91900000099`. The control (`--reverted`) substitutes a faithful port of the dropped trigger's predicate for `recompute_partner_rating` and scores **38 of 44**, where the six failures are all and only the aggregate assertions and every one of them reads `('0.0', 0)` — precisely the behaviour that was live in this database until migration 004. The three decisive lines of the real arm: `('0.0', 0) → ('5.0', 1)` on the first rating, `('4.5', 2)` after a second, and `('4.0', 2)` after one rating is deleted directly in SQL, which is the self-healing property an incremental writer cannot produce.
 
 Full regression: **248 unit tests** and **564 live assertions** across twelve harnesses, every harness exiting 0, database returned to baseline — 8 tables at documented counts, `ratings` at 0, trigger and function both absent.
+
+---
+
+# ADR-019: Notifications are written in the transaction that caused them, and address the party that did not act
+
+**Status:** Accepted
+
+**Date:** 2026-10-01
+
+## Decision
+
+In-app notifications, six parts, in the order they matter:
+
+1. **A notification is written inside the same transaction as the status change that caused it.** No savepoint, no separate transaction, no best-effort `try/except: pass`. The repository stages the row with `db.add()` and deliberately does not flush, so the `INSERT` rides the caller's existing flush and commit. If the notification cannot be written, the status change does not happen either.
+2. **The recipient is the party that did not act.** The owner cancels → the partners holding open assignments are told. A partner accepts, moves or cancels → the owner is told. The actor is never notified of their own action.
+3. **`requested` and `matching` are silent.** Both are written to `job_status_history`, neither produces a notification.
+4. **Message text contains no names, no phone numbers, no coordinates, no addresses, no prices and nothing copied from a request body.** Every message is one of eight fixed strings keyed by event.
+5. **`event` is the contract; `message` is prose.** Clients branch on `event`, which is a closed vocabulary owned by one module-level table in `app/services/notification_service.py`. `message` may be reworded at any time.
+6. **The feed is offset-paginated, ordered `sent_at DESC, id DESC`, and marking read is idempotent.** A second mark-read is `200` with `updated: 0`, not `409`. A notification belonging to another account returns `404 NOTIFICATION_NOT_FOUND` — the same status and the same code as one that never existed.
+
+Four seams write notifications: the dispatch offer (`job_offered`, to the partner), the accept (`job_accepted`, to the owner), every partner-driven lifecycle transition, and the owner's cancellation. Nothing else notifies, and nothing is delivered anywhere — `channel` is `'in_app'` and the client polls.
+
+## Context
+
+The feature as specified is "job status change alerts", and the `notifications` table had existed since the original schema with zero rows and no writer. That combination made almost every decision here free to take and expensive to defer, which is why this ADR is longer than the feature is large.
+
+The hard part is not the four read endpoints. It is that the writer is called from inside four other services' transactions, each of which already had a correctness story — ADR-015's row locks, principle 4's history rows, ADR-017's contact-release rules — and a notification is a *second* effect that has to fit inside each of those stories without weakening any of them.
+
+## Rationale
+
+**Same transaction (1).** The alternative everyone reaches for is to notify after the commit, so that a notification failure cannot fail the user's request. That trade is wrong here, and the reason is specific rather than aesthetic: the system has no retry, no outbox and no worker. A notification dropped after commit is dropped permanently and silently — the owner's job moves to `completed` and their feed never says so, and nothing anywhere records that a message was owed. Inside the transaction, the only possible failure is one that also rolls the status change back, which leaves the system in a state the client can see and retry. Given two choices, "the status change and the notification are both absent" is recoverable and "the status change happened and the notification is gone" is not.
+
+This also makes the notification inherit, for free, every guarantee the surrounding transaction already bought: the `jobs` row lock from ADR-015 means two racing transitions cannot both notify, and the history row and the notification are either both present or both absent, so the feed can never disagree with `job_status_history`.
+
+**The non-actor rule (2).** Stated as "notify the other party" rather than "notify the owner" because the two are indistinguishable in five of the six events and differ in exactly one. A partner accepting, progressing or cancelling all notify the owner; only the owner's own cancellation notifies the partner. So the naive version — the owner is the one who cares about their job — is right 5/6 of the time and wrong in the single case where a mechanic is driving to a job that no longer exists. That ratio is the reason the rule is written as a function of `actor_role` and the reason the live control run attacks precisely that branch (see Evidence).
+
+**Silence on `requested` and `matching` (3).** Both statuses are written during `POST /jobs`, synchronously, before the response is returned. Notifying on them would mean the owner's feed gains two rows describing the request the client is still rendering the response to — a notification is for something that happened while you were not looking. Principle 4 is about the audit trail, not about mail, and this is where the two deliberately diverge.
+
+**No PII in message text (4).** This is the one rule in the list that is a privacy decision rather than a correctness one. ADR-017 settled that contact details follow the assignment, not the role, and `GET /jobs/{id}` enforces that at read time. A notification message is a *stored string in a different table that nothing re-gates*. Anything baked into it at write time sits permanently outside ADR-017's gate and would still be sitting there if those rules were tightened. The safe version of a feature like that is one with nothing in it to leak, so the messages carry no identity at all and the client joins on `job_id` for anything it wants to display — through the endpoint that does the gating.
+
+**`event` over `message` (5), and no CHECK constraint on it.** Exactly the split the error envelope already makes: `code` is what clients branch on, `message` is for humans (`app/schemas/common.py`). A client cannot pick an icon or a deep-link target by matching English, and matching English breaks the first time the wording improves. The column is left unconstrained in the database on the reasoning recorded in migration 005: the vocabulary grows with every feature that notifies, a CHECK means a migration per new kind, and the predictable result of that friction is somebody reusing an almost-right existing value — which corrupts the column's meaning far worse than an unconstrained string does. The vocabulary's integrity is enforced where it is cheap: one writer, one table, asserted by unit test and by a live assertion that no unknown value reached the column.
+
+**Offset pagination and the tie-break (6).** Offset, not cursor, because the feed is small, bounded by one account's activity, and the client needs `total` for a "4 of 12" affordance that a cursor does not give. `sent_at DESC` alone is not a stable sort, and the instability is not theoretical: `now()` is transaction-start time, so an owner cancelling a job with two open offers writes two notifications whose `sent_at` are identical to the microsecond. Under an unstable sort, offset pagination does not merely reorder — page 1 and page 2 can show the same row twice and omit another entirely. `id DESC` is the tie-break; the live harness manufactures the tie in SQL and asserts the pages are disjoint and complete.
+
+**`updated: 0` rather than 409 (6).** The client's intent — "this should be read" — holds whether or not the row was already read, so a retry of a request that succeeded is not a conflict. Returning 409 would make an idempotent retry, which is the normal consequence of a dropped response on a phone network, look like a failure the UI has to explain. The response reports what changed (`updated`) and the resulting badge, so a client that cares can tell the difference without being told it did something wrong.
+
+**404, not 403, for somebody else's notification (6).** Principle 6, applied unchanged. The live harness asserts that marking another account's notification read and marking a random UUID read are indistinguishable: same status, same code.
+
+## Alternatives considered
+
+**Notify after commit, in a `try/except` that swallows.** Rejected for the reason above: with no outbox and no worker, every failure is silent and permanent. This becomes the right answer the day a delivery worker exists, because then "failed to notify" is a retryable state rather than a lost message — and the `channel` column already carries `'push'` and `'sms'` so that worker has somewhere to land.
+
+**A `SAVEPOINT` around the notification write.** This is the sophisticated version of the same mistake. It would let the status change commit while the notification rolled back, which is exactly the unrecoverable half of the trade, and it adds a round trip to every status change to buy it.
+
+**Notify both parties on every event.** Tempting because it deletes the `actor_role` parameter. Rejected because it makes every actor's feed a log of their own button presses, and because it does not actually simplify: the owner's cancellation would still need the partner list from the assignments, so the branch stays and only the rule gets vaguer.
+
+**A CHECK constraint on `event`.** Covered in Rationale and migration 005. Rejected for the friction it creates, with the vocabulary enforced in the application instead.
+
+**Cursor pagination.** Rejected: no `total`, and a cursor is for feeds that grow faster than they are read. This one does not.
+
+**A `Literal` type for `event` in the response schema.** Rejected for the same reason as the CHECK — a schema change would gate every new notification kind — and recorded as a comment on `NotificationBase` so the omission reads as a decision rather than an oversight.
+
+## Consequence
+
+**Migration 005 made the table writable: five changes to a table with no rows.** `channel` gained `'in_app'` (its CHECK permitted only `'push'` and `'sms'`, neither of which exists anywhere in the system — writing `'push'` for a row nothing pushes is ADR-018's dropped-trigger defect again, a stored value asserting a behaviour that does not happen). `recipient_type`, `recipient_id` and `channel` became `NOT NULL`, because both CHECKs pass on `NULL` and the table as shipped would have accepted a notification addressed to nobody — a row invisible to every query the endpoints can issue, written and stored and never delivered or reported. A composite index on `(recipient_type, recipient_id, sent_at DESC)` serves both the filter and the ordering, on what will be the fastest-growing table in the schema. A partial index on the same pair `WHERE is_read IS NOT TRUE` serves the badge, which is the most frequent read in the feature and shrinks as users read their mail. And the `event` column was added, immediately `NOT NULL` — only safe because the table is empty; against rows there would have been no honest value to backfill, since an event kind cannot be recovered from prose.
+
+**Migration 006 added `ON DELETE CASCADE` to `notifications.job_id`, and how it was found is the part worth keeping.** Not by reading the schema. The FK as originally written had no `ON DELETE` clause, which means `NO ACTION`, which means a job with notifications attached cannot be deleted at all. Nine of the thirteen `check_*.py` harnesses create jobs and delete them again in `purge()`, so the hour notifications started being written, every one of those deletes began failing — *inside cleanup*, which runs before the first assertion and again in `finally`. A purge that raises leaves its own rows behind, so each harness then failed at its next start, having run no checks at all. Fifteen jobs, forty-three notifications, seven partners and six users were stranded across five namespaces before the cause was clear. The new harness passed 79/79 throughout, because it was written knowing the FK had no cascade and deletes notifications before jobs; only the harnesses that could not have known broke. The generalisable shape: **adding a child table is a change to the parent's delete path, and it surfaces somewhere other than the new feature's tests.**
+
+The cascade is also the right answer on the merits, not merely the convenient one. The schema already splits the five children of `jobs` consistently — `job_assignments` and `job_status_history` cascade, `ratings` (evidence feeding the score, ADR-018) and `payments` (money) do not — and notifications are on the first side: a notification stores no fact not already recoverable from the job and its history, and every row deep-links to `job_id`, so one outliving its job is not an orphaned record but an unrenderable one. The privacy argument settles it: per decision 4 above, a message is text about a job sitting outside that job's access gate, so if a job were ever removed, leaving its notifications would leave feed entries referring to a job whose access rules no longer exist to consult. Nothing in production deletes a job — cancellation is a status — so this constraint governs test cleanup and whatever retention job eventually exists, which is exactly why it was cheap now. Recorded here rather than in its own ADR, per the rule that a consequence of a decision extends that decision.
+
+**A second `MissingGreenlet` of the class ADR-018 recorded, in code this task touched.** `dispatch_service._transition` logged `job_id=str(job.id)` in its `except` block *after* `await db.rollback()`. Same mechanism as the rating one: rollback expires every object in the identity map unconditionally, the attribute read emits a lazy `SELECT`, and on an `AsyncSession` that is a `MissingGreenlet` raised out of the error handler — so a mapped 409 would have been served as a 500. Fixed by binding `job_id` before the `try`. The rule ADR-018 stated has now caught its second instance, which is the argument for it being a rule rather than an anecdote.
+
+**The unit suite's test doubles had silently stopped resembling the rows they stand for.** Adding the writer broke 18 existing tests across four files: `FakeJob` in `test_job_lifecycle.py` had no `user_id`, and `FakeSession` in four files had no `add()`. Both are honest gaps rather than production defects — the real `Job` has the column and the real `Session` has the method — but the 18 failures were worth more than the fix, because the newly-added `session.added` list is an assertion target that did not exist before. Two test classes now use it: `TestTheOwnerIsToldWhatThePartnerDid` (6 tests) and `TestThePartnerIsToldTheJobIsOff` (6 tests). They are deliberately *not* in `test_notification_service.py`: that file proves the recipient *rule*, these prove the *wiring* at each seam, and a rule that is correct and never invoked is the failure mode neither file alone would catch. `TestThePartnerIsToldTheJobIsOff` lives in the cancellation file because that is the only seam in the system where a partner is the recipient — a bug that always addressed the owner would pass every other test in the suite and fail only there.
+
+**Stated gaps, so none is rediscovered as a hole.** There is no delivery: nothing pushes, nothing sends SMS, and `channel` is always `'in_app'`, which is why no row claims a delivery that did not happen. There is no real-time transport — the client polls, so a notification's latency is the client's poll interval, and WebSockets/SSE remain unbuilt. There is still no offer-expiry mechanism (deferred before this task and unchanged by it), so `job_offered` has no deadline and no countdown should be rendered against it. `job_no_match_found` is defined and wired but is the one event of the eight this task's live harness does not exercise, because producing it requires a job no partner is eligible for, which is `check_dispatch_flow.py`'s territory. And nothing marks a notification read automatically — opening the feed does not clear the badge; the client must call the endpoint.
+
+**Evidence.** 40 unit tests in `tests/unit/test_notification_service.py` covering the recipient rule, the silent statuses, the event vocabulary and the message text, plus the 12 wiring tests described above, in the files whose seams they test.
+
+Live: **79 of 79** assertions in `tests/integration/check_notifications.py`, against real Postgres and real Supabase tokens, in QA phone namespace `+91900000095`. The control (`--reverted`) removes the actor check from `recipients_for` so it always answers `("user",)` — the plausible wrong version, right for the accept, right for every lifecycle step, right for a partner's cancellation — and scores **71 of 79**. All eight failures are the owner's-cancellation branch and the one downstream assertion that reads the owner's whole feed: the mechanic holding the cancelled job is never told, and the owner receives a notification about the button they just pressed. A control that deleted the routes would have failed everything and proved only that the routes exist.
+
+The decisive live assertions are the ones no unit test can reach, because each needs two accounts' feeds read after one event: an offer notifies the partner while the owner's feed stays empty (the only live proof that `requested` and `matching` are silent, asserted against the two `job_status_history` rows that *were* written); the accept notifies the owner and not the accepting partner; three lifecycle steps add exactly three owner rows, newest first, one per non-silent history row; four rows forced to share a `sent_at` in SQL page disjointly and completely; another account's notification and a random UUID are both `404 NOTIFICATION_NOT_FOUND`; and no message among the 11 the run writes contains a name, a phone number, an address, a digit at all, or the free-text cancellation reason the owner typed.
+
+Full regression: **307 unit tests** and **646 live assertions** across thirteen harnesses, every harness exiting 0, database returned to the documented baseline (`users` 1, `vehicles` 1, `jobs` 2, `job_status_history` 2, everything else 0). One harness, `check_dispatch_capacity.py`, failed once mid-regression on a transport stall — a Redis `TimeoutError` and `asyncpg.ConnectionDoesNotExistError` in the same second — and passed 49/49 on re-run; its leftover rows are what prompted the fail-fast precondition now at the top of `check_notifications.py`, which refuses to start if the shared QA owner already has notifications and says which harness's mess to clear, rather than reporting eighteen mystery assertion failures about feed lengths.
+
+---
+
+# ADR-020: An admin is a row in one of our own tables, and there is deliberately no way to claim one
+
+**Status:** Accepted
+
+**Date:** 2026-10-01
+
+## Decision
+
+Admin identity, five parts:
+
+1. **An admin is a row in `admins` with a Supabase `sub` in `admins.auth_user_id`.** Not a role claim on the JWT, not a flag on `users`. `resolve_identity` resolves it by the same mechanism as the other two roles — an indexed lookup on our own column (ADR-010, ADR-011) — and `Role` is now `Literal["user", "partner", "admin"]`.
+2. **There is no admin link-auth endpoint.** Provisioning is `UPDATE admins SET auth_user_id = '<sub>' WHERE email = 'ops@sahayak.in';` run by whoever already holds database access. The absence is the security property, not an unfinished edge.
+3. **More than one local row for one `sub` is an `InternalError`, not a precedence rule.** The pre-existing user+partner case plus the two the third table adds all answer 500.
+4. **All three places an account gets bound to a local row check all three tables.** `register_user`, `link_user_auth`, `link_partner_auth`. These checks are the only thing preventing the state in (3), because no UNIQUE index spans two tables.
+5. **`require_admin` is the entire authorization boundary for the analytics routes,** and `admins.role` (`'ops'` vs `'super_admin'`) is not consulted.
+
+## Context
+
+The admin analytics endpoints read across every partner, every job and every offer in the system — including the matching-strategy comparison data the evaluation rests on. They are the first routes in the API with no owner to scope them to, so they are also the first that need a third role. `admins` had existed since the original schema with two seeded rows, an `email`, a `role` column, and nothing in the codebase that read it.
+
+## Rationale
+
+**Why a local column and not a role claim (1).** Supabase can carry arbitrary `app_metadata` into the token, and reading `claims["app_metadata"]["role"] == "admin"` would have cost one lookup less than the column does. Rejected on three grounds. It makes granting fleet-wide read access *an edit in the Supabase dashboard* — invisible to this repository, absent from code review, and impossible to express as a migration, so the answer to "who can read every customer's jobs, and since when" would live in a web console's audit log rather than in the schema. It splits the identity model: users and partners resolve to one of our rows, and a third role that resolves to a string in a token means `Identity.local_id` has no meaning for one of the three values of `Identity.role`. And it leaves `admins` unread forever — a table in the schema that nothing consults is a table that drifts until someone discovers it is decorative.
+
+**Why no link-auth endpoint (2), which is the decision this ADR exists for.** The obvious move was to copy `link_partner_auth`. Reading it first is what stopped that: **neither existing link-auth endpoint matches the token against the target row.** `link_user_auth` and `link_partner_auth` check that the row exists, that its `auth_user_id` is `NULL`, and that the calling account owns nothing else. No phone claim is compared to `users.phone` or `partners.phone`. Their entire authority is the premise *an unlinked profile is unclaimed*.
+
+For a profile that premise is a defensible trade. A `partners` row before link-auth is inert — unverified, off-shift, bound to nothing — so the worst case is a stranger claiming an un-onboarded mechanic's empty profile, which surfaces immediately because the real mechanic then cannot link and calls ops. For a **privilege grant** the same premise is not a trade, it is a hole: any logged-in customer who learned an `admins` row's UUID would acquire read access to every job, every partner and the divergence data, and the only thing standing in the way would be the secrecy of a UUID — a value that appears in no response but does exist in the database, in backups, and in any log line that ever touches that row.
+
+**Why matching the email claim was also rejected.** The natural repair is to require `claims.email == admins.email` before linking. It fails for a reason specific to this stack: whether that claim is *verified* depends on Supabase's "Confirm email" project setting, which this code cannot read and cannot assert. An authorization check whose correctness lives in a dashboard toggle is not a check — it is the same objection as (1), arriving by a different route. It is also the claim this project exercises least: auth is phone-OTP throughout, and `TokenClaims.email` is `Optional` precisely because most tokens here do not carry one.
+
+So there is no endpoint. Provisioning an admin requires database access, which is the privilege level appropriate to granting fleet-wide read access, and it leaves a statement someone can review rather than a self-service call someone can make.
+
+**Why ambiguity is a 500 and not a precedence rule (3).** Both tie-breaks are worse than the fault. Preferring the admin row hands admin to whoever created the second row — the escalation this whole ADR is about, arrived at by a sort order. Preferring the user row silently demotes a real admin, who then sees 403s on routes that worked yesterday and no reason why. A 500 with `auth_identity_ambiguous` logged at ERROR, naming both matched ids, is loud, is fixable from the log line alone, and fails closed.
+
+**Why the three binding guards are load-bearing and the database cannot help (4).** `users.auth_user_id`, `partners.auth_user_id` and `admins.auth_user_id` are three separate UNIQUE indexes, and **each one guards only its own table**. Nothing at the database level stops a `sub` that is already an admin's from also appearing in `users`. The consequence is not a duplicate row to clean up later: it is the state in (3), which that account then receives *on every request it ever makes*, because the failure is in identity resolution and so precedes every route. The constraint cannot catch this; only these checks can. All three binding sites were found by audit rather than assumption — partner registration binds nothing, so there are exactly three.
+
+**Why `admins.role` is not checked (5).** It grades admins against each other, and no endpoint yet distinguishes `'ops'` from `'super_admin'`. Checking it would be a check nothing could fail, which is worse than no check: it reads like a privilege boundary while enforcing nothing, and the first endpoint that genuinely needs the distinction would inherit the appearance of already having it.
+
+## Alternatives considered
+
+**`is_admin` boolean on `users`.** Collapses the privilege grant into a profile row, which makes the cross-table ambiguity problem vanish — along with the distinction between a person who uses the platform and a person who can read everyone else's data. It also discards two seeded rows and an `email`/`role` schema that already models exactly this.
+
+**A cross-table trigger or EXCLUDE constraint enforcing one local row per `sub`.** This is the honest fix for (4) — it would put the guarantee where the guarantees belong. Rejected for now because it needs a trigger on each of three tables each querying the other two, it converts a clean 409 into a constraint violation the service must then re-map, and the failure is already prevented by three checks that produce a better error. Recorded here as the thing to build if a fourth identity table ever appears, because three application checks scale as *n(n−1)* and the next one would make six.
+
+**An admin link-auth endpoint gated on a shared secret or a one-time provisioning token.** Correct in principle and genuinely more usable than a SQL statement. Rejected as scope: it needs a token table, an expiry, and a way to issue one, which is more machinery than two pilot admins justify — and the SQL statement is not a placeholder for it, it is the right answer at two admins.
+
+## Consequence
+
+**Every authenticated request now costs a third indexed lookup**, against a table with two rows that will almost always miss. That is the standing price of the local-row identity model, and it is paid on the hot path of every endpoint in the API. Accepted rather than optimised, because the alternative being avoided is reading a role off a claim; if it ever matters, the repair is to collapse the three lookups into one `UNION ALL`, not to move the answer into the token.
+
+**An unlinked admin can never reach the `IDENTITY_NOT_LINKED` branch**, which is load-bearing for the honesty of its message. That message names the two link-auth endpoints, and `_find_unlinked_profile` searches by phone — `admins` has no phone column, so an admin row cannot surface there and the API cannot advertise a route that does not exist. The return type is narrowed to `Optional[Literal["user", "partner"]]` to say so in the signature, and `TestNoAdminLinkPath` pins it, because "be helpful and look admins up too" is the obvious change and it would be wrong.
+
+**Migration 007 is three non-comment lines and a long comment**, and the comment is where the no-endpoint decision is written down at the point someone would act on it. It was applied three times — twice to prove idempotency, once after the comment was rewritten when the design reversed — and `db/schema.sql` carries the same note on the column. The migrations README's Log table was backfilled in the same pass: 004, 005 and 006 had shipped unrecorded, and its "Applying" section still described `psql`, which does not exist on this machine. It now describes `backend/tools/apply_migration.py`, written for this migration and reusable — one transaction per file, so a mid-file failure leaves nothing half-applied, and credentials masked to a character count rather than printed.
+
+**Evidence.** 17 unit tests in `tests/unit/test_admin_identity.py`. They are unit tests on purpose: two of the three behaviours under test are states the database cannot be driven into through the API, so a harness going through the endpoints can only observe the guard working and never show what the guard is for.
+
+Each of the four guards was reverted in turn and the suite re-run, restoring in a `finally`: baseline **17 passed** → ambiguity check reverted **5 failed** → registration guard reverted **1 failed** → both link guards reverted **2 failed** → `require_admin` reverted **3 failed** → restored **17 passed**. Every guard broke exactly the tests that name it and nothing else. Full unit suite **324 passed** (307 before this task).
+
+---
+
+# ADR-021: An analytics number is either defensible or absent — the reports carry their own caveats instead of being read alongside them
+
+**Status:** Accepted
+
+**Date:** 2026-10-03
+
+## Decision
+
+The three analytics reports never substitute a number they cannot support, and every limit on a number they do report travels **in the response**, as a `notes[]` array of `{code, detail}` with a fixed code vocabulary. Nine applications of that rule:
+
+1. **`eta_accuracy` is `null`**, with `ETA_ACCURACY_NOT_COMPUTABLE` stating that no code path has ever written an arrival estimate and citing the count from the requested window ("0 of 8 offers carry one"). `work_started` is reported next to it as the observable half, named for the transition it actually measures and carrying `WORK_STARTED_IS_NOT_ARRIVAL`.
+2. **A `no_match_found` caused by our own outage leaves *both* sides of the no-match rate**, not just the numerator; `rate_including_outages` is published beside it so the exclusion is auditable rather than invisible, and `OUTAGE_JOBS_EXCLUDED_FROM_NO_MATCH_RATE` says which jobs moved and why.
+3. **Two acceptance rates, always both.** `acceptance_rate_of_answered` and `acceptance_rate_of_all`, with `UNANSWERED_OFFERS_HAVE_NO_EXPIRY` naming the count that differs between them.
+4. **An offer's outcome is read from `accepted_at` / `responded_at`, never from `job_assignments.status`.**
+5. **Every number in `/matching` is restricted to `assignment_rank = 1`,** declared by `FIRST_OFFERS_ONLY`.
+6. **A score component that did not vary cannot be the driver of anything** — it is listed in `constant_components`, excluded from `driver`, and explained by `CONSTANT_COMPONENTS_CANNOT_ATTRIBUTE`. `ATTRIBUTION_IS_GROUP_MEANS_NOT_COUNTERFACTUAL` states what `driver` is not.
+7. **Percentiles over a thin sample are labelled**, not withheld: `SAMPLE_TOO_SMALL_FOR_PERCENTILES` names the observation count and says the mean is usable and p50/p95 are not.
+8. **An inverted window is `400 INVALID_DATE_RANGE`**, not a report of zeros. Equal bounds are allowed.
+9. **The `partners` block ignores the window** and says so with `PARTNER_ROSTER_IS_CURRENT_NOT_HISTORICAL` whenever a window was supplied.
+
+## Context
+
+These three endpoints produce the numbers that go into the final evaluation document and get defended in a viva: pilot conversion, dispatch latency, offer acceptance, the no-match rate, and above all the divergence rate — how often weighted scoring picked somebody other than the nearest eligible partner, which is the claim the whole matching design exists to support.
+
+That makes the failure mode here different from the rest of the API. A route that returns the wrong job is a bug someone notices. A report that returns `eta_accuracy: 0.0` because nothing ever wrote an estimate is a *finding*, and it is the kind of finding that gets copied into a document, quoted in a presentation, and only questioned by whoever is asking the hardest question in the room.
+
+## Rationale
+
+**Why the caveats are in the response and not in the documentation.** A caveat in `HANDOFF-frontend-contract.md` or in this ADR protects a reader who went looking for it. The person who will misquote these numbers is the person who did not. Putting `notes[]` in the payload means the limit arrives attached to the number, in the same JSON, at the same moment — a dashboard can render it, and a screenshot of the response contains its own disclaimer. The `code` is there so a frontend can branch; the `detail` is there because the sentence a human needs is longer than any code.
+
+**Why `eta_accuracy` is null rather than omitted or zero (1).** Three options, and the two rejected ones both lie. Reporting `0.0` claims a measurement of perfect accuracy. Omitting the field claims the metric was never part of the design — but it was, `job_assignments.estimated_arrival_min` is in the schema, and the gap is that no code path populates it. `null` plus a note is the only answer that distinguishes *we measured and got nothing* from *we did not measure*, and the note names which half is missing: **the estimate side, not the actual side**. That matters, because "we cannot measure ETA accuracy" sounds like a tracking failure and the truth is that the system never promises an ETA in the first place.
+
+**Why an outage leaves the denominator too (2).** This is the decision most likely to be challenged, because excluding unfavourable data from a rate is exactly what a dishonest report does. The distinction is that the no-match rate answers *how often did we fail to find a partner for a job* — and a job whose dispatch never executed, because Redis was unreachable, produced no evidence either way. Leaving it in the numerator overstates the supply problem; moving it to the denominator only (counting it as a success) understates it. Both are wrong in a specific direction, and no honest third option exists other than removing the job from the question. `rate_including_outages` is published so the choice is checkable: a reader who disagrees can see both numbers and the count that separates them. ADR-016 is why the two causes share a status at all and why the history note is the only thing that distinguishes them.
+
+**Why both acceptance rates ship together (3).** There is no offer timeout in the system — deferred deliberately, see ADR-012 — so an unanswered offer is still open and will stay open forever. `accepted / answered` is the real measure of partner willingness. `accepted / all` treats every unopened offer as a refusal and is therefore a floor, not a measurement. Publishing one and not the other invites the reader to treat whichever they got as *the* acceptance rate; publishing both, with the gap named, makes the open offers visible as the thing they are.
+
+**Why the offer classification reads timestamps and not status (4).** `job_assignments.status` is rewritten when the job ends: completing a job moves its accepted assignment to `'completed'`, and cancelling a job moves its still-open offer off `'offered'`. Classifying outcomes by that column therefore *loses history in proportion to how much work actually got finished* — the more successful the pilot, the lower the measured acceptance rate. `accepted_at` and `responded_at` are append-only facts about what the partner did, and they survive everything that happens to the job afterwards. The live harness has a job in each trap for this reason (§6), and the reverted control run swaps in the status-based query to show the partition breaking: 5 accepted becomes 3, 2 unanswered becomes 1, and the three outcomes stop summing to the number of offers.
+
+**Why divergence is rank-1 only (5).** `was_baseline_choice` is written on every assignment, so including later offers would roughly double the sample. It would also change the question halfway through it. On a first offer the flag means *this partner was also the nearest eligible one*. On a rank-2 offer, made after the nearest partner declined, it means *also the nearest of those still eligible* — a baseline computed over a smaller candidate set that no longer contains the partner the weighted strategy would most plausibly have been compared against. One definition per sample; the larger sample is the wrong sample.
+
+**Why constant components are excluded from `driver` (6).** `skill_score` is constant **by construction**: skill is a hard filter applied before scoring (ADR-009), so every candidate that reaches the ranking matches, and `skill_score()` takes no arguments and returns 1.0. `rating_score` is constant for any window in which no partner was rated, because an unrated partner takes a fixed prior. A mean-difference attribution run over those columns will still produce a number, and that number will be noise with a confident name on it. The report names them as constants instead, and `driver` is chosen only among components that actually varied. The companion admission is that even for the varying components, `driver` is a difference of *group means* — diverged picks versus agreed picks — and not a per-job comparison against the specific partner who was passed over. The stronger version is not computable from what is stored: `score_components` is written for the partner who received the offer and never for the runner-up, so there is no row to subtract. That is written down as the thing recording the baseline candidate's components at dispatch time would fix.
+
+**Why thin samples are labelled rather than suppressed (7).** Withholding p50 and p95 under a threshold would be defensible, and was rejected for being unhelpful in the only situation this project is ever in: nine jobs, or ninety. The pilot's whole dataset is a thin sample. Labelling keeps the number available to someone who understands what it is, and tells the reader who does not that the mean is the figure to quote.
+
+**Why an inverted window is refused (8).** An inverted range has an honest answer — no jobs match — and returning zeros would be defensible. Refused anyway, for the reason this whole ADR exists: a report full of zeros reads as a finding about the pilot. A `400` names the mistake at the point it was made. Equal bounds are a different thing and are allowed: the window is half-open, so `from == to` is an empty range someone asked for deliberately, and its zeros mean what they say.
+
+**Why the roster is current and says so (9).** `partners` holds no history — `is_available` is a current flag, `rating_avg` a running aggregate — so there is no honest way to report the roster as it stood during a past window. Rather than silently applying the window to the job blocks and not the partner block, the response admits the asymmetry whenever a window was supplied. The note is absent on an unwindowed request, because then there is nothing to warn about.
+
+## Alternatives considered
+
+**A single `caveats: string[]`.** Simpler, and unusable by a frontend that wants to render the ETA refusal differently from a thin-sample warning. The `code`/`detail` split costs one field and makes the vocabulary a contract rather than prose.
+
+**Computing `eta_accuracy` against `work_started` as a proxy.** This is the tempting one: there is a real timestamp for work starting, so a number could be produced. It would be a measurement of *our own two timestamps agreeing with each other*, presented under a name that claims the system's promises to customers were accurate. The field name would be doing the lying, which is harder to catch than a wrong number.
+
+**Suppressing the whole `no_match` block when any outage falls in the window.** Honest, and it discards the genuine no-match data in the same window for no reason. Excluding the specific jobs and publishing both rates keeps everything and hides nothing.
+
+**Leaving all of this to the frontend.** The caveats are judgments about what the data can support, and they are made by the code that knows which queries ran and over what. Shipping raw numbers and expecting the consumer to reconstruct the limits guarantees that whoever consumes them second does not.
+
+## Consequence
+
+**`notes[]` is now part of the response contract** for all three routes, and the nine codes are a vocabulary the frontend can switch on — documented in `HANDOFF-frontend-contract.md` §14. Codes can be added; the existing nine should not change meaning, because a dashboard that renders a specific caveat for `OUTAGE_JOBS_EXCLUDED_FROM_NO_MATCH_RATE` is relying on what it means.
+
+**Every analytics read is logged at INFO** with the admin's own id, the endpoint, the window and the note codes emitted. These three routes are the only ones in the system that return data about every partner and every customer at once, and "nothing was modified" is not an answer to "who looked".
+
+**Evidence.** 47 unit tests in `tests/unit/test_admin_analytics_service.py` and 99 live assertions in `tests/integration/check_admin_analytics.py`, which drives nine jobs through the real endpoints — offered, declined, re-offered, accepted, completed, cancelled, unmatched — and then asks the reports to describe what happened. Two of those nine exist only to catch (4), and one is an injected Redis outage that makes the shipped failure path write its own `Dispatch unavailable:` note rather than seeding that row with SQL, which is what proves the string the evaluation query matches on is the string the failure path emits.
+
+The divergence in (5)–(6) is arranged rather than hoped for: one partner 0.99 km from the pickup holding a live job, another 2.12 km away and free, so weighted scoring must pick the further one. The harness asserts `was_baseline_choice = false`, that `load_score` is the sole eligible component, and that `driver == "load_score"` and not `distance_score` — the component that was overridden is not the component that paid for it. Reverted control (`--reverted`, swapping the status-based offer classification back in) fails 5 of 99, all in the two sections that depend on the classification, and nothing else.
+
+Full regression after this task: **371 unit/api tests** and **745 live assertions across fourteen harnesses** (646 across thirteen before it), database verified back to baseline.
+
+## Implementation note: raw SQL parameters must be explicitly cast, because the driver is asyncpg
+
+Worth recording where someone will search for it, because it cost two shipping-blocker bugs and it will recur in the next feature that writes a windowed query.
+
+Nine of the twelve analytics queries — every one taking the window — were unexecutable when first written, failing with `asyncpg.exceptions.AmbiguousParameterError: could not determine data type of parameter $1`. The cause is protocol-level: **asyncpg uses the extended query protocol, so every statement is PREPAREd before any value is bound**, and Postgres must infer each parameter's type from the SQL text alone. A bare `:from_ts IS NULL` carries no type information, so the statement is refused — on the unbounded call *and* on a call with both timestamps supplied, because the value never gets a chance to help. `CAST(:from_ts AS timestamptz) IS NULL` resolves it.
+
+This is specifically an asyncpg property. psycopg2 interpolates client-side and never sees the problem, which means the identical SQL pasted into a psql session, or run through the psycopg2 connection every integration harness in this repo uses to verify its own results, works fine. Checking a query by hand through that path proves nothing about whether the app can run it.
+
+The second bug was blunter: `partner_supply` filtered on `p.is_verified`, a boolean that has never existed on `partners` — verification is `verification_status`, a four-value enum, and `'rejected'` and `'suspended'` are both not-verified without being pending, which a boolean could not have carried. A third, latent, was found while fixing it: `sum(p.rating_count)` returns `NULL` on an empty `partners` table while the schema types the field `int`, so a fresh database would have produced a Pydantic validation error; now `COALESCE(..., 0)`.
+
+**All three endpoints returned 500 on every call while the 47 unit tests were green**, and that is the part worth keeping. The unit fixture monkeypatches every function in `analytics_repository`, which is the right design for testing the service's arithmetic and its refusal to invent numbers, and it makes those tests *structurally incapable* of noticing that no query in the module could execute. Same class of lesson as the escaped-exception-before-cleanup bug in `check_dispatch_capacity.py`: a suite that passes while telling you nothing about the thing you care about. The repair was not more unit tests — it was a 50-line throwaway that ran all twelve queries against the live schema, which surfaced all ten failures in one pass and was deleted once both causes were fixed.
+
+

@@ -1,0 +1,82 @@
+-- 007_admin_auth.sql
+--
+-- Give admins an identity, so the analytics endpoints can be protected by the
+-- same mechanism as everything else.
+--
+-- Written 2026-10-01, as the prerequisite half of the admin-analytics task.
+--
+-- Until now `admins` has been a decorative table: two seeded rows
+-- (ops@sahayak.in, admin@sahayak.in) and no way whatsoever for either of them
+-- to authenticate. Nothing read the table, nothing wrote it, and no route
+-- existed that would have cared. The analytics endpoints are the first thing
+-- that needs to tell an admin apart from anyone else, and they need it badly:
+-- they expose fleet-wide acceptance rates, dispatch latencies and per-partner
+-- performance, which is exactly the data an unauthenticated endpoint must not
+-- serve.
+--
+-- Nullable, for the same reason as users and partners in migration 001: the two
+-- seeded rows exist now and hold no account. Unique, because one Supabase
+-- account must never control two admin profiles.
+--
+--
+-- How a value gets into this column
+-- ---------------------------------
+-- By hand, in SQL, by whoever has database access:
+--
+--     UPDATE admins SET auth_user_id = '<sub>' WHERE email = 'ops@sahayak.in';
+--
+-- There is deliberately **no admin link-auth endpoint**, which is the one place
+-- this column's story differs from users.auth_user_id and
+-- partners.auth_user_id, and the difference is the point.
+--
+-- Those two are claimed self-service, and the security property their service
+-- functions actually rest on is "an unlinked profile is unclaimed" — not a
+-- match against the token's phone claim, which neither link_user_auth nor
+-- link_partner_auth performs. So holding any valid Supabase token plus the row's
+-- UUID is enough to claim an unlinked one. That is a defensible trade for a
+-- profile: the UUID is unguessable, ops hand it to the mechanic out of band, and
+-- what the claimant gains is their own data.
+--
+-- It is not a defensible trade here. An admins row is not a profile, it is a
+-- privilege grant: the analytics endpoints it opens expose fleet-wide
+-- acceptance rates, dispatch latencies and per-partner performance. Reusing the
+-- same pattern would mean any phone-OTP customer who learned one UUID could
+-- read all of it.
+--
+-- Matching the token's email claim against admins.email instead was the obvious
+-- repair and was also rejected. Whether that claim is *verified* depends on
+-- Supabase's "Confirm email" project setting, which this code cannot assert and
+-- an ops change could silently flip; with confirmation off, a self-service email
+-- signup as ops@sahayak.in would be an admin token. An authorization check whose
+-- correctness lives in a dashboard toggle is not a check.
+--
+-- Out-of-band provisioning costs two SQL statements, ever — there are two admins
+-- and no admin signup flow — and in exchange there is no code path at all by
+-- which a customer's token becomes an admin's. The absence of the endpoint is
+-- the security property, which is why it is written down here rather than left
+-- to be noticed as a gap and helpfully filled in later.
+--
+--
+-- Why a local column rather than a role claim in the JWT
+-- -----------------------------------------------------
+-- Reading `app_metadata.role == 'admin'` straight off a verified token would
+-- have needed no migration at all. It was rejected for two reasons. First,
+-- every other identity in this system resolves to one of our own rows — that is
+-- the entire premise of resolve_identity, and the property that lets a handler
+-- act on our foreign keys without trusting the client (ADR-010, ADR-011).
+-- Authorization that lives only in a token we did not write is a different
+-- trust model bolted onto the side of that one, and it has the same defect as
+-- the email-claim option above: granting admin would become an edit in the
+-- Supabase dashboard, invisible to this repository and to anyone reviewing it.
+-- Second, it would have left `admins` unread forever, which is the worse answer
+-- to "why does this schema have a table nothing uses".
+--
+-- See ADR-020.
+
+ALTER TABLE admins ADD COLUMN IF NOT EXISTS auth_user_id UUID;
+
+-- Named explicitly rather than left to ADD CONSTRAINT UNIQUE, so the index name
+-- is stable across environments and IF NOT EXISTS is available. Matches the
+-- naming in migration 001.
+CREATE UNIQUE INDEX IF NOT EXISTS admins_auth_user_id_key
+    ON admins (auth_user_id);

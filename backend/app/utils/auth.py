@@ -104,3 +104,30 @@ async def require_partner(
             message="This endpoint is available to registered partners only.",
         )
     return identity
+
+
+async def require_admin(
+    identity: Identity = Depends(get_current_identity),
+) -> Identity:
+    """Identity, restricted to platform admins.
+
+    For the analytics endpoints, which read across every partner and every job
+    in the system. Unlike require_user and require_partner there is no
+    corresponding ownership check to follow it: an admin's local_id scopes
+    nothing, because the whole point of these routes is that they are not
+    scoped. This dependency is therefore the entire authorization boundary, and
+    a route that forgets it is wide open to any logged-in customer rather than
+    merely over-scoped.
+
+    Admin is a role in the same sense the other two are — a row in one of our
+    tables with a Supabase account attached (ADR-020) — so nothing here reads a
+    claim. The `role` column on admins ('ops' vs 'super_admin') is not consulted
+    either: it grades admins against each other and no endpoint yet distinguishes
+    them, so checking it would be a check nothing could fail.
+    """
+    if identity.role != "admin":
+        raise ForbiddenError(
+            code=ErrorCode.FORBIDDEN,
+            message="This endpoint is available to platform administrators only.",
+        )
+    return identity

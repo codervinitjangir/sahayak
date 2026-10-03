@@ -71,6 +71,17 @@ class FakeSession:
     def __init__(self) -> None:
         self.committed = False
         self.rolled_back = False
+        # Objects staged but not flushed. Today that is only the notification
+        # rows: notification_repository.create_notification_row deliberately
+        # calls add() without flushing so the INSERTs ride the caller's flush
+        # (ADR-019). A stand-in session without add() does not merely fail to
+        # record them — it raises, which is how this file first learned that
+        # cancelling had started notifying.
+        self.added: list = []
+
+    def add(self, obj) -> None:
+        """Sync, like the real Session.add — it stages, it does not await."""
+        self.added.append(obj)
 
     async def commit(self) -> None:
         self.committed = True
@@ -104,10 +115,10 @@ class FakeJob:
 
 
 class FakeAssignment:
-    def __init__(self, status: str = "offered") -> None:
+    def __init__(self, status: str = "offered", partner_id: uuid.UUID = PARTNER_ID) -> None:
         self.id = uuid.uuid4()
         self.job_id = JOB_ID
-        self.partner_id = PARTNER_ID
+        self.partner_id = partner_id
         self.status = status
 
 
@@ -478,6 +489,100 @@ class TestWhatIsRecorded:
         cancel(session)
         assert "price_final" not in stub_repos["job_writes"]
         assert "completed_at" not in stub_repos["job_writes"]
+
+
+class TestThePartnerIsToldTheJobIsOff:
+    """The notification half of the same transaction (ADR-019).
+
+    This is the only seam in the system where the *partner* is the recipient,
+    which makes it the one worth wiring-testing here rather than trusting the
+    writer's own unit tests: everywhere else, "notify the party that is not the
+    actor" resolves to the owner, so a bug that always addressed the owner would
+    pass every other test in the suite and fail only here.
+    """
+
+    def test_an_open_offer_earns_a_notification(self, stub_repos):
+        stub_repos["job"] = FakeJob("matching")
+        stub_repos["assignments"] = [FakeAssignment("offered")]
+        session = FakeSession()
+
+        cancel(session)
+
+        assert len(session.added) == 1
+        row = session.added[0]
+        assert row.recipient_type == "partner"
+        assert row.recipient_id == PARTNER_ID
+        assert row.event == "job_cancelled_by_owner"
+        assert row.job_id == JOB_ID
+
+    def test_the_owner_is_not_told_what_they_just_did(self, stub_repos):
+        """The rule, at the seam that could most plausibly break it: the client
+        that sent this request is already reading the 200 that answers it."""
+        stub_repos["job"] = FakeJob("assigned")
+        stub_repos["assignments"] = [FakeAssignment("accepted")]
+        session = FakeSession()
+
+        cancel(session)
+
+        assert {row.recipient_type for row in session.added} == {"partner"}
+
+    def test_every_open_partner_is_notified_not_just_the_first(self, stub_repos):
+        """Mirrors test_every_open_assignment_is_closed_not_just_the_first.
+
+        Closing an assignment without notifying its partner leaves the same
+        stale offer on a phone that that test exists to prevent — the row is
+        tidy and the mechanic still does not know.
+        """
+        other = uuid.UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
+        stub_repos["job"] = FakeJob("matching")
+        stub_repos["assignments"] = [
+            FakeAssignment("offered"),
+            FakeAssignment("accepted", partner_id=other),
+        ]
+        session = FakeSession()
+
+        cancel(session)
+
+        assert {row.recipient_id for row in session.added} == {PARTNER_ID, other}
+
+    def test_cancelling_a_job_nobody_holds_notifies_nobody(self, stub_repos):
+        """The ordinary case, not a fault: an owner calling off a 'requested'
+        job before dispatch has offered it to anyone. It must not raise, and it
+        must not invent a recipient."""
+        stub_repos["job"] = FakeJob("requested")
+        stub_repos["assignments"] = []
+        session = FakeSession()
+
+        result = cancel(session)
+
+        assert result.status == "cancelled"
+        assert session.added == []
+        assert session.committed
+
+    def test_a_refused_cancellation_notifies_nobody(self, stub_repos):
+        """A 409 must not leave a partner told a job was cancelled when it was
+        not — the row would outlive the failed request."""
+        stub_repos["job"] = FakeJob("completed")
+        stub_repos["assignments"] = [FakeAssignment("accepted")]
+        session = FakeSession()
+
+        with pytest.raises(AppError):
+            cancel(session)
+
+        assert session.added == []
+        assert not session.committed
+
+    def test_the_notification_carries_no_reason_text(self, stub_repos):
+        """The owner's free-text reason is stored on the job, where the gated
+        GET /jobs/{id} decides who may read it. It must not be copied into a
+        notification message, which nothing re-gates."""
+        stub_repos["job"] = FakeJob("assigned")
+        stub_repos["assignments"] = [FakeAssignment("accepted")]
+        session = FakeSession()
+
+        cancel(session, reason="found a friend with cables")
+
+        assert "cables" not in session.added[0].message
 
 
 class TestTheRequestBody:
