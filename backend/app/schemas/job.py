@@ -113,6 +113,12 @@ class CurrentAssignmentResponse(BaseModel):
     partner_name: Optional[str] = None
     partner_phone: Optional[str] = None
     partner_rating: Optional[Decimal] = None
+    # The sample size behind partner_rating, so a client can render "4.5 (12
+    # jobs)" rather than a bare number. It matters more here than it usually
+    # would: the score is Bayesian-smoothed toward a 3.5 prior (ADR-009), so a
+    # mechanic with one rating and one with fifty are pulled toward the middle
+    # by very different amounts, and the average alone cannot say which is which.
+    partner_rating_count: Optional[int] = None
     estimated_arrival_min: Optional[int] = None
 
 

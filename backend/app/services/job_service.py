@@ -29,6 +29,7 @@ from app.schemas.job import (
     JobTimelineEntry,
 )
 from app.services.auth_service import Identity
+from app.services import notification_service
 from app.utils.errors import (
     BadRequestError,
     ConflictError,
@@ -404,6 +405,7 @@ async def get_job_with_status(
             partner_name=partner.name if partner else None,
             partner_phone=partner.phone if partner else None,
             partner_rating=partner.rating_avg if partner else None,
+            partner_rating_count=partner.rating_count if partner else None,
             # Kept for everyone: an ETA says when, never who.
             estimated_arrival_min=assignment.estimated_arrival_min,
         )
@@ -622,6 +624,13 @@ async def transition_job_status(
                 else None
             ),
         )
+        # Same transaction as the status change and the history row, for the
+        # same reason (ADR-019). Every transition reachable here is driven by
+        # the partner, so the owner is always who gets told — including the
+        # cancellation, where the event written is 'job_cancelled_by_partner'.
+        await notification_service.notify_job_status_change(
+            db, job=job, status=target, actor_role="partner"
+        )
         await db.commit()
     except SQLAlchemyError as exc:
         await db.rollback()
@@ -807,6 +816,17 @@ async def cancel_job_by_owner(
             job_id=job.id,
             status="cancelled",
             note=_cancellation_note("owner", payload.cancellation_reason),
+        )
+        # The one seam where the owner is the actor, so the partners are who
+        # hear about it. One notification per open assignment, and none at all
+        # when there are none — cancelling from 'requested' before anyone was
+        # offered the job is the ordinary case, and it has nobody to tell.
+        await notification_service.notify_job_status_change(
+            db,
+            job=job,
+            status="cancelled",
+            actor_role="user",
+            partner_ids=[a.partner_id for a in open_assignments],
         )
         await db.commit()
     except SQLAlchemyError as exc:

@@ -62,6 +62,11 @@ CREATE TABLE IF NOT EXISTS admins (
     name        VARCHAR(100),
     email       VARCHAR(150) UNIQUE,
     role        VARCHAR(20) DEFAULT 'ops' CHECK (role IN ('ops','super_admin')),
+    -- Supabase Auth `sub`, as on users and partners. Unlike those two there is
+    -- no link-auth endpoint for admins: this is set by hand in SQL, because an
+    -- admins row is a privilege grant rather than a profile and self-service
+    -- claiming is the wrong trade for one. See migration 007 and ADR-020.
+    auth_user_id UUID UNIQUE,
     created_at  TIMESTAMPTZ DEFAULT now()
 );
 
@@ -247,11 +252,39 @@ CREATE TABLE IF NOT EXISTS payments (
 -- ============================
 CREATE TABLE IF NOT EXISTS notifications (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    recipient_type  VARCHAR(10) CHECK (recipient_type IN ('user','partner')),
-    recipient_id    UUID,
-    channel         VARCHAR(10) CHECK (channel IN ('push','sms')),
+    recipient_type  VARCHAR(10) NOT NULL CHECK (recipient_type IN ('user','partner')),
+    recipient_id    UUID NOT NULL,
+    -- 'in_app' is the only value anything writes today; the feed endpoints are a
+    -- poll, not a delivery. 'push' and 'sms' are kept for a delivery worker that
+    -- does not exist yet — see db/migrations/005_notifications_writable.sql.
+    channel         VARCHAR(10) NOT NULL CHECK (channel IN ('in_app','push','sms')),
+    -- The machine-readable kind, e.g. 'job_accepted'. This is what clients branch
+    -- on; `message` is prose and may be reworded. Deliberately unconstrained: the
+    -- vocabulary grows with every feature that notifies, and a CHECK here would
+    -- mean a migration per new kind. It is owned by one module-level table in
+    -- app/services/notification_service.py, which is its only writer.
+    event           VARCHAR(40) NOT NULL,
     message         TEXT,
     is_read         BOOLEAN DEFAULT FALSE,
+    -- Named sent_at by the original schema; for an in-app row it is the moment
+    -- the notification was created, since nothing sends it anywhere.
     sent_at         TIMESTAMPTZ DEFAULT now(),
-    job_id          UUID REFERENCES jobs(id)
+    -- ON DELETE CASCADE, like job_assignments and job_status_history and unlike
+    -- ratings and payments: a notification stores no fact that is not already in
+    -- the job and its history, and every row in a feed deep-links to this
+    -- job_id, so one that outlived its job could be fetched and not rendered.
+    -- See migration 006, which added the cascade after its absence blocked every
+    -- DELETE FROM jobs in the integration suite.
+    job_id          UUID REFERENCES jobs(id) ON DELETE CASCADE
 );
+
+-- Every read the feed endpoints make filters on the recipient pair and orders by
+-- sent_at DESC; this serves both, so no sort is needed.
+CREATE INDEX IF NOT EXISTS idx_notifications_recipient_sent
+    ON notifications (recipient_type, recipient_id, sent_at DESC);
+
+-- The unread badge is the most frequent read in the feature. Partial, so it
+-- indexes only the rows that query wants and stops growing as mail is read.
+CREATE INDEX IF NOT EXISTS idx_notifications_recipient_unread
+    ON notifications (recipient_type, recipient_id)
+    WHERE is_read IS NOT TRUE;

@@ -334,6 +334,9 @@ check("estimated_arrival_min visible", ca and ca.get("estimated_arrival_min") ==
 check("partner_name withheld", ca and ca.get("partner_name") is None, repr(ca and ca.get("partner_name")))
 check("partner_phone withheld", ca and ca.get("partner_phone") is None, repr(ca and ca.get("partner_phone")))
 check("partner_id withheld", ca and ca.get("partner_id") is None, repr(ca and ca.get("partner_id")))
+check("partner_rating withheld", ca and ca.get("partner_rating") is None, repr(ca and ca.get("partner_rating")))
+check("partner_rating_count withheld", ca and ca.get("partner_rating_count") is None,
+      repr(ca and ca.get("partner_rating_count")))
 
 print("  -- same job, fetched by an unrelated vehicle owner --")
 r = c.get(f"/api/v1/jobs/{job_id}", headers=hdr(tok_stranger))
@@ -358,6 +361,12 @@ check("partner_phone returned", ca and ca.get("partner_phone") == "+919000000801
       repr(ca and ca.get("partner_phone")))
 check("partner_id returned", ca and ca.get("partner_id") == partner_a)
 check("partner_rating present in shape", ca and "partner_rating" in ca)
+# rating_count reached a response for the first time on 2026-09-30. Asserted as a
+# real integer rather than mere presence: the column existed and was readable
+# long before anything could write it, so "present and 0" was the old bug's
+# signature, not evidence the field works.
+check("partner_rating_count returned as an int", ca and isinstance(ca.get("partner_rating_count"), int),
+      repr(ca and ca.get("partner_rating_count")))
 
 print("\n=== 6b. GET /jobs/{id} as the ASSIGNED partner ===")
 r = c.get(f"/api/v1/jobs/{job_id}", headers=hdr(tok_a))

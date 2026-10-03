@@ -25,6 +25,7 @@ import pytest
 from sqlalchemy.sql import ClauseElement
 
 from app.services import job_service
+from app.services import notification_service
 from app.services.job_service import ALLOWED_TRANSITIONS
 from app.repositories import job_repository
 from app.utils.errors import AppError, ErrorCode
@@ -32,6 +33,7 @@ from app.utils.errors import AppError, ErrorCode
 PARTNER_ID = uuid.UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
 OTHER_PARTNER_ID = uuid.UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
 JOB_ID = uuid.UUID("cccccccc-cccc-cccc-cccc-cccccccccccc")
+OWNER_ID = uuid.UUID("dddddddd-dddd-dddd-dddd-dddddddddddd")
 # What the stand-in session puts where the database would put now().
 FIXED_NOW = datetime(2026, 9, 20, 12, 0, 0, tzinfo=timezone.utc)
 
@@ -75,6 +77,16 @@ class FakeSession:
     def __init__(self) -> None:
         self.committed = False
         self.rolled_back = False
+        # Objects staged but not flushed. Today that is only the notification
+        # row: notification_repository.create_notification_row deliberately
+        # calls add() without flushing so the INSERT rides the caller's flush
+        # (ADR-019), which means a stand-in session that swallowed add() would
+        # make the write untestable from here.
+        self.added: list = []
+
+    def add(self, obj) -> None:
+        """Sync, like the real Session.add — it stages, it does not await."""
+        self.added.append(obj)
 
     async def commit(self) -> None:
         self.committed = True
@@ -101,6 +113,11 @@ class FakeSession:
 class FakeJob:
     def __init__(self, status: str) -> None:
         self.id = JOB_ID
+        # Read by the notification writer to address the owner. Not here when
+        # this file was written, and its absence is what made every transition
+        # test fail the moment job_service started notifying — the double had
+        # quietly stopped resembling the row it stands for.
+        self.user_id = OWNER_ID
         self.status = status
         self.price_final = None
         self.completed_at = None
@@ -432,3 +449,93 @@ class TestSideEffects:
             "cancelled_at",
             "cancellation_reason",
         }
+
+
+class TestTheOwnerIsToldWhatThePartnerDid:
+    """The notification half of the same transaction (ADR-019).
+
+    Kept beside the history-row assertions rather than in
+    test_notification_service.py on purpose. That file tests the writer's rules
+    in isolation; these test the *wiring* — that this service actually calls it,
+    with this actor_role, inside this transaction. A rule that is correct and
+    never invoked is the failure mode neither file alone would catch.
+    """
+
+    def test_every_legal_transition_notifies_the_owner_exactly_once(self, stub_repos):
+        for source, target in sorted(EXPECTED_LEGAL):
+            stub_repos["job"] = FakeJob(source)
+            stub_repos["assignment"] = FakeAssignment(PARTNER_ID)
+            session = FakeSession()
+            transition(
+                Payload(target, price_final=250 if target == "completed" else None),
+                session,
+            )
+            assert len(session.added) == 1, f"{source} -> {target}"
+            row = session.added[0]
+            assert row.recipient_type == "user", f"{source} -> {target}"
+            assert row.recipient_id == OWNER_ID
+            assert row.job_id == JOB_ID
+
+    def test_the_partner_is_never_notified_of_their_own_move(self, stub_repos):
+        """The rule this endpoint exists to exercise: the actor is the partner,
+        so the partner is never a recipient here — including the cancellation,
+        which is the one event where it would be plausible to tell both."""
+        for source, target in sorted(EXPECTED_LEGAL):
+            stub_repos["job"] = FakeJob(source)
+            stub_repos["assignment"] = FakeAssignment(PARTNER_ID)
+            session = FakeSession()
+            transition(
+                Payload(target, price_final=250 if target == "completed" else None),
+                session,
+            )
+            recipients = {row.recipient_type for row in session.added}
+            assert recipients == {"user"}, f"{source} -> {target}"
+
+    def test_a_partner_cancellation_says_so_in_the_event_name(self, stub_repos):
+        """Reaching cancellation through *this* endpoint means the partner
+        walked away, which is a different thing for the owner to read than their
+        own cancellation echoed back. The event carries which; the message text
+        is prose and cannot be branched on."""
+        session = FakeSession()
+        transition(Payload("cancelled", cancellation_reason="broke down"), session)
+        assert session.added[0].event == "job_cancelled_by_partner"
+
+    def test_the_notification_is_staged_not_written_separately(self, stub_repos):
+        """One commit for the job, the history row and the notification.
+
+        If this ever shows a flush, the notification has bought its own round
+        trip on the lifecycle path for no reason — the id is never read and
+        there is no constraint worth tripping early.
+        """
+        session = FakeSession()
+        transition(Payload("partner_en_route"), session)
+        assert session.added, "nothing was staged"
+        assert session.committed
+        assert not hasattr(session, "flushed") or not session.flushed
+
+    def test_a_refused_transition_notifies_nobody(self, stub_repos):
+        """Same property the history assertions check, one table over: an error
+        must not leave a notification claiming something happened."""
+        stub_repos["job"] = FakeJob("completed")
+        session = FakeSession()
+        with pytest.raises(AppError):
+            transition(Payload("cancelled"), session)
+        assert session.added == []
+        assert not session.committed
+
+    def test_the_event_written_is_one_the_vocabulary_knows(self, stub_repos):
+        """No free-text event strings. The column has no CHECK constraint
+        (migration 005), so this assertion is standing in for one at the seam
+        that writes most of them."""
+        for source, target in sorted(EXPECTED_LEGAL):
+            stub_repos["job"] = FakeJob(source)
+            stub_repos["assignment"] = FakeAssignment(PARTNER_ID)
+            session = FakeSession()
+            transition(
+                Payload(target, price_final=250 if target == "completed" else None),
+                session,
+            )
+            event = session.added[0].event
+            assert event in notification_service.NOTIFICATION_EVENTS, (
+                f"{source} -> {target} wrote an unknown event {event!r}"
+            )

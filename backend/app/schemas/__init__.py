@@ -33,7 +33,11 @@ from app.schemas.rating import (
     RatingCreateRequest, RatingItem, JobRatingsResponse
 )
 from app.schemas.payment import PaymentBase, PaymentCreate, PaymentResponse
-from app.schemas.notification import NotificationBase, NotificationCreate, NotificationResponse
+from app.schemas.notification import (
+    NotificationBase, NotificationCreate, NotificationResponse,
+    NotificationItem, NotificationListResponse, UnreadCountResponse,
+    MarkReadResponse
+)
 
 __all__ = [
     "ApiResponse", "Meta", "ErrorDetail", "ErrorResponse", "HealthResponse", "envelope",
@@ -58,4 +62,6 @@ __all__ = [
     "RatingCreateRequest", "RatingItem", "JobRatingsResponse",
     "PaymentBase", "PaymentCreate", "PaymentResponse",
     "NotificationBase", "NotificationCreate", "NotificationResponse",
+    "NotificationItem", "NotificationListResponse", "UnreadCountResponse",
+    "MarkReadResponse",
 ]

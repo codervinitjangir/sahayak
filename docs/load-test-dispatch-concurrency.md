@@ -1,20 +1,22 @@
 # Dispatch Engine — Concurrency Load Test
 
-**Date:** 2026-09-24 · **re-measured at the reduced connection pool 2026-09-27 (§8.1)**
+**Date:** 2026-09-24 · **re-measured at the reduced connection pool 2026-09-27 (§8.1)** · **matching accuracy re-measured as a controlled experiment 2026-09-30 (§4.2), which also corrects §4**
 **Target:** `POST /api/v1/jobs` (dispatch runs synchronously inside the request)
 **Tool:** k6 v2.2.0 for load generation, Python for seeding, response simulation and post-run analysis
 **Environment:** single uvicorn worker on `127.0.0.1:8010`, Windows 11, Python 3.12.10 → Supabase PostgreSQL 17.6 + PostGIS via the `aws-0-ap-south-1` **session-mode** pooler; Redis 7 in Docker Desktop
 **Connection pool:** the four runs of §2 ran at `pool_size=5, max_overflow=10` (**15**), which was the default at the time. **The app now runs `pool_size=3, max_overflow=2` (5)** — §9.1 explains the change and §8.1 measures the same baseline scenario at it. Where the two disagree, §8.1 is the current system.
 
 > **If you are quoting one throughput number from this report, quote §8.1's.** §2's headline
-> table describes a configuration that is no longer deployed. Nothing in §3, §4, §6 or §7 is
+> table describes a configuration that is no longer deployed. Nothing in §3, §6 or §7 is
 > affected — the algorithm, the round-trip analysis, the ceiling *mechanism* and both bugs
-> reproduced identically at the new pool.
+> reproduced identically at the new pool. **If you are quoting one matching-accuracy number,
+> quote §4.2's**, and read §4.2's first three paragraphs before quoting anything from §4.
 
 Scripts: [`tests/load/`](../backend/tests/load/) — `seed_dispatch_load.py`, `dispatch.js`,
 `responder_dispatch_load.py`, `collect_dispatch_load.py`, `profile_dispatch.py`,
-`check_pool_exhaustion.py`. Raw artefacts in `tests/load/results/`; the 2026-09-27 re-run is
-tagged `*_pool5` and sits alongside the originals rather than replacing them.
+`check_pool_exhaustion.py`, `measure_matching_accuracy.py` (added 2026-09-30, §4.2). Raw
+artefacts in `tests/load/results/`; the 2026-09-27 re-run is tagged `*_pool5` and sits
+alongside the originals rather than replacing them.
 
 ---
 
@@ -51,6 +53,14 @@ tagged `*_pool5` and sits alongside the originals rather than replacing them.
    and returns 500s for 57.1 % of requests after a full 30 s `pool_timeout` wait; 2/s runs
    clean. Finding 1 survives intact — dispatch p50 moved from 858.3 ms to 871.9 ms and 100 %
    of jobs matched while more than half the requests were failing. See §8.1.
+9. **Added 2026-09-30 — the rating term is worth 70 percentage points, and without it the
+   engine was provably identical to the baseline it exists to beat.** A two-arm controlled
+   experiment (ratings live vs. ratings zeroed, load and skill held constant) measured 70.0 %
+   divergence from pure-nearest with real ratings and **exactly 0.0 %** without — the second
+   figure predicted from the arithmetic before the run and confirmed by it. This also
+   **corrects §4 and ADR-018**: the load harness seeds ratings directly via SQL, so every
+   earlier figure in this report is a *rating-live* number. Production, not this harness, was
+   the rating-blind system. See §4.2.
 
 ---
 
@@ -190,6 +200,12 @@ Redis call (§7.2).
 
 ## 4. Matching accuracy vs the naive baseline
 
+> **Read §4.2 before quoting anything from this section.** Everything below was measured with
+> ratings seeded directly into `partners` by the harness, which — unknown at the time of
+> writing — was the *only* working path to those columns in the entire system. These are
+> rating-live figures. They are not "before the ratings fix" figures, and §4.2 supersedes this
+> section as the defensible accuracy measurement.
+
 `was_baseline_choice` is written on the rank-1 assignment when the weighted engine picks
 the same partner that pure-nearest would have. The rate at which the engine **differs** is
 the spec's accuracy metric:
@@ -270,6 +286,113 @@ look identical in a final number, and only one of them is defensible. The reason
 also worth keeping — Redis was healthy throughout (isolated GEOSEARCH p50 0.43 ms), and a
 worker accepting 3 jobs/s cannot hold enough jobs concurrently to exhaust 11 eligible
 partners the way §5's mixed run did.
+
+### 4.2 What the rating term is actually worth, measured 2026-09-30 — and a correction to §4
+
+Ratings endpoints shipped 2026-09-29. Until then nothing in the application could write
+`partners.rating_avg` or `rating_count`: the columns existed, were readable, and were wired
+into the scoring function, but the only thing that ever set them was a database trigger that
+could not fire (ADR-018). Every partner row in production held `0.0` / `0`.
+
+**The correction first, because it changes how every figure in §4 must be read.** When
+ADR-018 was written it said no ranking produced before 2026-09-29 exercised the rating
+dimension at all, *"the load-test numbers included"*. That last clause is **wrong**.
+`seed_dispatch_load.py` sets ratings directly with SQL (`UPDATE partners SET rating_avg = …`,
+lines 374–383), explicitly because no endpoint existed to do it. So this harness was the one
+place in the whole system where the rating dimension *did* work — it worked precisely because
+it bypassed the writer that was broken. Every number in §4 and §8.1 is a **rating-live**
+number. Production, over the same period, was rating-blind, and had never been measured.
+
+The consequence is that simply re-running the load test after the fix proves nothing: the
+seeder was already doing what the fix now makes the application do, so the re-run returns the
+same ~72 % and answers a question nobody asked. The number that was missing is what the
+engine did when the rating term was dead — the production condition.
+
+**Method — a two-arm controlled experiment, not a re-run.**
+`tests/load/measure_matching_accuracy.py`. A saturating k6 run varies three things at once
+(jittered distance, fleet load, seeded rating), so its divergence figure cannot be attributed
+to any single term. This script holds two of the three still: it runs **no responders**, so no
+assignment ever reaches `accepted`, every `active_job_count` stays 0 and `load_score` is a
+constant 1.0; `skill_score` is already constant because `find_candidates` only returns exact
+service matches. Distance and rating are then the only varying terms, and the two arms differ
+in exactly one of them:
+
+- **rating-live** — partners keep the seeded spread, in which the *nearest* eligible partner
+  (p01, 0.5 km) is rated 3.10 from 4 reviews and is labelled `# nearest, and badly rated: the
+  trap` in the fixture, while p02 at 0.9 km holds 4.80 from 55.
+- **rating-blind** — every QA partner is set to `rating_avg 0.0, rating_count 0` for the
+  duration and restored afterwards from a snapshot, with the round-trip asserted. Not a
+  synthetic condition: it is what every row actually held until 2026-09-29.
+
+**The prediction was written into the script's docstring before the run, not after.** With
+load and skill constant, `rating_score(0.0, 0)` collapses to `PRIOR_MEAN / MAX_RATING = 0.7`
+for *every* candidate, because the Bayesian smoothing has nothing but the prior to work with.
+The only term left that varies is `distance_score = max(0, 1 − d/10000)`, which is
+monotonically decreasing in distance. Therefore `argmax(score) ≡ argmin(distance) ≡
+baseline_pick()`. Divergence must be **exactly 0.0 %** — not approximately. Anything else
+would mean the arm failed to apply or the pipeline is not what the code says it is, making the
+number a bug report rather than a measurement.
+
+**Results — 2026-09-30, 60 jobs per arm, seed 20260930 (identical pickup jitter in both arms),
+11 eligible partners, create-only.** Raw output:
+`tests/load/results/matching-accuracy-20260930T114915Z.json`
+
+| | **rating-live** (post-fix: what production does now) | **rating-blind** (pre-fix: what production actually did) |
+|---|---|---|
+| rank-1 offers measured | 60 | 60 |
+| differed from pure-nearest | 42 | **0** |
+| **divergence rate** | **70.0 %** | **0.0 %** |
+| distinct `rating_score` values | 2 (0.9383 … 0.9635) | **1** (0.7 … 0.7) |
+| distinct `load_score` values | 1 (held still) | 1 (held still) |
+| `matching_score` p50 | 0.9498 | 0.9204 |
+| distance offered at p50 | 947 m | 491 m |
+| who won the work | p02 **58** (96.7 %), p04 2 (3.3 %) | p01 **42** (70.0 %), p02 18 (30.0 %) |
+
+**Prediction confirmed exactly.** Rating-blind divergence is 0.0 %, and `rating_score` took
+exactly one distinct value across all 60 offers. The rating dimension is worth **70.0
+percentage points** of divergence from a pure distance sort, holding load and skill constant.
+
+The single sentence this produces, and it is a stronger claim than "the rating term was a
+constant": **with the rating term dead, the weighted scoring engine was provably identical to
+the naive nearest-partner baseline it exists to beat.** Not similar to it — identical, on all
+60 of 60 decisions, for the arithmetic reason above. The project's headline differentiator was
+not partially degraded in production before 2026-09-29; it was not operating.
+
+The fixture's own trap makes the same point without any arithmetic: **p01 — nearest at 0.5 km,
+rated 3.10 from 4 reviews — won 0 of 60 jobs with ratings live, and 42 of 60 with ratings
+blind.** It was seeded specifically to catch a distance-only matcher, and in the blind arm it
+caught this one. (p02's 30 % share of the blind arm is not a rating effect: the ±0.6 km pickup
+jitter genuinely puts p02 nearer than p01 on some jobs, and the engine correctly follows.)
+
+**Cross-check against the existing figures.** 70.0 % here sits alongside §4's 73.1 % and
+§8.1's 72.3 %, all three measured create-only with the same seeded fixture. They agree within
+three points, which is the corroboration worth having: this script's rating-live arm is
+reproducing the earlier harness, so the 0.0 % in the other column is a property of the
+condition and not of a different measurement method. The residual gap is sample size (60
+against 469–1200) and one jitter draw, not a change in the engine.
+
+**One incidental corroboration of §8.1.** The script asked for 2.0 creations/s and achieved
+0.81/s, because it creates jobs strictly sequentially and each `POST /api/v1/jobs` spends
+~1.2 s of it holding a connection. That is §6's measured 1198 ms connection-hold time showing
+up again from a completely different tool — a sequential client cannot exceed ~1/1.198 ≈
+0.83/s no matter what rate it is asked for. The 2/s clean ceiling in §8.1 is a *concurrent*
+figure and remains the one to quote.
+
+**What to put in the final evaluation document.** These are two different regimes, not a
+before/after improvement in the algorithm — the code of `scoring.py` is unchanged between the
+arms, and was unchanged by the ratings fix. State it as:
+
+> The weighted matching engine diverges from a pure-nearest baseline on **70.0 %** of
+> dispatch decisions once real rating data reaches it (measured 2026-09-30, n=60,
+> create-only, load and skill held constant). Before ratings could be written
+> (pre-2026-09-29), the same engine on the same fixture diverged on **0.0 %** of decisions —
+> provably reducing to the naive baseline, because an unrated candidate set gives every
+> partner the identical prior-only rating score of 0.7 and leaves distance as the sole
+> varying term.
+
+Do **not** quote §4's 73.1 % / 63.1 % / 22.0 % spread as "pre-fix" figures. They were
+rating-live throughout, for the reason at the top of this section, and the fleet-contention
+explanation in §4 is still the correct reading of them.
 
 ---
 

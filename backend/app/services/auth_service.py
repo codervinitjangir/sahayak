@@ -42,7 +42,7 @@ from app.utils.errors import (
 )
 from app.utils.logging import log_event
 
-Role = Literal["user", "partner"]
+Role = Literal["user", "partner", "admin"]
 
 # How Supabase signs, and therefore how we verify.
 #
@@ -164,10 +164,10 @@ class Identity:
     handed — an `identity.local_id = something_else` slip would be an
     authorization bypass that type checking would never catch.
 
-    auth_user_id is Supabase's id; local_id is ours (users.id or partners.id).
-    Keeping both means an endpoint can act on our own foreign keys without ever
-    trusting the client, and still write the Supabase id into a log or an audit
-    row when it needs to.
+    auth_user_id is Supabase's id; local_id is ours (users.id, partners.id or
+    admins.id). Keeping both means an endpoint can act on our own foreign keys
+    without ever trusting the client, and still write the Supabase id into a log
+    or an audit row when it needs to.
     """
 
     auth_user_id: uuid.UUID
@@ -257,11 +257,19 @@ def decode_token(token: str) -> TokenClaims:
 async def resolve_identity(db: AsyncSession, claims: TokenClaims) -> Identity:
     """Map a verified token onto the local row it owns.
 
-    A given auth_user_id must exist in at most one of the two tables. The UNIQUE
-    constraint on each column enforces "at most one row per table"; it cannot
-    enforce "not in both", so that case is checked here and treated as a server
-    fault rather than resolved by picking one. Silently preferring users over
-    partners would hand whoever created the second row the other's permissions.
+    A given auth_user_id must exist in at most one of the three tables. The
+    UNIQUE constraint on each column enforces "at most one row per table"; it
+    cannot enforce "not in two of them", so that case is checked here and
+    treated as a server fault rather than resolved by picking one. Silently
+    preferring users over partners would hand whoever created the second row the
+    other's permissions — and since admins joined the set, the same slip would
+    be a privilege escalation rather than a mix-up.
+
+    Admin is resolved the same way as the other two, out of our own table,
+    rather than by reading a role claim off the token. ADR-020 has the argument;
+    the short form is that a role claim would move the definition of "who is an
+    admin" into the Supabase dashboard, where this repository cannot see it and
+    a reviewer cannot audit it.
 
     When nothing matches, the caller gets one of two 403s — IDENTITY_NOT_LINKED
     if an unclaimed profile exists for their number, USER_NOT_REGISTERED if not.
@@ -270,24 +278,29 @@ async def resolve_identity(db: AsyncSession, claims: TokenClaims) -> Identity:
     """
     user = await auth_repository.get_user_by_auth_id(db, claims.auth_user_id)
     partner = await auth_repository.get_partner_by_auth_id(db, claims.auth_user_id)
+    admin = await auth_repository.get_admin_by_auth_id(db, claims.auth_user_id)
 
-    if user is not None and partner is not None:
+    matches: list[tuple[Role, uuid.UUID]] = [
+        (role, row.id)
+        for role, row in (("user", user), ("partner", partner), ("admin", admin))
+        if row is not None
+    ]
+
+    if len(matches) > 1:
         log_event(
             "auth_identity_ambiguous",
             level=logging.ERROR,
             auth_user_id=str(claims.auth_user_id),
-            user_id=str(user.id),
-            partner_id=str(partner.id),
+            matched_roles=",".join(role for role, _ in matches),
+            matched_ids=",".join(str(local_id) for _, local_id in matches),
             outcome="failure",
         )
         raise InternalError("Account is in an inconsistent state.")
 
-    if user is not None:
-        return Identity(auth_user_id=claims.auth_user_id, role="user", local_id=user.id)
-
-    if partner is not None:
+    if matches:
+        role, local_id = matches[0]
         return Identity(
-            auth_user_id=claims.auth_user_id, role="partner", local_id=partner.id
+            auth_user_id=claims.auth_user_id, role=role, local_id=local_id
         )
 
     # Authenticated, but no profile. Which of the two answers this is decides
@@ -300,6 +313,13 @@ async def resolve_identity(db: AsyncSession, claims: TokenClaims) -> Identity:
     # token's own phone claim is the evidence that connects the two, and it is
     # evidence we can trust — Supabase put it there after verifying the number,
     # the caller did not.
+    #
+    # An unlinked *admin* row can never surface here, which is deliberate rather
+    # than incidental: the search is by phone and admins has no phone column, so
+    # there is nothing to match on. That is the right outcome — the error below
+    # names two link-auth endpoints, and there is no third one to name. An
+    # unprovisioned admin is simply not an admin yet, and the fix is an UPDATE,
+    # not a call. See ADR-020.
     #
     # Everything else is somebody who passed OTP and never signed up.
     unlinked = await _find_unlinked_profile(db, claims.phone)
@@ -342,11 +362,15 @@ async def resolve_identity(db: AsyncSession, claims: TokenClaims) -> Identity:
 
 async def _find_unlinked_profile(
     db: AsyncSession, phone: Optional[str]
-) -> Optional[Role]:
+) -> Optional[Literal["user", "partner"]]:
     """Is there an existing, unclaimed profile for this phone number?
 
     Returns "user"/"partner" when one exists, None otherwise — which is the
     difference between "call link-auth" and "sign up".
+
+    Narrower than Role on purpose. Role gained "admin" with the analytics work
+    and this function can never return it: admins has no phone column to search
+    and no link-auth endpoint to point at.
 
     Only reached when the caller has no identity, so it costs nothing on the
     normal path. A token with no phone claim (an email or OAuth sign-in) has
@@ -412,11 +436,24 @@ async def link_partner_auth(
     # Checked before the write so the caller gets a clear 409 instead of a 500
     # from the UNIQUE violation. The constraint is still the real guarantee —
     # this only improves the error, and the IntegrityError below covers the race.
+    #
+    # admins is checked too, and there the pre-check is not a nicety. Each
+    # UNIQUE index only guards its own table, so nothing at the database level
+    # stops an account that is already an admin's from also claiming a partner
+    # profile — and the result is the two-table state resolve_identity reports
+    # as an InternalError, which would then be the answer to *every* request
+    # that account ever makes. The constraint cannot catch this one; only this
+    # check can.
     existing_partner = await auth_repository.get_partner_by_auth_id(
         db, claims.auth_user_id
     )
     existing_user = await auth_repository.get_user_by_auth_id(db, claims.auth_user_id)
-    if existing_partner is not None or existing_user is not None:
+    existing_admin = await auth_repository.get_admin_by_auth_id(db, claims.auth_user_id)
+    if (
+        existing_partner is not None
+        or existing_user is not None
+        or existing_admin is not None
+    ):
         log_event(
             "auth_link_rejected",
             level=logging.WARNING,
@@ -484,7 +521,15 @@ async def link_user_auth(
     existing_partner = await auth_repository.get_partner_by_auth_id(
         db, claims.auth_user_id
     )
-    if existing_user is not None or existing_partner is not None:
+    # See the note on the same check in link_partner_auth for why admins is
+    # here: no UNIQUE index spans two tables, so this is the only thing stopping
+    # an admin's account from also holding a user profile.
+    existing_admin = await auth_repository.get_admin_by_auth_id(db, claims.auth_user_id)
+    if (
+        existing_user is not None
+        or existing_partner is not None
+        or existing_admin is not None
+    ):
         log_event(
             "auth_link_rejected",
             level=logging.WARNING,

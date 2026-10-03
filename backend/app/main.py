@@ -3,9 +3,11 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.admin import router as admin_router
 from app.api.health import router as health_router
 from app.api.job_assignments import router as job_assignments_router
 from app.api.jobs import router as jobs_router
+from app.api.notifications import router as notifications_router
 from app.api.partners import router as partners_router
 from app.api.ratings import router as ratings_router
 from app.api.users import router as users_router
@@ -78,3 +80,16 @@ app.include_router(vehicles_router)
 # here, but keeping it adjacent means the two routers that answer under one
 # prefix are read together.
 app.include_router(ratings_router)
+
+# Include the notifications router (the in-app feed both sides poll). Its own
+# prefix, /api/v1/notifications, shared with nothing.
+app.include_router(notifications_router)
+
+# Include the admin analytics router (/api/v1/admin/analytics). Last, and under
+# its own /admin prefix rather than beside the resource each report reads: the
+# three routes return data spanning every job and every partner in the system,
+# and keeping the one admin-only surface together in the path means an auth rule
+# or a reverse-proxy restriction can be written against the prefix. Every route
+# carries Depends(require_admin) individually — see the module docstring for why
+# that is not set on the router instead.
+app.include_router(admin_router)

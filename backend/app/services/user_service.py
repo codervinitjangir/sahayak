@@ -151,11 +151,18 @@ async def register_user(
     # Checked before the write so the caller gets a clear 409 instead of a 500
     # from the UNIQUE violation on auth_user_id. The constraint is still the real
     # guarantee — this only improves the error.
+    #
+    # Except for admins, where it is the only guarantee there is: users'
+    # auth_user_id index knows nothing about the admins table, so without this
+    # an admin's account could register a customer profile and land in the
+    # two-table state resolve_identity answers with a 500 — permanently, for
+    # every request that account makes afterwards. See ADR-020.
     linked_user = await auth_repository.get_user_by_auth_id(db, claims.auth_user_id)
     linked_partner = await auth_repository.get_partner_by_auth_id(
         db, claims.auth_user_id
     )
-    if linked_user is not None or linked_partner is not None:
+    linked_admin = await auth_repository.get_admin_by_auth_id(db, claims.auth_user_id)
+    if linked_user is not None or linked_partner is not None or linked_admin is not None:
         _reject("rejected_account_already_linked")
         raise ConflictError(
             ErrorCode.AUTH_ALREADY_LINKED,

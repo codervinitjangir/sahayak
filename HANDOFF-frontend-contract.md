@@ -111,6 +111,7 @@ export interface CurrentAssignment {
   partner_name: string | null;
   partner_phone: string | null;
   partner_rating: number | null;
+  partner_rating_count: number | null;   // added 2026-09-30 — see §12.6
   estimated_arrival_min: number | null;
 }
 ```
@@ -181,10 +182,12 @@ Returns 200 with `{ id, auth_user_id, ... }`, is idempotent if you re-send the s
 
 The response shape is the same for everyone, but `current_assignment` redacts by caller:
 
-* **The job's owner** and **the assigned partner** get `partner_name`, `partner_phone`, `partner_rating`, `partner_id`.
-* **Anyone else** with a valid token gets a `200` with those four fields set to `null`, while `status` and `estimated_arrival_min` stay populated.
+* **The job's owner** and **the assigned partner** get `partner_name`, `partner_phone`, `partner_rating`, `partner_rating_count`, `partner_id`.
+* **Anyone else** with a valid token gets a `200` with those five fields set to `null`, while `status` and `estimated_arrival_min` stay populated.
 
 So do not assume `partner_name` is present just because `current_assignment` is. Render the contact block conditionally.
+
+**Updated 2026-09-30:** `partner_rating_count` was added to this gate, not beside it — the list above is enforced by a unit test that iterates the gated field names (`backend/tests/unit/test_job_detail_contact_gate.py`), so a future partner field added outside the gate fails the suite rather than quietly leaking. The server also skips the partner lookup entirely for a non-privileged caller rather than fetching the row and nulling the fields afterwards.
 
 ### 2.5c Owner signup — `POST /api/v1/users` (new, 2026-09-20)
 
@@ -1362,15 +1365,20 @@ Worth knowing because one part of it is visible to you and one part is not:
   `web/src/pages/owner/JobTrackingPage.tsx:183` reads `job.partner.rating_avg.toFixed(1)` and
   `job.partner.rating_count`. There is no `job.partner` on the response — it's
   `job.current_assignment`, with flat `partner_*` fields, which is §2.2's point and unchanged
-  by this task. Mapped across, `rating_avg` → `current_assignment.partner_rating`, and
-  `rating_count` **has no equivalent on this endpoint at all** — it exists in the database and
-  feeds the algorithm, and it is in exactly one response shape, `POST /api/v1/partners`
-  (a mechanic's own signup, where it is always `0` because they're new), which is no use to
-  an owner tracking a job. So `★ 4.5 (12 jobs)` can't be rendered today — the stars can, the
-  `(12 jobs)` can't. Say the word and I'll add the count to `CurrentAssignmentResponse`; it's
-  a one-line change and now there's finally a real number to put in it. Also note
-  `.toFixed()` will throw on `null` — `partner_rating` is nullable whenever the partner is
-  withheld or unresolved, so guard it either way.
+  by this task. Mapped across: `rating_avg` → `current_assignment.partner_rating`, and
+  `rating_count` → `current_assignment.partner_rating_count` — **added 2026-09-30, after this
+  section was first written.** When I flagged it here the count had no equivalent on this
+  endpoint and `★ 4.5 (12 jobs)` could not be rendered; it now can. Both fields sit inside the
+  same contact gate as name and phone (§2.5b), so both are `null` for a caller who is neither
+  the owner nor the assigned partner, and both are `null` before a partner is assigned. Guard
+  `.toFixed()` accordingly — it throws on `null`, and `partner_rating` is nullable for those
+  two reasons independent of anything you do.
+- **Why the count is worth rendering rather than dropping** (the reason I offered it rather
+  than just deleting the line): the rating that drives matching is Bayesian-smoothed toward a
+  3.5 prior, so `4.9` from two jobs and `4.9` from two hundred are very different claims and
+  the average alone cannot tell them apart. A brand-new mechanic reads `null`/`0`, not a bad
+  score. Showing the sample size is the difference between a number a user can calibrate and
+  one they have to trust blindly.
 
 ### 12.7 Verified by
 
@@ -1378,3 +1386,546 @@ Worth knowing because one part of it is visible to you and one part is not:
 against the real database and real Supabase tokens
 (`backend/tests/integration/check_ratings.py`), plus a control run that restores the old
 broken behaviour and fails on exactly the aggregate assertions.
+
+---
+
+## 13. Notifications — the in-app feed (new, 2026-10-01)
+
+Four endpoints. **Both roles use all four** — there is no owner feed route and partner feed
+route, the token decides whose rows come back. Same pattern as ratings (§12).
+
+```
+GET  /api/v1/notifications                        the feed, newest first
+GET  /api/v1/notifications/unread-count           just the badge
+POST /api/v1/notifications/{notification_id}/read mark one read
+POST /api/v1/notifications/read-all               clear the badge
+```
+
+Nothing creates a notification. There is no `POST /notifications` and there will not be — the
+server writes them inside the transactions that change a job's status, so a client cannot
+assert that something happened. Read-only apart from marking read.
+
+**Nothing in `web/` or `mobile/` calls any of this today** — I grepped both for a request to
+`/notifications` and there is none, so this section is new surface rather than a correction and
+has no "one change needed" subsection like §12.1.
+
+One thing I did find, and it's the natural place to start: `web/src/pages/partner/components/PartnerTopBar.tsx:67`
+already renders the bell. It has **no `onClick`**, and the unread dot on line 73 is rendered
+unconditionally — so every partner currently sees a permanently-lit notification badge that
+means nothing. Those two lines are now backable by a real number (§13.2) and a real list
+(§13.1). There is no equivalent bell on the owner side yet.
+
+### 13.1 `GET /api/v1/notifications` — the feed
+
+```
+GET /api/v1/notifications?limit=20&offset=0&unread_only=false
+Authorization: Bearer <supabase access token>
+```
+
+| Param | Default | Rules |
+|---|---|---|
+| `limit` | `20` | 1–100. Outside that range is a **422**, not a clamp. |
+| `offset` | `0` | ≥ 0. |
+| `unread_only` | `false` | Filters the rows. Changes `total`, never `unread_count` — see below. |
+
+`200`:
+
+```json
+{
+  "data": {
+    "items": [
+      { "id": "e41a...", "event": "job_completed",
+        "message": "Your request has been completed.",
+        "job_id": "9a3c...", "is_read": false,
+        "sent_at": "2026-10-01T09:14:22.108Z" },
+      { "id": "c07b...", "event": "job_accepted",
+        "message": "A partner has accepted your request.",
+        "job_id": "9a3c...", "is_read": true,
+        "sent_at": "2026-10-01T08:51:03.994Z" }
+    ],
+    "unread_count": 3,
+    "total": 11,
+    "limit": 20,
+    "offset": 0,
+    "has_more": false
+  },
+  "meta": { "request_id": "..." }
+}
+```
+
+Five things worth stating because each one decides a line of your code:
+
+- **An empty feed is `200` with `items: []`**, not a 404. That's the ordinary state of a new
+  account, so render the empty state off `items.length === 0` and never off a status code.
+- **`unread_count` is over the whole feed, not the page.** Returned here *as well as* on its
+  own endpoint so that opening the list is one request instead of two. It does **not** respond
+  to `unread_only` — if it did, the badge would change as the user toggled a filter, which is
+  the one thing a badge must not do.
+- **`total` does** respond to `unread_only`. So with the filter on, `total` is the unread count
+  *after* filtering and `unread_count` is the same number by coincidence; with it off they
+  differ. Page off `total`/`has_more`, badge off `unread_count`, and don't cross the two.
+- **`has_more`** is `offset + items.length < total`, precomputed. Use it rather than doing that
+  arithmetic — it stays right if the paging model ever changes.
+- **No `recipient_type` / `recipient_id` on an item.** Every row in the response is addressed
+  to you, which is the only way it could be in the response, so the address would be a field
+  you'd have to ignore. Don't go looking for it.
+
+Ordering is `sent_at DESC, id DESC`. The second part matters to you in one case: the server
+writes all of a cancellation's notifications in one transaction, and `now()` is transaction
+start time, so two rows can share `sent_at` **to the microsecond**. The tie-break on `id` is
+what stops offset paging from showing you one of them twice and skipping the other. You don't
+have to do anything about this, but if you build client-side dedupe keyed on `sent_at`, it
+will be wrong.
+
+### 13.2 `GET /api/v1/notifications/unread-count` — the badge
+
+```json
+{ "data": { "unread_count": 3 }, "meta": { "request_id": "..." } }
+```
+
+This is the one to poll on a timer. It's served from a partial index over unread rows only, so
+its cost tracks unread mail rather than feed size — it does not get slower as a user's history
+grows, which `GET /notifications` does. **30–60s is a sane interval**; see §13.7 on why
+polling is the only option right now.
+
+### 13.3 Marking read — both calls return the same shape
+
+```
+POST /api/v1/notifications/{notification_id}/read     no body
+POST /api/v1/notifications/read-all                   no body
+```
+
+Both `200` with:
+
+```json
+{ "data": { "updated": 1, "unread_count": 2 }, "meta": { "request_id": "..." } }
+```
+
+- **`updated: 0` is success, not a conflict.** A notification that was already read returns
+  `200 { updated: 0 }`, not a 409. Your intent — "this should be read" — holds either way, and
+  the overwhelmingly common cause of a repeat is a retry after a dropped response on a phone
+  network. So don't show an error on `updated: 0`; the state is what you asked for.
+- **`unread_count` in the response is the badge afterwards**, so you never need a follow-up
+  call to `/unread-count` after marking something read. Use it directly.
+- `read-all` always returns `unread_count: 0` — that's what the call guarantees, so it's
+  returned rather than re-queried. `updated` is how many rows it actually changed, which is `0`
+  for an account with nothing unread.
+- Neither call is scoped to the current page or filter. `read-all` means all.
+- **POST, not PATCH**, on both. No body on either — don't send `{}` with a JSON content type
+  and expect it to be ignored; send nothing.
+
+### 13.4 The `event` values — this is what you branch on
+
+Eight, and the list is closed today. `message` is prose and **will** be reworded (and
+eventually translated), so never match on it.
+
+| `event` | Who receives it | When |
+|---|---|---|
+| `job_offered` | **partner** | Dispatch offered them this job. Pair it with §10's offer list. |
+| `job_accepted` | owner | A partner took the job (`status` → `assigned`). |
+| `job_partner_en_route` | owner | Partner started driving. |
+| `job_in_progress` | owner | Partner started work. |
+| `job_completed` | owner | Job done. Good moment to surface the rating form (§12.4). |
+| `job_cancelled_by_owner` | **partner** | The owner called it off on a job this partner held. |
+| `job_cancelled_by_partner` | owner | The partner dropped the job. |
+| `job_no_match_found` | owner | Dispatch found nobody. See §13.5 on the two causes. |
+
+Two things to read off that table rather than assume:
+
+- **You are never notified of your own action.** The owner does not get a notification for
+  their own cancellation; the partner does not get one for their own accept. So a feed is a log
+  of what the *other* party did, and an optimistic local update after your own action is not
+  going to be duplicated by a notification arriving later.
+- **`cancelled` is two events, not one.** `job_cancelled_by_owner` and
+  `job_cancelled_by_partner` are separate because the recipient differs, the wording differs,
+  and a client needs to render them differently — one is news about someone else's decision,
+  the other is the consequence of your own role's job being dropped. Collapsing them would have
+  forced you to re-derive which happened from your own role.
+
+**`message` contains no names, no phone numbers, no coordinates, no addresses, no prices and
+nothing the user typed.** Not an oversight — a stored string cannot be re-gated, and the
+contact-release rules in §2.5b / ADR-017 decide at *read time* who may see a mechanic's name
+and number. "Ramesh is on the way" baked into a TEXT column would sit outside that gate
+forever. If you want a name in the notification row, fetch it from `GET /jobs/{job_id}` using
+the item's `job_id` — that's the endpoint that does the gating, and it'll return `null` for a
+caller who isn't entitled.
+
+`job_id` is nullable. It's non-null on all eight events today, but the column is nullable
+because account-level notifications (verification approved, payout settled) will not be about a
+job. Guard the deep-link, don't assume it.
+
+### 13.5 Errors
+
+| Code | HTTP | What to do |
+|---|---|---|
+| `NOTIFICATION_NOT_FOUND` | 404 | On `/{id}/read`. Covers both "no such notification" and "it's someone else's" — **identical response, don't try to tell them apart** (principle 6, same as §8.5). Drop the row from your list and move on; it isn't a retry. |
+| `UNAUTHORIZED` | 401 | Missing/expired/invalid token. Refresh and retry once, as everywhere else. |
+| `VALIDATION_ERROR` | 422 | `limit` outside 1–100, negative `offset`, or a non-UUID `notification_id`. `details[]` names the field. |
+
+There is no 403 on any of these four routes and no 409 on either mark-read. Nothing else can
+come back.
+
+`job_no_match_found` is worth one note here even though it isn't an error code: it has **two
+genuinely different causes** — nobody was available within range, or the dispatch
+infrastructure (Redis location store) was unreachable. They are distinguishable on the server
+via the `job_status_history` note (ADR-016), and **not distinguishable by you today** — the
+notification, the job status and the job response are identical in both cases. So the honest
+copy for this event is "we couldn't find a partner — try again", which is right for both, not
+"nobody is available nearby", which is a lie in the second case. If you want the split, it
+needs an endpoint that doesn't exist yet; say so and I'll add it.
+
+### 13.6 What I'd build, in order
+
+Not a spec, just the sequencing that gets the most out of this for the least work:
+
+1. **The badge.** Poll `/unread-count` on a timer and drive the dot that
+   `PartnerTopBar.tsx:73` already renders unconditionally — that's a one-line condition on a
+   number you now have, and it turns a decorative dot into a true one. ~20 lines total, and it
+   is the only part of this feature that changes what a user does: it's what makes them open
+   the app.
+2. **The feed list** on a bell tap: one `GET /notifications` call, `event` → icon + copy,
+   `job_id` → deep-link into the existing tracking screen. Mark read on tap, using the
+   `unread_count` in the mark-read response to update the badge without a second call.
+3. **`read-all`** behind a "mark all read" affordance. Cheap, and without it a badge the user
+   can't clear is a permanent irritant.
+4. **Partner-side `job_offered` handling last**, because it overlaps §10's offer list — a
+   partner polling `/partners/me/offers` already sees the offer. The notification's value on
+   that side is the badge when the offers screen *isn't* open.
+
+### 13.7 What not to build — four things this feature does not do
+
+Each of these would be reasonable to assume from the word "notifications", and each is wrong
+today:
+
+- **Nothing is pushed.** No FCM, no APNs, no SMS. `channel` is `'in_app'` on every row, which
+  is why no row claims a delivery that didn't happen. So a notification only exists while your
+  app is open and polling — do not build an onboarding flow asking for push permission against
+  this, there's nothing on the other end of it yet.
+- **There is no real-time transport.** No WebSocket, no SSE. Latency is your poll interval,
+  which is why the badge endpoint is separate and cheap.
+- **Do not auto-mark-read on feed open.** Opening `GET /notifications` changes nothing — the
+  badge is cleared only by an explicit call. That's deliberate (a feed render is not a read),
+  but it means the badge stays lit until you call one of the two POSTs.
+- **`job_offered` still has no expiry, so build no countdown.** This is the same flag as §10:
+  an offer the partner never answers sits indefinitely, and a timer ring implying a deadline
+  would be inventing a deadline. Unchanged by this task.
+
+### 13.8 Verified by
+
+52 unit tests (40 in `backend/tests/unit/test_notification_service.py` for the recipient rule
+and the vocabulary, 12 across the lifecycle and cancellation files proving the writer is
+actually wired at each seam) and **79 of 79** live assertions against the real database and
+real Supabase tokens (`backend/tests/integration/check_notifications.py`), including two
+accounts' feeds read after a single event — which is the only way to prove "the owner was told
+and the partner wasn't".
+
+The control run (`--reverted`) removes the actor check so the rule always answers "the owner",
+and scores **71 of 79**: all eight failures are the owner's-cancellation branch, i.e. the
+mechanic driving to a cancelled job is never told. Full regression after the change: 307 unit
+tests, 646 live assertions across thirteen harnesses, all green.
+
+---
+
+## 14. Admin analytics — three read-only reports (new, 2026-10-03)
+
+Three endpoints, all `GET`, all admin-only, all read-only. They exist for an internal ops
+dashboard and for the final evaluation; there is nothing here a customer or a partner app
+should ever call, and nothing that returns a single job or a single person's data.
+
+If you are not building an admin surface, the one thing in this section that may still matter
+to you is **§14.6, the `notes[]` array** — it is a response-shape pattern we may reuse — and
+`INVALID_DATE_RANGE` in §14.7, which is a new entry in the shared error registry.
+
+### 14.1 The three routes
+
+```
+GET /api/v1/admin/analytics/overview     job funnel, conversion, current roster, time-to-work
+GET /api/v1/admin/analytics/dispatch     dispatch latency, offer outcomes, no-match split
+GET /api/v1/admin/analytics/matching     weighted scoring vs nearest-partner baseline
+```
+
+Every one takes the same two optional query parameters:
+
+| Param  | Type               | Notes                                         |
+|--------|--------------------|-----------------------------------------------|
+| `from` | ISO 8601 timestamp | inclusive lower bound on `jobs.requested_at`  |
+| `to`   | ISO 8601 timestamp | **exclusive** upper bound                     |
+
+Both optional, independently. Omitting both reports over all time. The window is half-open on
+purpose — two adjacent windows built this way partition the jobs between them, with nothing
+counted twice and nothing dropped, which a closed upper bound would not give you. Send
+timezone-aware timestamps; a naive one is read as UTC.
+
+### 14.2 Who can call them
+
+**`admin` role only.** Not an owner, not a partner, not "a logged-in user with a flag".
+
+- no token → `401 UNAUTHORIZED`
+- a valid owner's token → `403 FORBIDDEN`
+- a valid partner's token → `403 FORBIDDEN`
+- a valid token for an account linked to nothing → `403 USER_NOT_REGISTERED`
+
+**There is no endpoint that makes someone an admin, and there is not going to be one.** No
+`POST /api/v1/admins`, no admin `link-auth`. An admin is a row in our `admins` table with a
+Supabase `sub` written into it by hand, in SQL, by someone who already has database access.
+That absence is deliberate — see ADR-020 — so if you are building an admin login screen, the
+flow is: the person signs in with Supabase exactly like anyone else, and either their account
+is already attached to an `admins` row or all three routes answer 403. There is nothing for
+the UI to do about a 403 here except say so; retrying, re-linking or re-registering will not
+change it.
+
+### 14.3 `/overview`
+
+```json
+{
+  "data": {
+    "window": {
+      "requested_from": "2026-10-03T11:31:17.966692Z",
+      "requested_to": null,
+      "first_job_at": "2026-10-03T11:31:18.447695Z",
+      "last_job_at": "2026-10-03T11:31:46.923629Z"
+    },
+    "jobs": {
+      "total": 9, "requested": 0, "matching": 0, "assigned": 1,
+      "partner_en_route": 1, "in_progress": 1, "completed": 2,
+      "cancelled": 1, "no_match_found": 2
+    },
+    "conversion": { "completed": 2, "total": 9, "still_open": 4, "rate": 0.2222 },
+    "partners": {
+      "partners_total": 2, "verified": 2, "available_now": 2, "dispatchable_now": 2,
+      "busy_now": 2, "live_assignments": 3,
+      "rated": 0, "ratings_total": 0, "mean_rating": null
+    },
+    "work_started": {
+      "count": 3, "mean": 0.42, "min": 0.21, "p50": 0.4, "p95": 0.6,
+      "max": 0.64, "unit": "minutes"
+    },
+    "eta_accuracy": null,
+    "notes": [ { "code": "...", "detail": "..." } ]
+  },
+  "meta": { "request_id": "..." }
+}
+```
+
+Four things to read carefully before rendering any of it:
+
+**The eight status counts sum to `jobs.total`.** Safe to draw as a funnel or a stacked bar
+without a residual bucket.
+
+**`conversion.rate` is `completed / total` over the whole window, and it is a floor, not a
+success rate.** `still_open` counts only jobs that can still reach `completed`
+(`requested`, `matching`, `assigned`, `partner_en_route`, `in_progress`). `cancelled` and
+`no_match_found` are terminal, so they sit in the denominator as settled outcomes rather than
+being counted as in-flight. If you want "of the jobs that finished, how many succeeded", you
+have the numbers to compute it — but it is not this field, so do not label this field that way.
+
+**`partners` ignores the window entirely.** `is_available` is a current flag and `rating_avg`
+a running aggregate; the table holds no history, so there is no honest way to report the roster
+as it stood last Tuesday. When you send a window you will get the
+`PARTNER_ROSTER_IS_CURRENT_NOT_HISTORICAL` note, and the block should be labelled "as of now"
+in the UI even when the rest of the page says "last 7 days". `mean_rating` is `null` when
+nobody in the system has been rated, not `0`.
+
+**`eta_accuracy` is always `null` right now, and `work_started` is not arrival time.**
+`work_started` measures from the partner accepting to the job entering `in_progress`, which is
+the transition out of `partner_en_route`. There is no `arrived` status and no arrival
+timestamp anywhere in the system, so this includes however long the mechanic spent between
+pulling up and starting work. It is a floor on travel time. Label it "time to work starting",
+not "arrival time" or "ETA" — and if you shorten it, shorten it to something still true.
+Note that `count` is every job that *ever* reached `in_progress`, including jobs that have
+since completed; it is not a count of jobs currently in progress.
+
+### 14.4 `/dispatch`
+
+```json
+{
+  "data": {
+    "window": { "requested_from": "...", "requested_to": null,
+                "first_job_at": null, "last_job_at": null },
+    "dispatch_latency": { "count": 7, "mean": 1.111, "min": 0.83, "p50": 1.08,
+                          "p95": 1.4, "max": 1.52, "unit": "seconds" },
+    "offers": {
+      "total": 8, "accepted": 5, "declined": 1, "unanswered": 2,
+      "jobs_offered": 7, "partners_offered": 2,
+      "acceptance_rate_of_answered": 0.8333,
+      "acceptance_rate_of_all": 0.625
+    },
+    "offers_before_acceptance": {
+      "accepted_offers": 5, "mean_rank": 1.0,
+      "at_rank_1": 5, "at_rank_2": 0, "at_rank_3_or_worse": 0, "worst_rank": 1
+    },
+    "no_match": {
+      "total": 2, "genuine": 1, "dispatch_unavailable": 1, "jobs_in_window": 9,
+      "rate": 0.125, "rate_including_outages": 0.2222
+    },
+    "notes": [ "..." ]
+  }
+}
+```
+
+**`accepted + declined + unanswered == total`, always.** An offer's outcome is read from
+timestamps (`accepted_at`, `responded_at`), not from `job_assignments.status`, so an offer
+keeps its outcome after the job it belongs to has been completed or cancelled. This matters
+more than it sounds: `status` is overwritten when a job ends, so a count taken from it would
+lose history in proportion to how much work actually got finished.
+
+**Quote `acceptance_rate_of_answered`.** There is no offer timeout in the system — an
+unanswered offer is still open and will stay open indefinitely, so it is not a refusal.
+`acceptance_rate_of_all` treats every unopened offer as a decline and is therefore a floor.
+Both ship together and the `UNANSWERED_OFFERS_HAVE_NO_EXPIRY` note names the gap; if you only
+have room for one number on a card, use `_of_answered` and put `unanswered` next to it.
+
+**`no_match.rate` deliberately excludes our own outages from both sides of the division.**
+A job reaches `no_match_found` either because nobody was available (`genuine`) or because the
+partner location service could not be reached (`dispatch_unavailable`) — both share the status
+by design and are separated by the timeline note (ADR-016). A job whose dispatch never ran is
+not evidence about partner supply in either direction, so it is removed from the numerator
+*and* the denominator: in the sample above `rate` is `1/8`, not `1/9`.
+`rate_including_outages` is published beside it so the choice is checkable. If
+`dispatch_unavailable > 0`, that is an infrastructure incident and worth surfacing as one,
+separately from supply.
+
+`jobs_offered` is 7 while `total` is 8 because one job received two offers (a decline produced
+a second), and two jobs received none at all (the two that ended `no_match_found`).
+
+### 14.5 `/matching` — the one the evaluation rests on
+
+```json
+{
+  "data": {
+    "window": { "...": "..." },
+    "divergence": { "first_offers": 7, "diverged": 1,
+                    "agreed_with_nearest": 6, "rate": 0.1429 },
+    "weighted_diverged": {
+      "offers": 1, "answered": 1, "accepted": 1, "acceptance_rate": 1.0,
+      "mean_matching_score": 0.8553, "mean_distance_score": 0.7883,
+      "mean_load_score": 1.0, "mean_skill_score": 1.0, "mean_rating_score": 0.7
+    },
+    "also_nearest": { "offers": 6, "mean_distance_score": 0.8823,
+                      "...": "same shape as weighted_diverged" },
+    "attribution": {
+      "diverged_offers": 1,
+      "deltas": { "distance_score": -0.094, "load_score": 0.0833,
+                  "skill_score": 0.0, "rating_score": 0.0 },
+      "stddev": { "distance_score": 0.041, "load_score": 0.189,
+                  "skill_score": 0.0, "rating_score": 0.0 },
+      "eligible_components": ["load_score"],
+      "constant_components": ["skill_score", "rating_score"],
+      "driver": "load_score"
+    },
+    "notes": [ "..." ]
+  }
+}
+```
+
+`divergence.rate` is the headline: **how often weighted scoring picked somebody other than the
+nearest eligible partner.** `diverged + agreed_with_nearest == first_offers`.
+
+**Every number here is restricted to the first offer of each job** (`assignment_rank = 1`),
+which is why `first_offers` (7) is less than `/dispatch`'s `offers.total` (8). On a later
+offer, "was the baseline choice" means "also the nearest of those *still* eligible" — a
+different question over a smaller candidate set — so mixing ranks would compare the strategy
+against a baseline that changes definition partway through the sample. The `FIRST_OFFERS_ONLY`
+note says this in the payload. Do not compute a divergence rate against `offers.total`
+yourself; it would be wrong, and lower.
+
+**`attribution.driver` names the component that paid for overriding distance.** Two
+restrictions, both also stated in the response:
+
+- A component that took the same value for every decision in the window appears in
+  `constant_components` and can never be the `driver`, whatever its mean. `skill_score` is
+  constant **by construction** — skill is a hard filter applied before scoring, so every
+  ranked candidate matches and the term is always `1.0`. `rating_score` is constant in any
+  window where no partner had been rated. Attribution over a constant column produces a
+  number that is noise with a confident name on it.
+- `driver` is a difference of *group means* — diverged picks versus agreed picks — not a
+  per-job comparison against the partner who was actually passed over. We store
+  `score_components` for the partner who got the offer and never for the runner-up, so there
+  is no row to subtract. `ATTRIBUTION_IS_GROUP_MEANS_NOT_COUNTERFACTUAL` says so.
+
+`driver` can be `null` (no divergence in the window, or nothing varied). Render that as
+"not determinable", not as "distance".
+
+### 14.6 `notes[]` — the caveats travel with the numbers
+
+Every one of the three responses carries `notes: [{ "code": "...", "detail": "..." }]`. This
+is not decoration and it is not a debug field: these endpoints produce numbers that end up in
+documents, and the limits on a number belong attached to it rather than in a doc somebody may
+not have read. **Render them.** A collapsed "3 notes" affordance next to the figures is
+enough; dropping them is not.
+
+`code` is stable and safe to branch on. `detail` is a full sentence meant to be shown to a
+human as-is. The nine current codes:
+
+| Code | Appears on | Means |
+|------|-----------|-------|
+| `ETA_ACCURACY_NOT_COMPUTABLE` | overview (always) | `eta_accuracy` is null because nothing has ever written an arrival estimate. Cites the count from your window. |
+| `WORK_STARTED_IS_NOT_ARRIVAL` | overview, when `work_started.count > 0` | What `work_started` measures, and that it is a floor on travel time. |
+| `PARTNER_ROSTER_IS_CURRENT_NOT_HISTORICAL` | overview, only when a window was sent | The `partners` block is as-of-now and ignored your window. |
+| `UNANSWERED_OFFERS_HAVE_NO_EXPIRY` | dispatch, when `unanswered > 0` | Those offers are still open, not refusals. Quote `_of_answered`. |
+| `OUTAGE_JOBS_EXCLUDED_FROM_NO_MATCH_RATE` | dispatch, when `dispatch_unavailable > 0` | How many jobs left both sides of `rate`, and why. |
+| `FIRST_OFFERS_ONLY` | matching (always) | Everything is `assignment_rank = 1`. |
+| `CONSTANT_COMPONENTS_CANNOT_ATTRIBUTE` | matching, when any component was constant | Which components cannot have separated candidates, and why. |
+| `ATTRIBUTION_IS_GROUP_MEANS_NOT_COUNTERFACTUAL` | matching, when `diverged > 0` | What `driver` is and is not. |
+| `SAMPLE_TOO_SMALL_FOR_PERCENTILES` | any, under the threshold | The mean is usable; `p50`/`p95` describe the sample, not the system. |
+
+Codes may be added later. The nine above will not change meaning, so a dashboard that renders
+a specific caveat for one of them can rely on it. A `code` you do not recognise should still
+be displayed using its `detail` — do not filter to a known list.
+
+`SAMPLE_TOO_SMALL_FOR_PERCENTILES` will be present on essentially every pilot-sized window.
+When it is, suppress `p50` and `p95` in the UI or mark them, and show the mean.
+
+### 14.7 `INVALID_DATE_RANGE` — one new error code
+
+| Code | HTTP | When |
+|------|------|------|
+| `INVALID_DATE_RANGE` | 400 | `from` is later than `to` |
+
+New entry in the shared registry, so it is available to any future endpoint taking a date
+range — not analytics-specific.
+
+`from == to` is **not** an error: the window is half-open, so it is an empty range somebody
+asked for deliberately, and it answers `200` with zeros that mean what they say. Only strict
+inversion is refused. A date picker that can produce a backwards range should catch it before
+the request, but handle the 400 anyway.
+
+An unparseable timestamp is `422 VALIDATION_ERROR` from the usual validation layer, not
+`INVALID_DATE_RANGE`.
+
+### 14.8 Nothing changed for you
+
+No existing response shape, status code or error code was modified by this work. If you are
+not building an admin surface, the only reasons to read this section are the `notes[]` pattern
+(§14.6) and the new registry entry (§14.7).
+
+### 14.9 Verified by
+
+47 unit tests (`backend/tests/unit/test_admin_analytics_service.py`) and **99 of 99** live
+assertions against the real database and real Supabase tokens
+(`backend/tests/integration/check_admin_analytics.py`). The harness drives nine jobs through
+the real endpoints — offered, declined, re-offered, accepted, completed, cancelled, unmatched
+— and then asks the three reports to describe what happened, with one of the nine being an
+injected location-service outage so the shipped failure path writes its own timeline note
+rather than the test seeding it.
+
+The divergence in §14.5 is arranged, not hoped for: one partner 0.99 km from the pickup
+holding a live job, another 2.12 km away and free, so weighted scoring has to pick the further
+one. The harness asserts `was_baseline_choice = false`, that `load_score` is the only
+component that varied, and that `driver == "load_score"` rather than `distance_score` — the
+component that was overridden is not the component that paid for it.
+
+The control run (`--reverted`) swaps the offer classification back to reading
+`job_assignments.status`, and scores **94 of 99**: all five failures are the two sections that
+depend on it — the three outcomes stop summing to the total, `accepted` drops from 5 to 3,
+`unanswered` from 2 to 1, and both acceptance rates move. Everything else still passes, which
+is the point: the defect isolates to the one column it lives in.
+
+Two shipping-blocker SQL bugs were found and fixed while writing that harness, both of which
+had all three endpoints returning 500 on every call while the 47 unit tests were green. See
+ADR-021's implementation note — the short version is that asyncpg PREPAREs before binding, so
+a parameter in raw SQL needs an explicit `CAST`, and the same SQL run through psycopg2 does
+not reproduce the failure.
+
+Full regression after the change: **371 unit/api tests** and **745 live assertions across
+fourteen harnesses**, all green, database verified back to baseline.
