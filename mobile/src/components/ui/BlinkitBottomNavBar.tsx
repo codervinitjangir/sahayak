@@ -188,12 +188,12 @@ export default function BlinkitBottomNavBar({
     },
     {
       key: "services",
-      label: "Services",
+      label: "Categories",
       renderIcon: (active) => <ServicesIcon active={active} />,
     },
     {
       key: "activity",
-      label: "Rescues",
+      label: "Orders",
       renderIcon: (active) => <RescuesIcon active={active} />,
     },
     {

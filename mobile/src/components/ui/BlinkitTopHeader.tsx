@@ -54,14 +54,14 @@ export default function BlinkitTopHeader({
     tab === "services"
       ? 'Search "flatbed towing, jumpstart, tyre..."'
       : tab === "activity"
-      ? 'Search "past rescues, invoices, bills..."'
+      ? 'Search "past orders, invoices, bills..."'
       : 'Search "mechanic, towing, flat tyre..."';
 
   const contextLabel =
     tab === "services"
-      ? "Services in"
+      ? "Categories in"
       : tab === "activity"
-      ? "Rescues in"
+      ? "Orders in"
       : "Sahayak in";
 
   return (

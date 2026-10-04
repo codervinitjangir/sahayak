@@ -144,16 +144,16 @@ export default function AccountView({
 
         {/* ── 2. FRAME 2: THREE QUICK ACTION PILL CARDS (EXACT MATCH) ── */}
         <View style={styles.cardsRowWrapper}>
-          {/* Card 1: Your rescues */}
+          {/* Card 1: Your orders */}
           <TouchableOpacity
             style={styles.threeCardItem}
             onPress={() => onGoToTab?.("activity")}
             activeOpacity={0.85}
           >
             <View style={styles.threeCardIconBox}>
-              <Ionicons name="construct-outline" size={26} color="#1C1C1C" />
+              <Ionicons name="bag-handle-outline" size={26} color="#1C1C1C" />
             </View>
-            <Text style={styles.threeCardTitle}>Your rescues</Text>
+            <Text style={styles.threeCardTitle}>Your orders</Text>
           </TouchableOpacity>
 
           {/* Card 2: Sahayak Cash */}

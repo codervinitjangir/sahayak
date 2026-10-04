@@ -501,6 +501,11 @@ export default function HomeScreen() {
             onOpenVehicleModal={() => setShowVehicleModal(true)}
             onOpenSos={() => setShowSosModal(true)}
             searchQuery={serviceSearchQuery}
+            lastBookedService={{
+              type: "battery",
+              title: "Battery Jumpstart Booster",
+              vehicle: `${selectedVehicle.make} ${selectedVehicle.model}`,
+            }}
           />
         </View>
       )}
@@ -511,6 +516,14 @@ export default function HomeScreen() {
           <ActivityView
             onLaunchService={handleLaunchService}
             onOpenSos={() => setShowSosModal(true)}
+            onTrackActiveJob={() =>
+              nav.navigate("OwnerFlow", {
+                initialStep: "partner_matched",
+                serviceType: "towing",
+                pickupAddress: "Indiranagar 100 Feet Road, Bengaluru",
+              })
+            }
+            onGoToServices={() => setActiveTab("services")}
             searchQuery={activitySearchQuery}
           />
         </View>
