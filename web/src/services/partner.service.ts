@@ -1,23 +1,60 @@
 import { apiClient } from './api';
 import { jobsService } from './jobs.service';
 import * as mock from './partner.mock';
-import { IS_DEMO_MODE } from '../app/config';
+import { getStoredPartnerProfile } from '../types/partner';
 import type { Job, JobStatus } from '../types/jobs';
-import type { EarningsWindow, PartnerEarnings, PartnerOffer, PartnerTrustStats } from '../types/partner';
+import type {
+  EarningsWindow,
+  PartnerEarnings,
+  PartnerOffer,
+  PartnerTrustStats,
+} from '../types/partner';
 
 /**
  * Partner dispatch API.
  *
- * The /partners/me/* endpoints are not built yet, so every call has two
- * branches: the real request, written out and ready, and the in-memory fixture
- * in ./partner.mock. VITE_PARTNER_API_MOCK picks between them — see
- * .env.example. No page or hook knows which branch ran.
+ * Real endpoints (shipped as of 2026-09-27):
+ *   GET  /partners/me/offers           → getPendingOffer()
+ *   POST /job-assignments/{id}/respond → acceptOffer() / rejectOffer()
+ *   PATCH /partners/{id}/availability  → setAvailability()
+ *
+ * Not yet built on the backend (mock-only until a backend decision):
+ *   getActiveJob()  — no GET /partners/me/jobs/active endpoint exists.
+ *                     The POST /job-assignments/{id}/respond accept response
+ *                     returns only { assignment_status, job_status }, not a
+ *                     full Job object, so local caching after accept is
+ *                     insufficient for page-refresh recovery. This is a real
+ *                     backend gap — see FRONTEND-GUIDE §5.2 and TASKS-frontend.md.
+ *   getEarnings()   — no /partners/me/earnings endpoint. No payments data in
+ *                     the backend at all. Screens that depend on this:
+ *                     ConsoleSettings earnings card, PartnerDashboard stats block.
+ *   getTrustStats() — no /partners/me/stats endpoint. Screens that depend on
+ *                     this: ConsoleSettings stats card, PartnerDashboard metrics.
+ *
+ * VITE_PARTNER_API_MOCK controls the mock branch:
+ *   - false (default): real API calls for the three shipped endpoints above.
+ *   - true (explicit opt-in): mock for all calls, including earnings/stats,
+ *     which have no real path. Set this if you need to demo earnings/stats
+ *     UI without a backend decision on those endpoints.
+ *
+ * Note: earnings and stats always fall back to mock regardless of this flag,
+ * because no real endpoint exists for them.
  */
 
-const MOCK_FLAG = import.meta.env.VITE_PARTNER_API_MOCK;
-
-/** Unset means "mock in dev, real in a production build" — same rule as IS_DEMO_MODE. */
-export const IS_PARTNER_API_MOCK = MOCK_FLAG === undefined ? IS_DEMO_MODE : MOCK_FLAG === 'true';
+/**
+ * Mock switch.
+ *
+ * Defaults to false — real API calls are made for the shipped endpoints:
+ *   GET  /partners/me/offers           → getPendingOffer()
+ *   POST /job-assignments/{id}/respond → acceptOffer() / rejectOffer()
+ *   PATCH /partners/{id}/availability  → setAvailability()
+ *
+ * Set VITE_PARTNER_API_MOCK=true in .env to explicitly opt in to mock behavior.
+ *
+ * Note: getActiveJob(), getEarnings(), and getTrustStats() always use mock
+ * data regardless of this flag because their backend endpoints do not exist yet.
+ */
+export const IS_PARTNER_API_MOCK = import.meta.env.VITE_PARTNER_API_MOCK === 'true';
 
 /** Enough latency for loading states to be real, none of it in the test run. */
 const MOCK_LATENCY_MS = import.meta.env.MODE === 'test' ? 0 : 150;
@@ -36,36 +73,172 @@ function settleWith<T>(produce: () => T): Promise<T> {
   }
 }
 
+/**
+ * Shape returned by GET /partners/me/offers (one item in the data array).
+ * The field name on the wire is `assignment_id` — this is what you pass to
+ * acceptOffer() and rejectOffer(). It is NOT an "offer id"; it is the
+ * assignment_id that /job-assignments/{assignment_id}/respond expects.
+ */
+export interface PartnerOfferItem {
+  assignment_id: string;
+  job_id: string;
+  offered_at: string;
+  distance_at_offer_m: string;     // Decimal string — parse before arithmetic
+  estimated_arrival_min: number;
+  assignment_rank: number;
+  job: {
+    status: string;
+    service_code: string | null;
+    service_name: string | null;
+    vehicle_number: string | null;
+    pickup_address_text: string | null;
+    issue_description: string | null;
+    price_estimate: string | null;  // Decimal string — parse before arithmetic
+    requested_at: string;
+  };
+}
+
+/** Shape returned by POST /job-assignments/{id}/respond */
+export interface AssignmentRespondResponse {
+  assignment_id: string;
+  assignment_status: 'accepted' | 'rejected';
+  job_id: string;
+  job_status: string;
+  responded_at?: string;
+  /** Present on reject only — the offer that was passed to the following partner. */
+  next_assignment_id?: string | null;
+}
+
 export const partnerService = {
+  /**
+   * Returns the first 'offered' assignment for this partner, or null if idle.
+   *
+   * Real path: GET /partners/me/offers (returns a list, newest first).
+   * By design at most one offer should be in 'offered' state per partner at
+   * any given moment (the dispatch engine serialises offers), but the list
+   * model is more robust: we take the first item and treat an empty list as
+   * "no pending offer", not as an error.
+   *
+   * The returned object exposes `assignment_id` (not `id`), which is what
+   * acceptOffer() and rejectOffer() expect.
+   */
   async getPendingOffer(): Promise<PartnerOffer | null> {
     if (IS_PARTNER_API_MOCK) return settleWith(() => mock.getPendingOffer());
 
-    const res = await apiClient<PartnerOffer | null>('/partners/me/offers/current', { method: 'GET' });
+    const res = await apiClient<PartnerOfferItem[]>('/partners/me/offers', { method: 'GET' });
+    const items = res.data;
+    if (!items || items.length === 0) return null;
+
+    // Normalize the wire shape to the internal PartnerOffer shape used by the UI.
+    const item = items[0];
+    const offer: PartnerOffer = {
+      // The UI currently calls this field `id`, but on the wire it is `assignment_id`.
+      // We surface assignment_id as the primary key — call sites should use this
+      // when calling acceptOffer() / rejectOffer().
+      id: item.assignment_id,
+      jobId: item.job_id,
+      serviceCode: item.job.service_code ?? '',
+      serviceName: item.job.service_name ?? '',
+      distanceAtOfferM: parseFloat(item.distance_at_offer_m),
+      pickupAddressText: item.job.pickup_address_text ?? '',
+      vehicleNumber: item.job.vehicle_number ?? '',
+      issueDescription: item.job.issue_description ?? '',
+      offeredAt: item.offered_at,
+      payoutEstimate: item.job.price_estimate != null
+        ? parseFloat(item.job.price_estimate)
+        : undefined,
+    };
+    return offer;
+  },
+
+  /**
+   * Accept an outstanding offer.
+   *
+   * Real path: POST /job-assignments/{assignment_id}/respond
+   * Body: { "action": "accept" }
+   *
+   * IMPORTANT — return type: the respond endpoint returns
+   * { assignment_status, job_status }, NOT a full Job object. To get the full
+   * job, call getJob(jobId) with the job_id from the offer that was accepted.
+   *
+   * The `assignmentId` parameter is the value from PartnerOffer.id (which maps
+   * to assignment_id on the wire from GET /partners/me/offers). The name
+   * `offerId` was kept for backward compatibility with call sites, but it
+   * must be the assignment_id, not a job_id.
+   *
+   * Rejects with ApiError status 409 ASSIGNMENT_ALREADY_ANSWERED when the
+   * offer was taken by someone else, or the owner cancelled underneath.
+   * Rejects with ApiError status 409 PARTNER_AT_CAPACITY when the partner is
+   * already at the maximum concurrent-job limit.
+   */
+  async acceptOffer(offerId: string): Promise<AssignmentRespondResponse> {
+    if (IS_PARTNER_API_MOCK) {
+      const job = await settleWith(() => mock.acceptOffer(offerId));
+      // Wrap mock's Job return in the real response shape for consistent call sites.
+      return {
+        assignment_id: offerId,
+        assignment_status: 'accepted' as const,
+        job_id: job.id,
+        job_status: job.status,
+      };
+    }
+
+    const res = await apiClient<AssignmentRespondResponse>(
+      `/job-assignments/${offerId}/respond`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ action: 'accept' }),
+      }
+    );
     return res.data;
   },
 
-  /** Rejects with ApiError status 409 when another partner already took it. */
-  async acceptOffer(offerId: string): Promise<Job> {
-    if (IS_PARTNER_API_MOCK) return settleWith(() => mock.acceptOffer(offerId));
-
-    const res = await apiClient<Job>(`/partners/me/offers/${offerId}/accept`, { method: 'POST' });
-    return res.data;
-  },
-
+  /**
+   * Reject an outstanding offer.
+   *
+   * Real path: POST /job-assignments/{assignment_id}/respond
+   * Body: { "action": "reject", "rejection_reason": reason (optional) }
+   *
+   * Declining is never an error — an offer that already vanished is still
+   * safe to call reject on (409 ASSIGNMENT_ALREADY_ANSWERED, treat as
+   * success: the offer is gone either way).
+   */
   async rejectOffer(offerId: string, reason?: string): Promise<void> {
     if (IS_PARTNER_API_MOCK) return settleWith(() => mock.rejectOffer(offerId));
 
-    await apiClient<void>(`/partners/me/offers/${offerId}/reject`, {
+    await apiClient<AssignmentRespondResponse>(`/job-assignments/${offerId}/respond`, {
       method: 'POST',
-      body: JSON.stringify({ reason }),
+      body: JSON.stringify({
+        action: 'reject',
+        ...(reason !== undefined ? { rejection_reason: reason } : {}),
+      }),
     });
   },
 
+  /**
+   * Get the partner's current active job.
+   *
+   * ⚠️  BACKEND GAP — this is mock-only until a backend endpoint is built.
+   *
+   * Evidence: POST /job-assignments/{id}/respond (accept) returns only
+   * { assignment_status, job_status } — no full Job object. There is no
+   * GET /partners/me/jobs/active route in the backend route inventory (checked
+   * 2026-10-01, FRONTEND-GUIDE §1.4). After an accept, the client has the
+   * job_id from the offer, so it can call getJob(jobId) in the same flow.
+   * But getActiveJob() as a standalone call (e.g. on page refresh, or when
+   * navigating directly to the active-job screen) has no real endpoint to
+   * back it.
+   *
+   * Resolution needed from backend: either ship GET /partners/me/active-job,
+   * or persist the active job_id client-side and call GET /jobs/{job_id}
+   * (already available). The latter requires no new endpoint but fails on
+   * cold-start if the client state is lost. See TASKS-frontend.md.
+   *
+   * For now: always uses the mock branch, regardless of IS_PARTNER_API_MOCK.
+   */
   async getActiveJob(): Promise<Job | null> {
-    if (IS_PARTNER_API_MOCK) return settleWith(() => mock.getActiveJob());
-
-    const res = await apiClient<Job | null>('/partners/me/jobs/active', { method: 'GET' });
-    return res.data;
+    // Always mock — no real endpoint. See comment above.
+    return settleWith(() => mock.getActiveJob());
   },
 
   async getJob(jobId: string): Promise<Job | null> {
@@ -84,27 +257,80 @@ export const partnerService = {
     return jobsService.updateJobStatus(jobId, status);
   },
 
+  /**
+   * Toggle on/off shift for this partner.
+   *
+   * Real path: PATCH /partners/{partner_id}/availability
+   * Body: { "is_available": bool }
+   *
+   * The partner_id is read from the stored partner profile (PartnerProfile.id),
+   * which is populated from POST /partners (registration) or
+   * POST /partners/{id}/link-auth, and persisted to localStorage via
+   * getStoredPartnerProfile(). In demo mode this is `ptr_ramesh_01` (seeded).
+   *
+   * If the partner has not yet completed registration (no stored profile id),
+   * the real call is a no-op and the mock branch will be used instead. This
+   * handles the demo/dev case and the rare edge case where registration was
+   * interrupted before saving the profile.
+   */
   async setAvailability(isAvailable: boolean): Promise<void> {
     if (IS_PARTNER_API_MOCK) return settleWith(() => mock.setAvailability(isAvailable));
 
-    await apiClient<void>('/partners/me/availability', {
-      method: 'POST',
+    const profile = getStoredPartnerProfile();
+    const partnerId = profile.id;
+
+    if (!partnerId) {
+      // Partner has not completed registration — their id was never stored.
+      // This should not happen in a real build; flag it clearly.
+      console.warn(
+        '[partner.service] setAvailability: no partner_id in stored profile. ' +
+        'Registration may be incomplete. Falling back to mock.'
+      );
+      return settleWith(() => mock.setAvailability(isAvailable));
+    }
+
+    await apiClient<void>(`/partners/${partnerId}/availability`, {
+      method: 'PATCH',
       body: JSON.stringify({ is_available: isAvailable }),
     });
   },
 
+  /**
+   * ⚠️  BACKEND GAP — earnings endpoint does not exist.
+   *
+   * GET /partners/me/earnings is not in the backend route inventory.
+   * There is no payments data in the backend at all today (FRONTEND-GUIDE §1.5,
+   * §5.4). Screens that depend on this: earnings card in ConsoleSettings,
+   * stats block in PartnerDashboard.
+   *
+   * This function ALWAYS uses the mock, regardless of IS_PARTNER_API_MOCK.
+   * It will continue to do so until a backend endpoint is built and a new
+   * section is added to HANDOFF-frontend-contract.md.
+   *
+   * Do not remove the mock fallback or add a real fetch path here — a fake
+   * success response for an endpoint that doesn't exist is worse than an
+   * explicit "not built" state.
+   */
   async getEarnings(window: EarningsWindow): Promise<PartnerEarnings> {
-    if (IS_PARTNER_API_MOCK) return settleWith(() => mock.getEarnings(window));
-
-    const res = await apiClient<PartnerEarnings>(`/partners/me/earnings?window=${window}`, { method: 'GET' });
-    return res.data;
+    // Always mock — no real endpoint. See comment above.
+    return settleWith(() => mock.getEarnings(window));
   },
 
+  /**
+   * ⚠️  BACKEND GAP — trust/performance stats endpoint does not exist.
+   *
+   * GET /partners/me/stats is not in the backend route inventory
+   * (FRONTEND-GUIDE §1.5, §5.4). No aggregated acceptance-rate, rating or
+   * lifetime-jobs data is available from the API today. Screens that depend on
+   * this: stats card in ConsoleSettings, metrics block in PartnerDashboard.
+   *
+   * This function ALWAYS uses the mock, regardless of IS_PARTNER_API_MOCK.
+   * It will continue to do so until a backend endpoint is built and a new
+   * section is added to HANDOFF-frontend-contract.md.
+   */
   async getTrustStats(): Promise<PartnerTrustStats> {
-    if (IS_PARTNER_API_MOCK) return settleWith(() => mock.getTrustStats());
-
-    const res = await apiClient<PartnerTrustStats>('/partners/me/stats', { method: 'GET' });
-    return res.data;
+    // Always mock — no real endpoint. See comment above.
+    return settleWith(() => mock.getTrustStats());
   },
 
   /**

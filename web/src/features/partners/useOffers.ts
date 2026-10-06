@@ -96,7 +96,10 @@ export function useOfferResponse(): OfferResponse {
   };
 
   const acceptMutation = useMutation({
-    mutationFn: (offerId: string) => partnerService.acceptOffer(offerId),
+    mutationFn: async (offerId: string) => {
+      const res = await partnerService.acceptOffer(offerId);
+      return partnerService.getJob(res.job_id);
+    },
     onSuccess: (job) => {
       setError(null);
       queryClient.setQueryData(PARTNER_ACTIVE_JOB_KEY, job);
