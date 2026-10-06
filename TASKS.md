@@ -24,6 +24,12 @@ critical path, and the mechanic/owner interviews are overdue from week 3._
       scaling only, not needed for single-worker MVP
 
 ## Done (most recent first)
+- [x] Partner active-job and trust stats endpoints — 2026-10-06: `GET /api/v1/partners/me/jobs/active`
+      (returns full `JobDetailResponse` with contact-detail gate for caller's active assignment,
+      or `data: null` with HTTP 200 on idle, closing the cold-refresh recovery gap) and
+      `GET /api/v1/partners/me/stats` (exposes `rating_avg`, `rating_count`, `verification_status`
+      from the `partners` row + aggregated `lifetime_jobs` and `acceptance_rate_pct` computed
+      from `job_assignments`). 7 new unit tests in `test_partner_active_job.py`, 378 unit tests passing.
 - [x] Admin analytics endpoints — 2026-10-03: `GET /api/v1/admin/analytics/{overview,
       dispatch,matching}`, admin-only, read-only, both window bounds optional and
       half-open. Shipped in two stages: admin identity first (migration 007, a third

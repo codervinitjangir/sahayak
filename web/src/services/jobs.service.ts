@@ -75,9 +75,9 @@ export const jobsService = {
   },
 
   async submitRating(jobId: string, rating: number, comment?: string): Promise<void> {
-    await apiClient<void>(`/jobs/${jobId}/rating`, {
+    await apiClient<void>(`/jobs/${jobId}/ratings`, {
       method: 'POST',
-      body: JSON.stringify({ rating, comment }),
+      body: JSON.stringify({ rating, ...(comment ? { comment } : {}) }),
     });
   },
 

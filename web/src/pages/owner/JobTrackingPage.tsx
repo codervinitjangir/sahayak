@@ -168,40 +168,52 @@ export const JobTrackingPage: React.FC = () => {
         </div>
 
         {/* Assigned Partner Information */}
-        {job.partner && (
-          <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-brand-50 text-brand-700 flex items-center justify-center font-bold">
-                {job.partner.name.charAt(0)}
-              </div>
-              <div>
-                <div className="flex items-center gap-1.5">
-                  <h4 className="text-sm font-bold text-slate-900">{job.partner.name}</h4>
-                  <Shield className="w-3.5 h-3.5 text-brand-700" />
-                </div>
-                <div className="flex items-center gap-2 text-xs text-slate-500">
-                  <span>★ {job.partner.rating_avg.toFixed(1)} ({job.partner.rating_count} jobs)</span>
-                  {distanceKm && (
-                    <>
-                      <span>•</span>
-                      <span className="inline-flex items-center gap-0.5 text-slate-600 font-medium">
-                        <Navigation className="w-3 h-3 text-brand-700" />
-                        {distanceKm} km away
-                      </span>
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
+        {(() => {
+          const partnerName = job.current_assignment?.partner_name || job.partner?.name;
+          const partnerPhone = job.current_assignment?.partner_phone || job.partner?.phone;
+          const partnerRating = job.current_assignment?.partner_rating ?? job.partner?.rating_avg;
+          const partnerRatingCount = job.current_assignment?.partner_rating_count ?? job.partner?.rating_count ?? 0;
+          if (!partnerName) return null;
 
-            <a
-              href={`tel:${job.partner.phone}`}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-brand-700 text-white rounded-lg text-sm font-semibold hover:bg-brand-800 touch-target"
-            >
-              <Phone className="w-4 h-4" /> Call
-            </a>
-          </div>
-        )}
+          return (
+            <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-brand-50 text-brand-700 flex items-center justify-center font-bold">
+                  {partnerName.charAt(0)}
+                </div>
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <h4 className="text-sm font-bold text-slate-900">{partnerName}</h4>
+                    <Shield className="w-3.5 h-3.5 text-brand-700" />
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-slate-500">
+                    <span>
+                      ★ {partnerRating != null ? Number(partnerRating).toFixed(1) : 'New'} ({partnerRatingCount} jobs)
+                    </span>
+                    {distanceKm && (
+                      <>
+                        <span>•</span>
+                        <span className="inline-flex items-center gap-0.5 text-slate-600 font-medium">
+                          <Navigation className="w-3 h-3 text-brand-700" />
+                          {distanceKm} km away
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {partnerPhone && (
+                <a
+                  href={`tel:${partnerPhone}`}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-brand-700 text-white rounded-lg text-sm font-semibold hover:bg-brand-800 touch-target"
+                >
+                  <Phone className="w-4 h-4" /> Call
+                </a>
+              )}
+            </div>
+          );
+        })()}
 
         {/* Cancellation Action (only while matching or assigned) */}
         {(job.status === 'requested' || job.status === 'matching' || job.status === 'assigned') && (

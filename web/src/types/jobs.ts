@@ -56,6 +56,10 @@ export interface JobAssignment {
     skill: number;
     rating: number;
   };
+  partner_name?: string;
+  partner_phone?: string;
+  partner_rating?: number | string;
+  partner_rating_count?: number;
   was_baseline_choice?: boolean;
 }
 

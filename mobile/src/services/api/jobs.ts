@@ -18,15 +18,21 @@ export const jobsApi = {
   listMyJobs: () =>
     apiClient.get<Job[]>("/jobs/me").then((r) => r.data),
 
-  /** Cancel a pending job */
-  cancelJob: (jobId: string) =>
-    apiClient.patch<Job>(`/jobs/${jobId}/cancel`).then((r) => r.data),
+  /** Cancel a pending or active job */
+  cancelJob: (jobId: string, reason?: string) =>
+    apiClient.post<Job>(`/jobs/${jobId}/cancel`, { reason }).then((r) => r.data),
 
-  /** Partner: accept an assigned job */
-  acceptJob: (jobId: string) =>
-    apiClient.patch<Job>(`/jobs/${jobId}/accept`).then((r) => r.data),
+  /** Partner: respond to an offer assignment (accept or reject) */
+  respondToAssignment: (assignmentId: string, action: "accept" | "reject", rejectionReason?: string) =>
+    apiClient.post(`/job-assignments/${assignmentId}/respond`, {
+      action,
+      rejection_reason: rejectionReason,
+    }).then((r) => r.data),
 
-  /** Partner: complete a job */
-  completeJob: (jobId: string) =>
-    apiClient.patch<Job>(`/jobs/${jobId}/complete`).then((r) => r.data),
+  /** Partner: update job status (partner_en_route, in_progress, completed) */
+  updateJobStatus: (jobId: string, status: string, priceFinal?: number) =>
+    apiClient.post<Job>(`/jobs/${jobId}/status`, {
+      status,
+      price_final: priceFinal,
+    }).then((r) => r.data),
 };
