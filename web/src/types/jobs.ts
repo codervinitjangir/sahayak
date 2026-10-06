@@ -124,3 +124,20 @@ export interface CreateJobPayload {
   /** @deprecated Kept for backward compatibility */
   drop_location?: LocationPoint;
 }
+
+export interface RatingItem {
+  id: string;
+  job_id: string;
+  rated_by: 'user' | 'partner';
+  rating: number;
+  comment?: string | null;
+  created_at: string;
+}
+
+export interface JobRatingsResponse {
+  job_id: string;
+  job_status: string;
+  ratings: RatingItem[];
+  can_rate: boolean;
+}
+

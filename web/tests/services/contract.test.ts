@@ -225,4 +225,78 @@ describe('Backend Contract Compliance Tests', () => {
       await expect(vehiclesService.deleteVehicle('veh-new-1')).resolves.toBeUndefined();
     });
   });
+
+  describe('Ratings Contract (GET & POST /api/v1/jobs/:id/ratings)', () => {
+    it('calls GET /jobs/:id/ratings to fetch can_rate and existing reviews', async () => {
+      vi.mocked(fetch).mockResolvedValue(
+        mockResponse(200, {
+          data: {
+            job_id: 'job-rate-1',
+            job_status: 'completed',
+            ratings: [],
+            can_rate: true,
+          },
+        })
+      );
+
+      const res = await jobsService.getJobRatings('job-rate-1');
+      expect(res.can_rate).toBe(true);
+      expect(fetch).toHaveBeenCalledTimes(1);
+      const [url, options] = vi.mocked(fetch).mock.calls[0];
+      expect(url).toContain('/jobs/job-rate-1/ratings');
+      expect(options?.method).toBe('GET');
+    });
+
+    it('submits rating via POST /jobs/:id/ratings', async () => {
+      vi.mocked(fetch).mockResolvedValue(
+        mockResponse(201, {
+          data: {
+            id: 'rate-1',
+            job_id: 'job-rate-1',
+            rated_by: 'user',
+            rating: 5,
+            comment: 'Fast and helpful!',
+            created_at: '2026-10-06T12:00:00Z',
+          },
+        })
+      );
+
+      await jobsService.submitRating('job-rate-1', 5, 'Fast and helpful!');
+      expect(fetch).toHaveBeenCalledTimes(1);
+      const [url, options] = vi.mocked(fetch).mock.calls[0];
+      expect(url).toContain('/jobs/job-rate-1/ratings');
+      expect(options?.method).toBe('POST');
+      const body = JSON.parse(options?.body as string);
+      expect(body.rating).toBe(5);
+      expect(body.comment).toBe('Fast and helpful!');
+    });
+
+    it('treats 409 RATING_ALREADY_SUBMITTED as idempotent success', async () => {
+      vi.mocked(fetch).mockResolvedValue(
+        mockResponse(409, {
+          error: {
+            code: 'RATING_ALREADY_SUBMITTED',
+            message: 'You have already rated this job.',
+          },
+        })
+      );
+
+      await expect(jobsService.submitRating('job-rate-1', 5)).resolves.toBeUndefined();
+    });
+  });
+
+  describe('Service Catalogue', () => {
+    it('returns seeded services matching database codes', async () => {
+      const services = await jobsService.listServices();
+      expect(services.length).toBe(6);
+      const codes = services.map((s) => s.code);
+      expect(codes).toContain('flatbed_towing');
+      expect(codes).toContain('wheel_lift_towing');
+      expect(codes).toContain('battery_jumpstart');
+      expect(codes).toContain('flat_tyre');
+      expect(codes).toContain('minor_repair');
+      expect(codes).toContain('fuel_delivery');
+    });
+  });
 });
+

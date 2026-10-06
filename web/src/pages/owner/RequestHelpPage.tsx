@@ -17,12 +17,12 @@ import { Vehicle } from '../../types/vehicles';
 
 // Default seeded services per Sahayak specifications if API reference list is loading/empty
 const FALLBACK_SERVICES: Service[] = [
-  { id: 1, category_id: 1, code: 'flat_tyre', name: 'Flat-Tyre Support', requires_vehicle_equipment: false, estimated_price: 350 },
-  { id: 2, category_id: 1, code: 'battery_jumpstart', name: 'Battery Jumpstart', requires_vehicle_equipment: false, estimated_price: 450 },
-  { id: 3, category_id: 2, code: 'minor_repair', name: 'On-Site Minor Repair', requires_vehicle_equipment: false, estimated_price: 500 },
-  { id: 4, category_id: 3, code: 'flatbed_tow', name: 'Flatbed Towing', requires_vehicle_equipment: true, estimated_price: 1500 },
-  { id: 5, category_id: 3, code: 'wheel_lift_tow', name: 'Wheel-Lift Towing', requires_vehicle_equipment: true, estimated_price: 1200 },
-  { id: 6, category_id: 1, code: 'fuel_delivery', name: 'Emergency Fuel (5L)', requires_vehicle_equipment: false, estimated_price: 300 },
+  { id: 1, category_id: 3, code: 'flatbed_towing', name: 'Flatbed Towing', requires_vehicle_equipment: true, estimated_price: 1500 },
+  { id: 2, category_id: 3, code: 'wheel_lift_towing', name: 'Wheel-Lift Towing', requires_vehicle_equipment: true, estimated_price: 1200 },
+  { id: 3, category_id: 2, code: 'battery_jumpstart', name: 'Battery Jumpstart', requires_vehicle_equipment: false, estimated_price: 450 },
+  { id: 4, category_id: 2, code: 'flat_tyre', name: 'Flat Tyre Support', requires_vehicle_equipment: false, estimated_price: 350 },
+  { id: 5, category_id: 2, code: 'minor_repair', name: 'On-Site Minor Repair', requires_vehicle_equipment: false, estimated_price: 500 },
+  { id: 6, category_id: 1, code: 'fuel_delivery', name: 'Emergency Fuel Delivery', requires_vehicle_equipment: false, estimated_price: 300 },
 ];
 
 // Placeholder vehicle so the form is explorable without a backend. Its id is never

@@ -31,6 +31,8 @@ import { StepIndicator } from './components/StepIndicator';
 import { OtpInput } from './components/OtpInput';
 import { FileUploadCard } from './components/FileUploadCard';
 import { Button } from '../../components/ui/Button';
+import { apiClient } from '../../services/api';
+import { IS_PARTNER_API_MOCK } from '../../services/partner.service';
 import './partner.css';
 
 const IndiaFlag: React.FC = () => (
@@ -197,7 +199,7 @@ export const PartnerSignup: React.FC = () => {
     }
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     // Generate verification items based on the Two-Tier model:
     // Tier 1 (Identity): in_progress (submitted for verification)
     // Tier 2 (Capabilities): not_started (gated by Tier 1 approval)
@@ -276,6 +278,33 @@ export const PartnerSignup: React.FC = () => {
       },
       sampleJobCompleted: false,
     };
+
+    if (!IS_PARTNER_API_MOCK) {
+      try {
+        const payload = {
+          name: newProfile.name,
+          phone: `+91${phone.replace(/\D/g, '')}`,
+          primary_category_code: resolvedCategory === 'both' ? 'towing' : resolvedCategory,
+        };
+        const regRes = await apiClient<{ id: string }>('/partners', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
+        if (regRes?.data?.id) {
+          newProfile.id = regRes.data.id;
+          if (activeServices.length > 0) {
+            await apiClient(`/partners/${newProfile.id}/services`, {
+              method: 'POST',
+              body: JSON.stringify({
+                service_codes: activeServices.map((s) => s.code),
+              }),
+            }).catch(() => {});
+          }
+        }
+      } catch (err) {
+        console.warn('[PartnerSignup] Backend registration fallback to local profile:', err);
+      }
+    }
 
     saveStoredPartnerProfile(newProfile);
     setIsSuccess(true);

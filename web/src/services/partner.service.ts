@@ -14,11 +14,12 @@ import type {
  * Partner dispatch API.
  *
  * Real endpoints (shipped as of 2026-10-06):
- *   GET  /partners/me/offers           → getPendingOffer()
- *   POST /job-assignments/{id}/respond → acceptOffer() / rejectOffer()
+ *   GET   /partners/me/offers           → getPendingOffer()
+ *   POST  /job-assignments/{id}/respond → acceptOffer() / rejectOffer()
  *   PATCH /partners/{id}/availability  → setAvailability()
- *   GET  /partners/me/jobs/active      → getActiveJob()
- *   GET  /partners/me/stats            → getTrustStats()
+ *   POST  /partners/{id}/location      → reportLocation()
+ *   GET   /partners/me/jobs/active      → getActiveJob()
+ *   GET   /partners/me/stats            → getTrustStats()
  *
  * Not yet built on the backend (mock-only until a backend decision):
  *   getEarnings()   — no /partners/me/earnings endpoint. No payments data in
@@ -26,7 +27,7 @@ import type {
  *                     ConsoleSettings earnings card, PartnerDashboard stats block.
  *
  * VITE_PARTNER_API_MOCK controls the mock branch:
- *   - false (default): real API calls for the five shipped endpoints above.
+ *   - false (default): real API calls for the six shipped endpoints above.
  *   - true (explicit opt-in): mock for all calls, including earnings,
  *     which has no real path. Set this if you need to demo earnings
  *     UI without a backend decision on that endpoint.
@@ -42,6 +43,7 @@ import type {
  *   GET   /partners/me/offers           → getPendingOffer()
  *   POST  /job-assignments/{id}/respond → acceptOffer() / rejectOffer()
  *   PATCH /partners/{id}/availability  → setAvailability()
+ *   POST  /partners/{id}/location      → reportLocation()
  *   GET   /partners/me/jobs/active      → getActiveJob()
  *   GET   /partners/me/stats            → getTrustStats()
  *
@@ -282,6 +284,49 @@ export const partnerService = {
       method: 'PATCH',
       body: JSON.stringify({ is_available: isAvailable }),
     });
+  },
+
+  /**
+   * Report partner's current GPS coordinates to Redis GEO.
+   *
+   * Real path: POST /partners/{partner_id}/location
+   * Body: { "lat": number, "lng": number }
+   *
+   * Coordinates are stored in Redis only (not Postgres). Live dispatch uses
+   * Redis GEOSEARCH to discover nearby available partners.
+   */
+  async reportLocation(
+    lat: number,
+    lng: number
+  ): Promise<{ partner_id: string; recorded_at: string } | null> {
+    if (IS_PARTNER_API_MOCK) {
+      return settleWith(() => ({
+        partner_id: 'mock',
+        recorded_at: new Date().toISOString(),
+      }));
+    }
+
+    const profile = getStoredPartnerProfile();
+    const partnerId = profile.id;
+
+    if (!partnerId) {
+      console.warn(
+        '[partner.service] reportLocation: no partner_id in stored profile. Falling back to mock.'
+      );
+      return settleWith(() => ({
+        partner_id: 'mock',
+        recorded_at: new Date().toISOString(),
+      }));
+    }
+
+    const res = await apiClient<{ partner_id: string; recorded_at: string }>(
+      `/partners/${partnerId}/location`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ lat, lng }),
+      }
+    );
+    return res.data;
   },
 
   /**

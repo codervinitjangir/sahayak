@@ -296,6 +296,42 @@ describe('partner.service — real-path contract tests', () => {
     });
   });
 
+  // ── 4b. reportLocation ─────────────────────────────────────────────────────
+
+  describe('reportLocation(lat, lng)', () => {
+    it('calls POST /partners/{partner_id}/location — exact method and path', async () => {
+      vi.mocked(fetch).mockResolvedValue(
+        mockResponse(200, {
+          data: { partner_id: SEEDED_PARTNER_ID, recorded_at: '2026-10-06T12:00:00Z' },
+          meta: { request_id: 'req-loc-001' },
+        }),
+      );
+
+      const res = await partnerService.reportLocation(12.9716, 77.5946);
+
+      expect(fetch).toHaveBeenCalledTimes(1);
+      const [url, options] = vi.mocked(fetch).mock.calls[0];
+      expect(url).toMatch(new RegExp(`/partners/${SEEDED_PARTNER_ID}/location$`));
+      expect(options?.method).toBe('POST');
+      expect(res?.partner_id).toBe(SEEDED_PARTNER_ID);
+    });
+
+    it('sends { lat, lng } numbers in the body', async () => {
+      vi.mocked(fetch).mockResolvedValue(
+        mockResponse(200, {
+          data: { partner_id: SEEDED_PARTNER_ID, recorded_at: '2026-10-06T12:00:00Z' },
+          meta: { request_id: 'req-loc-002' },
+        }),
+      );
+
+      await partnerService.reportLocation(12.9716, 77.5946);
+
+      const [, options] = vi.mocked(fetch).mock.calls[0];
+      const body = JSON.parse(options?.body as string);
+      expect(body).toEqual({ lat: 12.9716, lng: 77.5946 });
+    });
+  });
+
   // ── 5. getActiveJob ────────────────────────────────────────────────────────
 
   describe('getActiveJob()', () => {

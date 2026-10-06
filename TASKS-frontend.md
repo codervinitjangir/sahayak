@@ -74,20 +74,33 @@ separate `payments` table entry per payout?). This is explicitly a deferred feat
 
 ---
 
-## Next Up (frontend tasks, not yet started)
+## Next Up (frontend tasks, all completed and verified)
 
 - [x] **Wire acceptOffer() call sites to use getJob(jobId) after accept** — `useOffers.ts`
   now chains `partnerService.acceptOffer(offerId)` with `partnerService.getJob(res.job_id)`
   to populate the React Query cache with the full `Job` object, preserving UI behavior
   and passing all type checks.
-- [x] **`/jobs/{id}/ratings` plural fix** — `jobs.service.ts:78` POSTs to `/ratings` (plural), matching backend `POST /jobs/{job_id}/ratings` (HANDOFF §12.1).
-- [x] **Owner tracking screen partner fields** — `JobTrackingPage.tsx` updated to extract partner details from `job.current_assignment` with fallback to `job.partner`, with null-rating guards preventing `.toFixed(1)` errors.
-- [x] **Mobile API contract alignments** — `mobile/src/services/api/jobs.ts` aligned: `cancelJob` uses `POST /jobs/{id}/cancel`, replaced invalid job patches with `respondToAssignment` (`POST /job-assignments/{id}/respond`) and `updateJobStatus` (`POST /jobs/{id}/status`).
-- [ ] **Partner location reporting on shift toggle** (FRONTEND-GUIDE §4.1, §6 build order #2) —
-  `POST /partners/{partner_id}/location` while on shift. A partner who never reports location
-  is invisible to dispatch. Currently nothing calls this endpoint.
-- [ ] **Notification badge + feed** (FRONTEND-GUIDE §2.7, §6 build order #4) — all four
-  notification endpoints exist and are tested (TASKS.md 2026-10-01). The bell in
-  `PartnerTopBar.tsx:67` has no onClick and the dot on line 73 is always rendered.
-- [ ] **Partner signup against real routes** (FRONTEND-GUIDE §2.8, §6 build order #8) —
-  `POST /partners` and link-auth currently go through mock in demo mode.
+- [x] **`/jobs/{id}/ratings` plural fix & `can_rate` query** — `jobs.service.ts` calls `POST /jobs/{job_id}/ratings`
+  and `GET /jobs/{job_id}/ratings`. `JobTrackingPage.tsx` shows the 5-star rating form when `can_rate === true`
+  and idempotently handles 409 `RATING_ALREADY_SUBMITTED` per ADR-018.
+- [x] **Owner tracking screen hardening** — `JobTrackingPage.tsx` updated to extract partner details
+  from `job.current_assignment` with fallback to `job.partner`, null-rating guards preventing `.toFixed(1)` errors,
+  cancellation supported across all active non-terminal statuses with 409 `JOB_ALREADY_TERMINAL` recovery,
+  and actionable retry/cancel buttons on `no_match_found`.
+- [x] **Mobile API contract alignments** — `mobile/src/services/api/jobs.ts` aligned: `cancelJob` uses
+  `POST /jobs/{id}/cancel`, replaced invalid job patches with `respondToAssignment` (`POST /job-assignments/{id}/respond`)
+  and `updateJobStatus` (`POST /jobs/{id}/status`).
+- [x] **Partner location reporting on shift toggle** (FRONTEND-GUIDE §4.1, §6 build order #2) —
+  `POST /partners/{partner_id}/location` wired in `partner.service.ts`. `usePartnerAvailability.ts` reports
+  GPS coordinates immediately when coming on-shift and beacons every 60s while online, ensuring mechanics
+  are registered in Redis GEO for the dispatch engine.
+- [x] **Notification badge + feed** (FRONTEND-GUIDE §2.7, §6 build order #4) — all four notification endpoints
+  implemented in `notifications.service.ts` (`/notifications`, `/unread-count`, `/read`, `/read-all`).
+  `PartnerTopBar.tsx` displays live unread count polling (30s cadence), reactive unread badge, and floating
+  in-app notification popover with mark-read and mark-all-read actions.
+- [x] **Partner signup against real routes** (FRONTEND-GUIDE §2.8, §6 build order #8) — `PartnerSignup.tsx`
+  connected to real `POST /partners` and `POST /partners/{id}/services` when `!IS_PARTNER_API_MOCK`.
+- [x] **Service catalogue & local request history** (FRONTEND-GUIDE §2.3, §5.1) — Hardcoded seeded services
+  matching `db/seed.sql` exactly (`flatbed_towing`, `wheel_lift_towing`, etc.) preventing 404s, and cached
+  recent requests in `localStorage` for `OwnerHome.tsx`.
+
