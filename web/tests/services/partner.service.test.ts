@@ -296,18 +296,51 @@ describe('partner.service — real-path contract tests', () => {
     });
   });
 
-  // ── 5. getActiveJob — mock-only gap ───────────────────────────────────────
+  // ── 5. getActiveJob ────────────────────────────────────────────────────────
 
-  describe('getActiveJob() — backend gap', () => {
-    it('never hits the network, regardless of IS_PARTNER_API_MOCK setting', async () => {
-      // fetch is still mocked but should never be called
-      vi.mocked(fetch).mockResolvedValue(mockResponse(200, { data: null, meta: {} }));
+  describe('getActiveJob()', () => {
+    it('calls GET /partners/me/jobs/active — exact method and path', async () => {
+      vi.mocked(fetch).mockResolvedValue(
+        mockResponse(200, {
+          data: {
+            id: 'job-active-123',
+            status: 'assigned',
+            vehicle_id: 'veh-001',
+            requested_at: '2026-10-06T10:00:00Z',
+          },
+          meta: { request_id: 'req-active-001' },
+        }),
+      );
+
+      const job = await partnerService.getActiveJob();
+
+      expect(fetch).toHaveBeenCalledTimes(1);
+      const [url, options] = vi.mocked(fetch).mock.calls[0];
+      expect(url).toMatch(/\/partners\/me\/jobs\/active$/);
+      expect(options?.method ?? 'GET').toBe('GET');
+      expect(job?.id).toBe('job-active-123');
+    });
+
+    it('returns null (not an error) when partner has no active job', async () => {
+      vi.mocked(fetch).mockResolvedValue(
+        mockResponse(200, { data: null, meta: { request_id: 'req-active-002' } }),
+      );
+
+      const job = await partnerService.getActiveJob();
+
+      expect(job).toBeNull();
+    });
+
+    it('does NOT call wrong path shapes like /partners/me/active-job', async () => {
+      vi.mocked(fetch).mockResolvedValue(
+        mockResponse(200, { data: null, meta: { request_id: 'req-active-003' } }),
+      );
 
       await partnerService.getActiveJob();
 
-      // If this assertion fails, getActiveJob() made a real API call to a
-      // non-existent endpoint — exactly the regression this test guards against.
-      expect(fetch).not.toHaveBeenCalled();
+      const [url] = vi.mocked(fetch).mock.calls[0];
+      expect(url).not.toMatch(/\/partners\/me\/active-job$/);
+      expect(url).toMatch(/\/partners\/me\/jobs\/active$/);
     });
   });
 
@@ -323,15 +356,57 @@ describe('partner.service — real-path contract tests', () => {
     });
   });
 
-  // ── 7. getTrustStats — mock-only gap ──────────────────────────────────────
+  // ── 7. getTrustStats ──────────────────────────────────────────────────────
 
-  describe('getTrustStats() — backend gap', () => {
-    it('never hits the network (no /partners/me/stats endpoint exists)', async () => {
-      vi.mocked(fetch).mockResolvedValue(mockResponse(200, { data: null, meta: {} }));
+  describe('getTrustStats()', () => {
+    it('calls GET /partners/me/stats — exact method and path', async () => {
+      vi.mocked(fetch).mockResolvedValue(
+        mockResponse(200, {
+          data: {
+            partner_id: 'ptr_123',
+            verification_status: 'verified',
+            rating_avg: 4.85,
+            rating_count: 24,
+            acceptance_rate_pct: 92,
+            lifetime_jobs: 38,
+          },
+          meta: { request_id: 'req-stats-001' },
+        }),
+      );
 
-      await partnerService.getTrustStats();
+      const stats = await partnerService.getTrustStats();
 
-      expect(fetch).not.toHaveBeenCalled();
+      expect(fetch).toHaveBeenCalledTimes(1);
+      const [url, options] = vi.mocked(fetch).mock.calls[0];
+      expect(url).toMatch(/\/partners\/me\/stats$/);
+      expect(options?.method ?? 'GET').toBe('GET');
+      expect(stats).toEqual({
+        acceptanceRatePct: 92,
+        ratingAvg: 4.85,
+        ratingCount: 24,
+        lifetimeJobs: 38,
+      });
+    });
+
+    it('handles numeric string rating_avg gracefully', async () => {
+      vi.mocked(fetch).mockResolvedValue(
+        mockResponse(200, {
+          data: {
+            partner_id: 'ptr_123',
+            verification_status: 'verified',
+            rating_avg: '4.50',
+            rating_count: 10,
+            acceptance_rate_pct: 100,
+            lifetime_jobs: 5,
+          },
+          meta: { request_id: 'req-stats-002' },
+        }),
+      );
+
+      const stats = await partnerService.getTrustStats();
+
+      expect(stats.ratingAvg).toBe(4.5);
     });
   });
 });
+

@@ -25,7 +25,7 @@ import logging
 import time
 import uuid
 from datetime import datetime, timezone
-from typing import List, Sequence
+from typing import List, Optional, Sequence
 
 from redis.exceptions import RedisError
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -37,12 +37,15 @@ from app.config.redis_client import (
     location_updated_at_key,
 )
 from app.models.partner import Partner
-from app.repositories import partner_repository
+from app.repositories import dispatch_repository, partner_repository
+from app.schemas.job import JobDetailResponse
 from app.schemas.partner import (
     PartnerCreateRequest,
     PartnerServiceItem,
     PartnerServicesResponse,
+    PartnerStatsResponse,
 )
+from app.services import job_service
 from app.services.auth_service import Identity
 from app.utils.errors import (
     BadRequestError,
@@ -462,3 +465,33 @@ def _to_services_response(
             for service in services
         ],
     )
+
+
+async def get_active_job(
+    db: AsyncSession, identity: Identity
+) -> Optional[JobDetailResponse]:
+    """Read the caller's current active job with its timeline and contact details.
+
+    Uses dispatch_repository.get_active_job_for_partner:
+    a job where this partner holds an accepted assignment and the job status
+    is active ('assigned', 'partner_en_route', 'in_progress').
+
+    Returns None (which renders as data: null, status 200) if the partner has no
+    active job right now.
+    """
+    job = await dispatch_repository.get_active_job_for_partner(db, identity.local_id)
+    if job is None:
+        return None
+    return await job_service.get_job_with_status(db, job.id, identity)
+
+
+async def get_partner_stats(
+    db: AsyncSession, identity: Identity
+) -> PartnerStatsResponse:
+    """Read the calling partner's trust and performance stats."""
+    stats = await partner_repository.get_partner_stats(db, identity.local_id)
+    if stats is None:
+        raise NotFoundError(ErrorCode.PARTNER_NOT_FOUND, "Partner not found")
+    return PartnerStatsResponse(**stats)
+
+

@@ -265,3 +265,17 @@ class PartnerOfferItem(BaseModel):
     estimated_arrival_min: Optional[int] = None
     assignment_rank: Optional[int] = None
     job: PartnerOfferJob
+
+
+class PartnerStatsResponse(BaseModel):
+    """Caller's trust and performance statistics."""
+
+    partner_id: uuid.UUID
+    verification_status: str
+    rating_avg: Decimal = Field(default=Decimal("0.0"))
+    rating_count: int = Field(default=0)
+    acceptance_rate_pct: int = Field(default=100)
+    lifetime_jobs: int = Field(default=0)
+
+    model_config = ConfigDict(from_attributes=True)
+

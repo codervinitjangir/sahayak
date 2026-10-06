@@ -1,8 +1,9 @@
 """
-Partner endpoints: registration, availability toggle, service coverage, auth link.
+Partner endpoints: registration, availability toggle, service coverage, auth link, active job.
 
   POST  /api/v1/partners
   GET   /api/v1/partners/me/offers
+  GET   /api/v1/partners/me/jobs/active
   POST  /api/v1/partners/{partner_id}/link-auth
   PATCH /api/v1/partners/{partner_id}/availability
   POST  /api/v1/partners/{partner_id}/location
@@ -22,7 +23,7 @@ Note on scope: partner documents, equipment and the verification workflow are
 not here. This module covers identity, shift status and coverage only.
 """
 import uuid
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,6 +31,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api import API_V1_PREFIX
 from app.config.database import get_db
 from app.schemas.common import ApiResponse, ErrorResponse, envelope
+from app.schemas.job import JobDetailResponse
 from app.schemas.partner import (
     PartnerAuthLinkResponse,
     PartnerAvailabilityRequest,
@@ -41,6 +43,7 @@ from app.schemas.partner import (
     PartnerResponse,
     PartnerServicesLinkRequest,
     PartnerServicesResponse,
+    PartnerStatsResponse,
 )
 from app.services import auth_service, dispatch_service, partner_service
 from app.services.auth_service import Identity, TokenClaims
@@ -124,6 +127,48 @@ async def list_my_offers(
     """
     offers = await dispatch_service.list_open_offers(db, identity.local_id)
     return envelope(offers)
+
+
+@router.get(
+    "/me/jobs/active",
+    response_model=ApiResponse[Optional[JobDetailResponse]],
+    status_code=status.HTTP_200_OK,
+    summary="Get the caller's current active job",
+)
+async def get_my_active_job(
+    identity: Identity = Depends(require_partner),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[Optional[JobDetailResponse]]:
+    """Return the calling partner's active job, or null if idle.
+
+    Uses the same predicate as active-job-count: a job where there exists an
+    accepted assignment for this partner, and the job status is in the active
+    set ('assigned', 'partner_en_route', 'in_progress').
+
+    Returns the full job detail with the same response shape as GET /jobs/{job_id},
+    respecting PII/contact-detail rules (the calling partner sees their own
+    contact details on the assignment), or null in the data envelope if no active
+    job exists.
+    """
+    job = await partner_service.get_active_job(db, identity)
+    return envelope(job)
+
+
+@router.get(
+    "/me/stats",
+    response_model=ApiResponse[PartnerStatsResponse],
+    status_code=status.HTTP_200_OK,
+    summary="Get the caller's trust and performance stats",
+)
+async def get_my_stats(
+    identity: Identity = Depends(require_partner),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[PartnerStatsResponse]:
+    """Return the calling partner's trust stats: rating average, rating count,
+    verification status, acceptance rate percentage, and completed job count.
+    """
+    stats = await partner_service.get_partner_stats(db, identity)
+    return envelope(stats)
 
 
 @router.post(

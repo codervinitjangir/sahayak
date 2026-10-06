@@ -13,46 +13,42 @@ import type {
 /**
  * Partner dispatch API.
  *
- * Real endpoints (shipped as of 2026-09-27):
+ * Real endpoints (shipped as of 2026-10-06):
  *   GET  /partners/me/offers           → getPendingOffer()
  *   POST /job-assignments/{id}/respond → acceptOffer() / rejectOffer()
  *   PATCH /partners/{id}/availability  → setAvailability()
+ *   GET  /partners/me/jobs/active      → getActiveJob()
+ *   GET  /partners/me/stats            → getTrustStats()
  *
  * Not yet built on the backend (mock-only until a backend decision):
- *   getActiveJob()  — no GET /partners/me/jobs/active endpoint exists.
- *                     The POST /job-assignments/{id}/respond accept response
- *                     returns only { assignment_status, job_status }, not a
- *                     full Job object, so local caching after accept is
- *                     insufficient for page-refresh recovery. This is a real
- *                     backend gap — see FRONTEND-GUIDE §5.2 and TASKS-frontend.md.
  *   getEarnings()   — no /partners/me/earnings endpoint. No payments data in
  *                     the backend at all. Screens that depend on this:
  *                     ConsoleSettings earnings card, PartnerDashboard stats block.
- *   getTrustStats() — no /partners/me/stats endpoint. Screens that depend on
- *                     this: ConsoleSettings stats card, PartnerDashboard metrics.
  *
  * VITE_PARTNER_API_MOCK controls the mock branch:
- *   - false (default): real API calls for the three shipped endpoints above.
- *   - true (explicit opt-in): mock for all calls, including earnings/stats,
- *     which have no real path. Set this if you need to demo earnings/stats
- *     UI without a backend decision on those endpoints.
+ *   - false (default): real API calls for the five shipped endpoints above.
+ *   - true (explicit opt-in): mock for all calls, including earnings,
+ *     which has no real path. Set this if you need to demo earnings
+ *     UI without a backend decision on that endpoint.
  *
- * Note: earnings and stats always fall back to mock regardless of this flag,
- * because no real endpoint exists for them.
+ * Note: earnings always falls back to mock regardless of this flag,
+ * because no real endpoint exists for it.
  */
 
 /**
  * Mock switch.
  *
  * Defaults to false — real API calls are made for the shipped endpoints:
- *   GET  /partners/me/offers           → getPendingOffer()
- *   POST /job-assignments/{id}/respond → acceptOffer() / rejectOffer()
+ *   GET   /partners/me/offers           → getPendingOffer()
+ *   POST  /job-assignments/{id}/respond → acceptOffer() / rejectOffer()
  *   PATCH /partners/{id}/availability  → setAvailability()
+ *   GET   /partners/me/jobs/active      → getActiveJob()
+ *   GET   /partners/me/stats            → getTrustStats()
  *
  * Set VITE_PARTNER_API_MOCK=true in .env to explicitly opt in to mock behavior.
  *
- * Note: getActiveJob(), getEarnings(), and getTrustStats() always use mock
- * data regardless of this flag because their backend endpoints do not exist yet.
+ * Note: getEarnings() always uses mock data regardless of this flag because
+ * its backend endpoint does not exist yet (payments deferred).
  */
 export const IS_PARTNER_API_MOCK = import.meta.env.VITE_PARTNER_API_MOCK === 'true';
 
@@ -218,27 +214,20 @@ export const partnerService = {
   /**
    * Get the partner's current active job.
    *
-   * ⚠️  BACKEND GAP — this is mock-only until a backend endpoint is built.
+   * Real path: GET /partners/me/jobs/active (shipped 2026-10-06).
    *
-   * Evidence: POST /job-assignments/{id}/respond (accept) returns only
-   * { assignment_status, job_status } — no full Job object. There is no
-   * GET /partners/me/jobs/active route in the backend route inventory (checked
-   * 2026-10-01, FRONTEND-GUIDE §1.4). After an accept, the client has the
-   * job_id from the offer, so it can call getJob(jobId) in the same flow.
-   * But getActiveJob() as a standalone call (e.g. on page refresh, or when
-   * navigating directly to the active-job screen) has no real endpoint to
-   * back it.
+   * Returns the partner's active job (status in 'assigned', 'partner_en_route',
+   * 'in_progress' where this partner holds an 'accepted' assignment), or null
+   * if the partner is currently idle.
    *
-   * Resolution needed from backend: either ship GET /partners/me/active-job,
-   * or persist the active job_id client-side and call GET /jobs/{job_id}
-   * (already available). The latter requires no new endpoint but fails on
-   * cold-start if the client state is lost. See TASKS-frontend.md.
-   *
-   * For now: always uses the mock branch, regardless of IS_PARTNER_API_MOCK.
+   * Reuses the full job detail representation with PII/contact details released
+   * to the assigned partner, enabling cold-refresh recovery on the active-job screen.
    */
   async getActiveJob(): Promise<Job | null> {
-    // Always mock — no real endpoint. See comment above.
-    return settleWith(() => mock.getActiveJob());
+    if (IS_PARTNER_API_MOCK) return settleWith(() => mock.getActiveJob());
+
+    const res = await apiClient<Job | null>('/partners/me/jobs/active', { method: 'GET' });
+    return res.data;
   },
 
   async getJob(jobId: string): Promise<Job | null> {
@@ -317,20 +306,35 @@ export const partnerService = {
   },
 
   /**
-   * ⚠️  BACKEND GAP — trust/performance stats endpoint does not exist.
+   * Get caller's trust and performance statistics.
    *
-   * GET /partners/me/stats is not in the backend route inventory
-   * (FRONTEND-GUIDE §1.5, §5.4). No aggregated acceptance-rate, rating or
-   * lifetime-jobs data is available from the API today. Screens that depend on
-   * this: stats card in ConsoleSettings, metrics block in PartnerDashboard.
+   * Real path: GET /partners/me/stats (shipped 2026-10-06).
    *
-   * This function ALWAYS uses the mock, regardless of IS_PARTNER_API_MOCK.
-   * It will continue to do so until a backend endpoint is built and a new
-   * section is added to HANDOFF-frontend-contract.md.
+   * Exposes rating_avg, rating_count, verification_status from the partner
+   * profile, and aggregated acceptance_rate_pct and lifetime_jobs from
+   * historical job_assignments.
    */
   async getTrustStats(): Promise<PartnerTrustStats> {
-    // Always mock — no real endpoint. See comment above.
-    return settleWith(() => mock.getTrustStats());
+    if (IS_PARTNER_API_MOCK) return settleWith(() => mock.getTrustStats());
+
+    const res = await apiClient<{
+      partner_id: string;
+      verification_status: string;
+      rating_avg: number | string;
+      rating_count: number;
+      acceptance_rate_pct: number;
+      lifetime_jobs: number;
+    }>('/partners/me/stats', {
+      method: 'GET',
+    });
+
+    const data = res.data;
+    return {
+      acceptanceRatePct: data.acceptance_rate_pct,
+      ratingAvg: Number(data.rating_avg) || 0,
+      ratingCount: data.rating_count,
+      lifetimeJobs: data.lifetime_jobs,
+    };
   },
 
   /**

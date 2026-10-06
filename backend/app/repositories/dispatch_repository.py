@@ -120,6 +120,38 @@ async def count_active_jobs(db: AsyncSession, partner_id: uuid.UUID) -> int:
     return int(result.scalar_one())
 
 
+async def get_active_job_for_partner(
+    db: AsyncSession, partner_id: uuid.UUID
+) -> Optional[Job]:
+    """Fetch the partner's current active job, if any.
+
+    Uses the exact same predicate as count_active_jobs and _active_job_count_select:
+    a job where there is an assignment for this partner with status in
+    ACTIVE_ASSIGNMENT_STATUSES ('accepted') AND the job's status is in
+    ACTIVE_JOB_STATUSES ('assigned', 'partner_en_route', 'in_progress').
+
+    If multiple active jobs exist (up to MAX_CONCURRENT_JOBS = 2), the most
+    recently accepted job is returned first. Returns None if the partner is idle.
+    """
+    stmt = (
+        select(Job)
+        .join(JobAssignment, JobAssignment.job_id == Job.id)
+        .where(
+            JobAssignment.partner_id == partner_id,
+            JobAssignment.status.in_(ACTIVE_ASSIGNMENT_STATUSES),
+            Job.status.in_(ACTIVE_JOB_STATUSES),
+        )
+        .order_by(
+            JobAssignment.accepted_at.desc().nullslast(),
+            JobAssignment.responded_at.desc().nullslast(),
+            Job.requested_at.desc(),
+        )
+        .limit(1)
+    )
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none()
+
+
 async def lock_partner_for_update(
     db: AsyncSession, partner_id: uuid.UUID
 ) -> Optional[Partner]:

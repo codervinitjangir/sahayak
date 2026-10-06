@@ -8,12 +8,14 @@ and where the transaction boundary sits, belongs to
 app/services/partner_service.py.
 """
 import uuid
+from decimal import Decimal
 from typing import Iterable, Optional, Sequence
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.job import JobAssignment
 from app.models.partner import Partner, PartnerService
 from app.models.service import Service, ServiceCategory
 
@@ -142,3 +144,43 @@ async def get_partner_services(
         .order_by(Service.id)
     )
     return result.scalars().all()
+
+
+async def get_partner_stats(
+    db: AsyncSession, partner_id: uuid.UUID
+) -> Optional[dict]:
+    """Fetch partner trust/performance metrics: rating, count, verification status,
+    plus aggregated lifetime jobs and acceptance rate from job_assignments.
+    """
+    partner = await get_partner_by_id(db, partner_id)
+    if partner is None:
+        return None
+
+    stmt = (
+        select(
+            func.count().filter(JobAssignment.status == "completed").label("lifetime_jobs"),
+            func.count().filter(JobAssignment.status.in_(("accepted", "completed"))).label("accepted_offers"),
+            func.count().filter(JobAssignment.status.in_(("accepted", "completed", "rejected", "timed_out"))).label("total_decided_offers"),
+        )
+        .where(JobAssignment.partner_id == partner_id)
+    )
+    result = await db.execute(stmt)
+    row = result.one()
+    lifetime_jobs = int(row.lifetime_jobs or 0)
+    accepted_offers = int(row.accepted_offers or 0)
+    total_decided_offers = int(row.total_decided_offers or 0)
+
+    if total_decided_offers > 0:
+        acceptance_rate_pct = round((accepted_offers / total_decided_offers) * 100)
+    else:
+        acceptance_rate_pct = 100
+
+    return {
+        "partner_id": partner.id,
+        "verification_status": partner.verification_status,
+        "rating_avg": partner.rating_avg or Decimal("0.0"),
+        "rating_count": partner.rating_count or 0,
+        "acceptance_rate_pct": acceptance_rate_pct,
+        "lifetime_jobs": lifetime_jobs,
+    }
+
