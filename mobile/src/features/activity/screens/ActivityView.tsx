@@ -28,6 +28,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { Typography } from "../../../constants/theme";
 import { useJobStore } from "../../../store/jobStore";
+import { jobsApi } from "../../../services/api/jobs";
 import type { ServiceType, Job } from "../../../types";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -280,7 +281,14 @@ export default function ActivityView({
         {
           text: "Yes, Cancel",
           style: "destructive",
-          onPress: () => {
+          onPress: async () => {
+            if (activeJob?.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(activeJob.id)) {
+              try {
+                await jobsApi.cancelJob(activeJob.id, selectedCancelReason);
+              } catch (err) {
+                console.warn("Backend cancel error:", err);
+              }
+            }
             setActiveJob(null);
             setShowCancelModal(false);
             setSelectedCancelReason(null);
@@ -313,7 +321,18 @@ export default function ActivityView({
     }).catch(() => {});
   };
 
-  const handleOpenRating = (item: ActivityItem) => {
+  const handleOpenRating = async (item: ActivityItem) => {
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.id)) {
+      try {
+        const ratingCheck = await jobsApi.getRatings(item.id);
+        if (!ratingCheck.can_rate) {
+          Alert.alert("Already Rated", "You have already submitted a rating for this service.");
+          return;
+        }
+      } catch {
+        // proceed with local flow
+      }
+    }
     setRatingItem(item);
     setSelectedRating(item.rating || 5);
     setSelectedTags(item.feedbackTags || []);
@@ -328,16 +347,27 @@ export default function ActivityView({
     }
   };
 
-  const handleSubmitRating = () => {
+  const handleSubmitRating = async () => {
     if (!ratingItem) return;
+    const targetId = ratingItem.id;
+    const itemName = ratingItem.serviceTitle;
+    const comment = [ratingComment, ...selectedTags].filter(Boolean).join(" · ");
+
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetId)) {
+      try {
+        await jobsApi.submitRating(targetId, selectedRating, comment || undefined);
+      } catch (err) {
+        console.warn("Backend submit rating error:", err);
+      }
+    }
+
     setActivities((prev) =>
       prev.map((a) =>
-        a.id === ratingItem.id
+        a.id === targetId
           ? { ...a, rating: selectedRating, feedbackTags: selectedTags }
           : a
       )
     );
-    const itemName = ratingItem.serviceTitle;
     setRatingItem(null);
     Alert.alert(
       "Thank you for your feedback! ⭐",

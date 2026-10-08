@@ -25,7 +25,9 @@ import {
   Platform,
   Alert,
   Image,
+  ActivityIndicator,
 } from "react-native";
+import * as Location from "expo-location";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -175,6 +177,25 @@ export default function HomeScreen() {
   const [serviceSearchQuery, setServiceSearchQuery] = useState("");
   const [activitySearchQuery, setActivitySearchQuery] = useState("");
 
+  // Live GPS Current Location State
+  const [currentLocationText, setCurrentLocationText] = useState(
+    "Indiranagar 100ft Rd, Bengaluru"
+  );
+  const [currentLocationDetails, setCurrentLocationDetails] = useState<{
+    title: string;
+    address: string;
+    latitude: number;
+    longitude: number;
+    isDetected: boolean;
+  }>({
+    title: "Use Current Location",
+    address: "Tap to auto-detect your breakdown spot via GPS",
+    latitude: 12.9716,
+    longitude: 77.5946,
+    isDetected: false,
+  });
+  const [isLocating, setIsLocating] = useState(false);
+
   // Toggle favorite heart
   const toggleFavorite = (id: string) => {
     setRecentPlaces((prev) =>
@@ -185,15 +206,121 @@ export default function HomeScreen() {
   // Launch Service Flow on Map
   const handleLaunchService = (
     svc: ServiceType = "towing",
-    address: string = "Indiranagar 100 Feet Road, Bengaluru"
+    address: string = "Indiranagar 100 Feet Road, Bengaluru",
+    coords?: { latitude: number; longitude: number }
   ) => {
     setDraftService(svc, selectedVehicle.id);
-    setDraftPickupLocation({ latitude: 12.9716, longitude: 77.5946, address });
+    const lat = coords?.latitude ?? currentLocationDetails.latitude;
+    const lng = coords?.longitude ?? currentLocationDetails.longitude;
+    setDraftPickupLocation({ latitude: lat, longitude: lng, address });
     nav.navigate("OwnerFlow", {
       initialStep: "service_select",
       serviceType: svc,
       pickupAddress: address,
     });
+  };
+
+  // Acquire Real-Time GPS Current Address
+  const handleGetCurrentLocation = async (autoLaunch: boolean = false) => {
+    if (isLocating) return;
+    try {
+      setIsLocating(true);
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert(
+          "Location Permission",
+          "Permission to access device location is needed to find the nearest breakdown assistance partner. Please allow location access in your device settings.",
+          [{ text: "OK" }]
+        );
+        setIsLocating(false);
+        return;
+      }
+
+      const pos = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+
+      const { latitude, longitude } = pos.coords;
+      let title = "Current Location";
+      let fullAddress = "Live GPS Location";
+
+      try {
+        const reverseList = await Location.reverseGeocodeAsync({
+          latitude,
+          longitude,
+        });
+
+        if (reverseList && reverseList.length > 0) {
+          const addr = reverseList[0];
+          const parts: string[] = [];
+          if (addr.name && addr.name !== addr.street) parts.push(addr.name);
+          if (addr.street) parts.push(addr.street);
+          if (addr.district) parts.push(addr.district);
+          if (addr.subregion && addr.subregion !== addr.city) parts.push(addr.subregion);
+          if (addr.city) parts.push(addr.city);
+
+          title =
+            addr.name ||
+            addr.street ||
+            addr.district ||
+            addr.subregion ||
+            addr.city ||
+            "Current Location";
+          fullAddress =
+            parts.filter(Boolean).join(", ") ||
+            `${addr.city || "Bengaluru"}, India`;
+        }
+      } catch (geocodeErr) {
+        console.warn("Reverse geocode fallback:", geocodeErr);
+        title = "GPS Coordinates";
+        fullAddress = `${latitude.toFixed(4)}° N, ${longitude.toFixed(4)}° E`;
+      }
+
+      const displayHeader = `${title}, ${fullAddress.split(",")[1]?.trim() || fullAddress.split(",")[0]?.trim() || "Bengaluru"}`;
+      setCurrentLocationText(displayHeader);
+      setCurrentLocationDetails({
+        title,
+        address: fullAddress,
+        latitude,
+        longitude,
+        isDetected: true,
+      });
+
+      setDraftPickupLocation({
+        latitude,
+        longitude,
+        address: fullAddress,
+      });
+
+      if (autoLaunch) {
+        handleLaunchService("towing", fullAddress, { latitude, longitude });
+      } else {
+        Alert.alert(
+          "GPS Location Detected",
+          `Pinpointed breakdown location:\n\n📍 ${title}\n${fullAddress}`,
+          [
+            { text: "Done", style: "cancel" },
+            {
+              text: "Request Rescue Here",
+              onPress: () =>
+                handleLaunchService("towing", fullAddress, {
+                  latitude,
+                  longitude,
+                }),
+            },
+          ]
+        );
+      }
+    } catch (err: any) {
+      console.warn("GPS Location error:", err);
+      Alert.alert(
+        "Location Notice",
+        "Could not acquire satellite GPS fix right now. Set breakdown spot manually or try again in an open area.",
+        [{ text: "OK" }]
+      );
+    } finally {
+      setIsLocating(false);
+    }
   };
 
   const userName = user?.name?.split(" ")[0] || "Arjun";
@@ -216,7 +343,7 @@ export default function HomeScreen() {
       {activeTab !== "account" && activeTab !== "home" && (
         <BlinkitTopHeader
           tab={activeTab}
-          locationText="Indiranagar 100ft Rd, HAL 2nd Stage"
+          locationText={currentLocationText}
           etaText="12 minutes"
           walletBalance="₹0"
           searchQuery={
@@ -231,7 +358,7 @@ export default function HomeScreen() {
               setActivitySearchQuery(text);
             }
           }}
-          onLocationPress={() => handleLaunchService("towing")}
+          onLocationPress={() => void handleGetCurrentLocation(false)}
           onWalletPress={() => {
             Alert.alert(
               "Sahayak Cash",
@@ -256,7 +383,7 @@ export default function HomeScreen() {
             {/* Seamless canvas: status bar + location + pill search bar + comic shards + motion loop */}
             <MotionBanner
               topInset={topInset}
-              locationText="Kundalahalli - Brookefield, Bengaluru"
+              locationText={currentLocationText}
               etaText="In 12 minutes"
               walletBalance="₹0"
               searchPlaceholder="Search for 'mechanic, towing, flat tyre...'"
@@ -268,7 +395,7 @@ export default function HomeScreen() {
                   setActiveTab("services");
                 }
               }}
-              onLocationPress={() => handleLaunchService("towing")}
+              onLocationPress={() => void handleGetCurrentLocation(false)}
               onWalletPress={() => {
                 Alert.alert(
                   "Sahayak Cash",
@@ -290,10 +417,80 @@ export default function HomeScreen() {
             />
 
             {/* ── MAIN CONTENT ON NEUTRAL GREY CANVAS ── */}
-            <View style={{ paddingHorizontal: 16, paddingTop: 14 }}>
+            <View style={{ paddingHorizontal: 16, paddingTop: 4 }}>
 
               {/* ── 3. RECENT & FAVORITE BREAKDOWN SPOTS ── */}
               <View style={styles.recentDestinationsCard}>
+                {/* ── A. GET CURRENT ADDRESS ROW (LIVE GPS DETECT) ── */}
+                <TouchableOpacity
+                  style={styles.currentLocationRow}
+                  onPress={() => void handleGetCurrentLocation(false)}
+                  activeOpacity={0.7}
+                >
+                  <View
+                    style={[
+                      styles.gpsIconBox,
+                      currentLocationDetails.isDetected && styles.gpsIconBoxActive,
+                    ]}
+                  >
+                    {isLocating ? (
+                      <ActivityIndicator size="small" color="#0C831F" />
+                    ) : (
+                      <Ionicons
+                        name={currentLocationDetails.isDetected ? "navigate" : "locate"}
+                        size={18}
+                        color={currentLocationDetails.isDetected ? "#FFFFFF" : "#0C831F"}
+                      />
+                    )}
+                  </View>
+
+                  <View style={{ flex: 1, paddingRight: 6 }}>
+                    <View style={styles.currentLocationTitleRow}>
+                      <Text style={styles.currentLocationTitle} numberOfLines={1}>
+                        {currentLocationDetails.isDetected
+                          ? currentLocationDetails.title
+                          : "Use Current Location"}
+                      </Text>
+                      <View style={styles.gpsLiveBadge}>
+                        <Text style={styles.gpsLiveBadgeText}>
+                          {currentLocationDetails.isDetected ? "LIVE GPS" : "GPS"}
+                        </Text>
+                      </View>
+                    </View>
+                    <Text style={styles.currentLocationSub} numberOfLines={1}>
+                      {isLocating
+                        ? "Acquiring exact GPS breakdown coordinates..."
+                        : currentLocationDetails.address}
+                    </Text>
+                  </View>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.locateActionBtn,
+                      currentLocationDetails.isDetected && styles.locateActionBtnActive,
+                    ]}
+                    onPress={() => void handleGetCurrentLocation(false)}
+                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                    disabled={isLocating}
+                  >
+                    <Ionicons
+                      name={isLocating ? "refresh" : "navigate-outline"}
+                      size={13}
+                      color="#0C831F"
+                    />
+                    <Text style={styles.locateActionBtnText}>
+                      {isLocating
+                        ? "Locating..."
+                        : currentLocationDetails.isDetected
+                        ? "Refresh"
+                        : "Locate"}
+                    </Text>
+                  </TouchableOpacity>
+                </TouchableOpacity>
+
+                <View style={styles.cardDivider} />
+
+                {/* ── B. RECENT PLACES LIST ── */}
                 {recentPlaces.map((item, idx) => (
                   <View key={item.id}>
                     <TouchableOpacity
@@ -1103,7 +1300,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.xl,
     borderWidth: 1,
     borderColor: Colors.border,
-    marginTop: 12,
+    marginTop: 0,
     paddingHorizontal: 14,
     paddingVertical: 8,
     elevation: 2,
@@ -1111,6 +1308,79 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
     shadowRadius: 6,
+  },
+  currentLocationRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 10,
+    gap: 12,
+  },
+  gpsIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#ECFDF5",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#A7F3D0",
+  },
+  gpsIconBoxActive: {
+    backgroundColor: "#0C831F",
+    borderColor: "#0C831F",
+  },
+  currentLocationTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  currentLocationTitle: {
+    fontSize: 15,
+    fontFamily: Typography.fontFamily.bold,
+    fontWeight: "700",
+    color: "#0C831F",
+    letterSpacing: -0.2,
+  },
+  gpsLiveBadge: {
+    backgroundColor: "#DCFCE7",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  gpsLiveBadgeText: {
+    fontSize: 9.5,
+    fontWeight: "800",
+    fontFamily: Typography.fontFamily.bold,
+    color: "#0C831F",
+    letterSpacing: 0.3,
+  },
+  currentLocationSub: {
+    fontSize: 12.5,
+    fontFamily: Typography.fontFamily.regular,
+    color: "#64748B",
+    marginTop: 2,
+    lineHeight: 16,
+  },
+  locateActionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#F0FDF4",
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#BBF7D0",
+  },
+  locateActionBtnActive: {
+    backgroundColor: "#DCFCE7",
+    borderColor: "#86EFAC",
+  },
+  locateActionBtnText: {
+    fontSize: 11.5,
+    fontWeight: "700",
+    fontFamily: Typography.fontFamily.bold,
+    color: "#0C831F",
   },
   recentRow: {
     flexDirection: "row",

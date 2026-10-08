@@ -23,6 +23,7 @@ import { StatusBadge } from "../../../components/ui/Badge";
 import { useAuthStore } from "../../../store/authStore";
 import { useJobStore } from "../../../store/jobStore";
 import { MOCK_PARTNER, MOCK_JOBS } from "../../../services/api";
+import { jobsApi, BackendPartnerOfferItem } from "../../../services/api/jobs";
 import type { PartnerStackParamList } from "../../../types";
 import type { ViewStyle } from "react-native";
 
@@ -32,9 +33,33 @@ export default function PartnerHomeScreen() {
   const nav = useNavigation<Nav>();
   const user = useAuthStore((s) => s.user);
   const { isOnline, setOnline } = useJobStore();
+  const [liveOffers, setLiveOffers] = useState<BackendPartnerOfferItem[]>([]);
 
   const partner = MOCK_PARTNER;
   const recentJobs = MOCK_JOBS;
+
+  // Poll real incoming offers when on duty
+  React.useEffect(() => {
+    if (!isOnline) {
+      setLiveOffers([]);
+      return;
+    }
+    let isMounted = true;
+    const fetchOffers = async () => {
+      try {
+        const offers = await jobsApi.getOffers();
+        if (isMounted) setLiveOffers(offers);
+      } catch {
+        // keep fallback
+      }
+    };
+    void fetchOffers();
+    const interval = setInterval(fetchOffers, 15000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [isOnline]);
 
   const toggleOnline = (val: boolean) => {
     setOnline(val);
@@ -120,8 +145,36 @@ export default function PartnerHomeScreen() {
           </View>
         </View>
 
-        {/* ── Incoming Job Demo Button ── */}
-        {isOnline && (
+        {/* ── Incoming Job Real / Demo Banners ── */}
+        {isOnline && liveOffers.length > 0 && liveOffers.map((off) => (
+          <TouchableOpacity
+            key={off.assignment_id}
+            style={[styles.incomingBanner, Shadows.button as ViewStyle]}
+            onPress={() =>
+              nav.navigate("IncomingOffer", {
+                jobId: off.job_id,
+                assignmentId: off.assignment_id,
+                offerData: off,
+              })
+            }
+            activeOpacity={0.85}
+          >
+            <View style={styles.incomingLeft}>
+              <View style={styles.incomingPulse}>
+                <Ionicons name="flash" size={20} color={Colors.primary} />
+              </View>
+              <View>
+                <Text style={styles.incomingTitle}>Breakdown Rescue Request!</Text>
+                <Text style={styles.incomingSubtitle}>
+                  {off.service_code.replace(/_/g, " ")} · {off.distance_km} km away · ₹{off.price_estimate}
+                </Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={Colors.textWhite} />
+          </TouchableOpacity>
+        ))}
+
+        {isOnline && liveOffers.length === 0 && (
           <TouchableOpacity
             style={[styles.incomingBanner, Shadows.button as ViewStyle]}
             onPress={() => nav.navigate("IncomingOffer", { jobId: "job_003" })}

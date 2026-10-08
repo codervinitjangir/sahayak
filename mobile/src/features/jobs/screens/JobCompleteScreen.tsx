@@ -23,6 +23,7 @@ import RatingStars from "../../../components/ui/RatingStars";
 import Button from "../../../components/ui/Button";
 import Card from "../../../components/ui/Card";
 import { MOCK_PARTNER, MOCK_VEHICLES } from "../../../services/api";
+import { jobsApi } from "../../../services/api/jobs";
 import { useJobStore } from "../../../store/jobStore";
 import type { OwnerStackParamList, Job } from "../../../types";
 
@@ -68,8 +69,14 @@ export default function JobCompleteScreen() {
       return;
     }
     setSubmitted(true);
+    const targetJobId = route.params?.jobId;
+    if (targetJobId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetJobId)) {
+      void jobsApi
+        .submitRating(targetJobId, rating, tip > 0 ? `Tip: ₹${tip}` : undefined)
+        .catch((e) => console.warn("Could not submit rating to backend:", e));
+    }
     const completedJob: Job = {
-      id: route.params?.jobId || "job_" + Date.now(),
+      id: targetJobId || "job_" + Date.now(),
       ownerId: "usr_001",
       partnerId: partner.id,
       vehicleId: activeJob?.vehicleId ?? "veh_001",

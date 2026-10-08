@@ -87,7 +87,7 @@ export default function MotionBanner({
         end={{ x: 0, y: 1 }}
         style={[
           styles.gradientContainer,
-          { paddingTop: calculatedInset + 8 },
+          { paddingTop: calculatedInset + 4 },
           height ? { height } : undefined,
         ]}
       >
@@ -251,7 +251,7 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 28,
     borderBottomRightRadius: 28,
     paddingHorizontal: 16,
-    paddingBottom: 16,
+    paddingBottom: 6,
   },
 
   // Top Location & Profile Row
@@ -351,7 +351,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
     shadowRadius: 5,
-    marginBottom: 6,
+    marginBottom: 4,
   },
   searchIcon: {
     marginRight: 9,
@@ -369,9 +369,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingTop: 12,
-    paddingBottom: 4,
-    minHeight: 140,
+    paddingTop: 8,
+    paddingBottom: 0,
+    minHeight: 135,
     position: "relative",
   },
   heroLeftCol: {
@@ -400,7 +400,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     alignSelf: "flex-start",
-    marginTop: 14,
+    marginTop: 12,
     paddingVertical: 4,
   },
   ctaText: {
@@ -416,25 +416,25 @@ const styles = StyleSheet.create({
   // Hero Right Column & Cutout
   heroRightCol: {
     flex: 0.95,
-    height: 140,
+    height: 135,
     alignItems: "center",
     justifyContent: "flex-end",
     position: "relative",
   },
   backdropSquircle: {
     position: "absolute",
-    width: 120,
-    height: 120,
-    borderRadius: 30,
+    width: 115,
+    height: 115,
+    borderRadius: 28,
     backgroundColor: "rgba(255, 255, 255, 0.65)",
-    bottom: 8,
+    bottom: 4,
     right: 6,
     transform: [{ rotate: "-8deg" }],
   },
   heroImage: {
-    width: 135,
-    height: 140,
-    bottom: 2,
+    width: 130,
+    height: 135,
+    bottom: 0,
     zIndex: 5,
   },
 });

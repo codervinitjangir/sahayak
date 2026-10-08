@@ -175,7 +175,7 @@ export type OwnerStackParamList = {
 
 export type PartnerStackParamList = {
   PartnerHome: undefined;
-  IncomingOffer: { jobId: string };
+  IncomingOffer: { jobId: string; assignmentId?: string; offerData?: any };
   ActiveJob: { jobId: string };
   PartnerJobDone: { jobId: string };
 };

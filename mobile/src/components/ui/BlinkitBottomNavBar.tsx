@@ -276,15 +276,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   tabLabel: {
-    fontSize: 11,
+    fontSize: 10.5,
     fontFamily: Typography.fontFamily.medium,
-    fontWeight: "500",
     color: "#1C1C1C",
-    letterSpacing: -0.2,
+    letterSpacing: -0.1,
   },
   tabLabelActive: {
     fontFamily: Typography.fontFamily.bold,
-    fontWeight: "800",
     color: "#1C1C1C",
   },
 });

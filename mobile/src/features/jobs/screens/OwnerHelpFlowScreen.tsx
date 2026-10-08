@@ -39,6 +39,7 @@ import {
   MOCK_USER_OWNER,
   MOCK_USER_PARTNER,
 } from "../../../services/api";
+import { jobsApi } from "../../../services/api/jobs";
 import Button from "../../../components/ui/Button";
 import SharedMapCanvas from "../../../components/map/SharedMapCanvas";
 import SlidingBottomSheet, { SheetHeightVariant } from "../../../components/sheet/SlidingBottomSheet";
@@ -142,6 +143,13 @@ export default function OwnerHelpFlowScreen({
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle>(MOCK_VEHICLES[0]);
   const [notes, setNotes] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("UPI: Google Pay •• 4032");
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const [matchedPartner, setMatchedPartner] = useState<{
+    name: string;
+    phone: string;
+    rating: number | null;
+    ratingCount: number;
+  } | null>(null);
 
   // Matched State Sub-steps & Timer
   const [matchedSubState, setMatchedSubState] = useState<MatchedSubState>("awaiting_start_code");
@@ -164,7 +172,7 @@ export default function OwnerHelpFlowScreen({
   const selectedSub = subServices.find((s) => s.id === selectedSubId) ?? subServices[0];
   const currentPrice = selectedSub?.estimatedPrice ?? 499;
 
-  // Auto-progress from finding_partner to partner_matched after 4.2s (Uber matching simulation)
+  // Real backend matching polling loop with 4.2s local fallback
   useEffect(() => {
     if (step !== "finding_partner") return;
 
@@ -177,17 +185,50 @@ export default function OwnerHelpFlowScreen({
       setDotCount((d) => (d % 3) + 1);
     }, 500);
 
-    const matchTimer = setTimeout(() => {
-      setStep("partner_matched");
-      setMatchedSubState("awaiting_start_code");
-    }, 4200);
+    let matchTimer: ReturnType<typeof setTimeout> | null = null;
+    let pollInterval: ReturnType<typeof setInterval> | null = null;
+
+    if (activeJobId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(activeJobId)) {
+      pollInterval = setInterval(async () => {
+        try {
+          const job = await jobsApi.getJob(activeJobId);
+          if (job.status === "assigned" || job.status === "partner_en_route" || job.status === "in_progress") {
+            if (job.current_assignment) {
+              setMatchedPartner({
+                name: job.current_assignment.partner_name,
+                phone: job.current_assignment.partner_phone,
+                rating: job.current_assignment.partner_rating,
+                ratingCount: job.current_assignment.partner_rating_count,
+              });
+            }
+            setStep("partner_matched");
+            setMatchedSubState("awaiting_start_code");
+          } else if (job.status === "no_match_found") {
+            Alert.alert(
+              "No Partners Available",
+              "All nearby mechanics are currently assisting other drivers. Please try again in a few minutes."
+            );
+            setStep("service_select");
+          }
+        } catch {
+          // ignore transient network poll error
+        }
+      }, 3000);
+    } else {
+      // Local demo fallback
+      matchTimer = setTimeout(() => {
+        setStep("partner_matched");
+        setMatchedSubState("awaiting_start_code");
+      }, 4200);
+    }
 
     return () => {
       clearInterval(progressTimer);
       clearInterval(dotTimer);
-      clearTimeout(matchTimer);
+      if (matchTimer) clearTimeout(matchTimer);
+      if (pollInterval) clearInterval(pollInterval);
     };
-  }, [step]);
+  }, [step, activeJobId]);
 
   // Handle back navigation per step
   const handleBack = () => {
@@ -204,12 +245,30 @@ export default function OwnerHelpFlowScreen({
     } else if (step === "finding_partner") {
       Alert.alert("Cancel Request?", "Are you sure you want to cancel partner search?", [
         { text: "No", style: "cancel" },
-        { text: "Yes, Cancel", style: "destructive", onPress: () => setStep("service_select") },
+        {
+          text: "Yes, Cancel",
+          style: "destructive",
+          onPress: () => {
+            if (activeJobId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(activeJobId)) {
+              void jobsApi.cancelJob(activeJobId, "Owner cancelled during partner search").catch(() => {});
+            }
+            setStep("service_select");
+          },
+        },
       ]);
     } else if (step === "partner_matched") {
       Alert.alert("Cancel Breakdown Job?", "Partner is currently assigned and en route. Cancel?", [
         { text: "Keep Job", style: "cancel" },
-        { text: "Cancel Job", style: "destructive", onPress: () => nav.navigate("OwnerHome") },
+        {
+          text: "Cancel Job",
+          style: "destructive",
+          onPress: () => {
+            if (activeJobId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(activeJobId)) {
+              void jobsApi.cancelJob(activeJobId, "Owner cancelled assigned breakdown").catch(() => {});
+            }
+            nav.navigate("OwnerHome");
+          },
+        },
       ]);
     } else if (step === "completed") {
       nav.navigate("OwnerHome");
@@ -237,7 +296,39 @@ export default function OwnerHelpFlowScreen({
     setStep("pickup_location");
   };
 
-  const handleConfirmPickup = () => {
+  const handleConfirmPickup = async () => {
+    // Map serviceType to real backend database seed service codes
+    const serviceCodeMap: Record<ServiceType, string> = {
+      towing: "flatbed_towing",
+      battery: "battery_jumpstart",
+      tyre: "flat_tyre",
+      fuel: "fuel_delivery",
+      mechanic: "minor_repair",
+      lockout: "minor_repair",
+    };
+
+    const serviceCode = serviceCodeMap[selectedService] || "battery_jumpstart";
+    const pickupLat = userLoc.latitude;
+    const pickupLng = userLoc.longitude;
+    const pickupAddress = (userLoc as { address?: string }).address || "Indiranagar, Bengaluru, Karnataka";
+    const vehicleId = selectedVehicle?.id || "00000000-0000-0000-0000-000000000001";
+
+    try {
+      const created = await jobsApi.createJob({
+        vehicle_id: vehicleId,
+        service_code: serviceCode,
+        pickup_lat: pickupLat,
+        pickup_lng: pickupLng,
+        pickup_address_text: pickupAddress,
+        notes: notes || undefined,
+      });
+      if (created?.id) {
+        setActiveJobId(created.id);
+      }
+    } catch (err) {
+      console.warn("Could not create job on backend; falling back to local simulation:", err);
+    }
+
     setStep("finding_partner");
   };
 
@@ -743,13 +834,17 @@ export default function OwnerHelpFlowScreen({
                 </View>
                 <View style={styles.ratingBadgePill}>
                   <Ionicons name="star" size={11} color="#F8CB46" />
-                  <Text style={styles.ratingBadgeText}>{partner.rating}</Text>
+                  <Text style={styles.ratingBadgeText}>
+                    {matchedPartner?.rating ? matchedPartner.rating.toFixed(1) : partner.rating}
+                  </Text>
                 </View>
               </View>
 
               <View style={styles.driverMeta}>
-                <Text style={styles.driverName}>{partner.name}</Text>
-                <Text style={styles.driverTripsText}>234 rescue jobs completed</Text>
+                <Text style={styles.driverName}>{matchedPartner?.name || partner.name}</Text>
+                <Text style={styles.driverTripsText}>
+                  {matchedPartner ? `${matchedPartner.ratingCount} reviews` : "234 rescue jobs completed"}
+                </Text>
                 <View style={styles.vehiclePlateTag}>
                   <Text style={styles.vehiclePlateTagText}>
                     {partner.vehicleModel} · {partner.vehicleNumber}
@@ -761,14 +856,14 @@ export default function OwnerHelpFlowScreen({
               <View style={styles.driverActionsRow}>
                 <TouchableOpacity
                   style={styles.circleActionBtn}
-                  onPress={() => Linking.openURL(`tel:${partner.phone}`)}
+                  onPress={() => Linking.openURL(`tel:${matchedPartner?.phone || partner.phone}`)}
                   accessibilityLabel="Call partner"
                 >
                   <Ionicons name="call" size={18} color={Colors.textPrimary} />
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.circleActionBtn}
-                  onPress={() => Linking.openURL(`sms:${partner.phone}`)}
+                  onPress={() => Linking.openURL(`sms:${matchedPartner?.phone || partner.phone}`)}
                   accessibilityLabel="Message partner"
                 >
                   <Ionicons name="chatbubble-ellipses" size={18} color={Colors.textPrimary} />
@@ -834,7 +929,9 @@ export default function OwnerHelpFlowScreen({
 
             {/* 5-Star Rating Input */}
             <View style={styles.ratingSection}>
-              <Text style={styles.ratingPrompt}>Rate your experience with {partner.name}</Text>
+              <Text style={styles.ratingPrompt}>
+                Rate your experience with {matchedPartner?.name || partner.name}
+              </Text>
               <RatingStars
                 value={userRating}
                 size={28}
@@ -846,7 +943,19 @@ export default function OwnerHelpFlowScreen({
             {/* Done Button */}
             <Button
               label="Done · Return to Map"
-              onPress={() => setStep("idle")}
+              onPress={async () => {
+                if (activeJobId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(activeJobId)) {
+                  try {
+                    const ratings = await jobsApi.getRatings(activeJobId);
+                    if (ratings.can_rate) {
+                      await jobsApi.submitRating(activeJobId, userRating, selectedTags.join(", "));
+                    }
+                  } catch (e) {
+                    console.warn("Rating error:", e);
+                  }
+                }
+                setStep("idle");
+              }}
               variant="primary"
               size="lg"
               fullWidth

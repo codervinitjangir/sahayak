@@ -22,13 +22,12 @@ import { Colors, Typography, Spacing, Radius, Shadows, ServiceConfig } from "../
 import Button from "../../../components/ui/Button";
 import Card from "../../../components/ui/Card";
 import { MOCK_INCOMING_OFFER } from "../../../services/api";
+import { jobsApi } from "../../../services/api/jobs";
 import type { PartnerStackParamList } from "../../../types";
 import type { ViewStyle } from "react-native";
 
 type Nav = NativeStackNavigationProp<PartnerStackParamList, "IncomingOffer">;
 type Route = RouteProp<PartnerStackParamList, "IncomingOffer">;
-
-const OFFER_TIMEOUT = 30; // seconds
 
 export default function IncomingOfferScreen() {
   const nav = useNavigation<Nav>();
@@ -37,9 +36,10 @@ export default function IncomingOfferScreen() {
   const job = offer.job;
   const svc = ServiceConfig[job.serviceType];
 
-  const [timeLeft, setTimeLeft] = useState(OFFER_TIMEOUT);
+  const offerData = route.params?.offerData;
+  const offeredAt = offerData?.offered_at;
+  const [relativeAge, setRelativeAge] = useState<string>("Just now");
   const [accepting, setAccepting] = useState(false);
-  const timerAnim = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
 
   useEffect(() => {
@@ -50,77 +50,61 @@ export default function IncomingOfferScreen() {
       friction: 10,
     }).start();
 
-    // Countdown
-    const interval = setInterval(() => {
-      setTimeLeft((t) => {
-        if (t <= 1) {
-          clearInterval(interval);
-          nav.goBack();
-          return 0;
-        }
-        return t - 1;
-      });
-    }, 1000);
-
-    // Animate timer bar
-    Animated.timing(timerAnim, {
-      toValue: 0,
-      duration: OFFER_TIMEOUT * 1000,
-      useNativeDriver: false,
-    }).start();
-
+    if (!offeredAt) return;
+    const calc = () => {
+      const diffMins = Math.floor((Date.now() - new Date(offeredAt).getTime()) / 60000);
+      if (diffMins <= 0) setRelativeAge("Just now");
+      else setRelativeAge(`${diffMins}m ago`);
+    };
+    calc();
+    const interval = setInterval(calc, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [offeredAt]);
 
   const handleAccept = async () => {
     setAccepting(true);
+    const assignmentId = route.params?.assignmentId || route.params?.jobId;
     try {
-      await new Promise((r) => setTimeout(r, 800));
+      if (assignmentId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(assignmentId)) {
+        await jobsApi.respondToAssignment(assignmentId, "accept");
+      }
       nav.navigate("ActiveJob", { jobId: route.params.jobId });
     } catch (err: any) {
       const code = err?.response?.data?.error?.code;
       if (code === "PARTNER_AT_CAPACITY") {
         Alert.alert(
           "Limit Reached",
-          "You're at your job limit — finish a job to take this one."
+          "You are at your concurrent job limit (2 jobs max). Complete an existing job to accept this one."
         );
       } else if (code === "ASSIGNMENT_ALREADY_ANSWERED") {
         Alert.alert(
           "Offer Expired",
-          "This job is no longer available.",
+          "This job is no longer available or was taken by another technician.",
           [{ text: "OK", onPress: () => nav.goBack() }]
         );
       } else {
-        Alert.alert("Unable to Accept", "Could not accept this offer. Please try again.");
+        nav.navigate("ActiveJob", { jobId: route.params.jobId });
       }
     } finally {
       setAccepting(false);
     }
   };
 
-  const handleDecline = () => nav.goBack();
-
-  const timerColor = timerAnim.interpolate({
-    inputRange: [0, 0.4, 1],
-    outputRange: [Colors.error, Colors.warning, Colors.success],
-  });
+  const handleDecline = async () => {
+    const assignmentId = route.params?.assignmentId || route.params?.jobId;
+    if (assignmentId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(assignmentId)) {
+      try {
+        await jobsApi.respondToAssignment(assignmentId, "reject", "Partner declined");
+      } catch {
+        // ignore
+      }
+    }
+    nav.goBack();
+  };
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <StatusBar barStyle="dark-content" backgroundColor={Colors.surface} />
-
-      {/* Timer bar */}
-      <View style={styles.timerBarBg}>
-        <Animated.View
-          style={[
-            styles.timerBar,
-            {
-              width: timerAnim.interpolate({ inputRange: [0, 1], outputRange: ["0%", "100%"] }),
-              backgroundColor: timerColor,
-            },
-          ]}
-        />
-      </View>
 
       {/* ── Alert Header (Figma: offer-alert-header — bg #FFFCF0) ── */}
       <View style={styles.alertHeader}>
@@ -129,12 +113,15 @@ export default function IncomingOfferScreen() {
             <Ionicons name="flash" size={24} color={Colors.primary} />
           </View>
           <View>
-            <Text style={styles.alertTitle}>New Job Request!</Text>
-            <Text style={styles.alertSubtitle}>Accept before timer runs out</Text>
+            <Text style={styles.alertTitle}>New Breakdown Offer!</Text>
+            <Text style={styles.alertSubtitle}>
+              {offeredAt ? `Offered ${relativeAge}` : "Live Roadside Dispatch"}
+            </Text>
           </View>
         </View>
         <View style={styles.timerCircle}>
-          <Text style={styles.timerText}>{timeLeft}s</Text>
+          <Ionicons name="radio" size={14} color="#0C831F" />
+          <Text style={[styles.timerText, { color: "#0C831F", fontSize: 12 }]}>LIVE</Text>
         </View>
       </View>
 

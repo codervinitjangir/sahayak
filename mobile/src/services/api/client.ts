@@ -1,6 +1,8 @@
 import axios from "axios";
 import { API_BASE_URL } from "../../constants";
 
+import { useAuthStore } from "../../store/authStore";
+
 // ─── Axios instance ───────────────────────────────────────────────────────────
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -9,10 +11,11 @@ export const apiClient = axios.create({
 });
 
 // ─── Auth token interceptor ───────────────────────────────────────────────────
-// TODO: wire up Zustand auth store token once auth is implemented
 apiClient.interceptors.request.use((config) => {
-  // const token = useAuthStore.getState().token;
-  // if (token) config.headers.Authorization = `Bearer ${token}`;
+  const token = useAuthStore.getState().token;
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
   return config;
 });
 
@@ -42,7 +45,15 @@ apiClient.interceptors.response.use(
   (error) => {
     // Failures use a different envelope — `{ error: { code, message },
     // request_id }` — so they are left intact for the caller to read.
-    console.error("[API Error]", error?.response?.data ?? error.message);
+    const isSilent = Boolean((error?.config as { silent?: boolean } | undefined)?.silent);
+
+    if (__DEV__ && !isSilent) {
+      if (error?.response) {
+        console.warn("[API Error]", error.response.status, error.response.data);
+      } else {
+        console.warn("[API Network Error]", error.message ?? "Backend unreachable at " + API_BASE_URL);
+      }
+    }
     return Promise.reject(error);
   }
 );

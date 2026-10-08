@@ -76,124 +76,165 @@ export const Colors = {
   shimmerHighlight: "#F5F6F8",
 } as const;
 
-// ─── Typography (Uber Design System Scale) ──────────────────────────────────
+// ─── Typography (Blinkit / Gilroy-Equivalent — Poppins Geometric Sans-Serif) ──
 export const Typography = {
-  // Font families (Inter mapped to Uber Move weights)
+  // Font families — Poppins mapped to Blinkit's Gilroy weight hierarchy
   fontFamily: {
-    regular: "Inter_400Regular",
-    medium: "Inter_500Medium",
-    semiBold: "Inter_600SemiBold",
-    bold: "Inter_700Bold",
+    regular: "Poppins_400Regular",      // body text, descriptions, menu items
+    medium: "Poppins_500Medium",        // addresses, subtitles, nav labels
+    semiBold: "Poppins_600SemiBold",    // context labels ("Blinkit in"), badges
+    bold: "Poppins_700Bold",            // section headings, card titles, buttons
+    extraBold: "Poppins_800ExtraBold",  // ETA numbers, page titles, hero display text
   },
 
-  // Font sizes matching Uber's exact scale
+  // Font sizes — Blinkit-accurate scale from screenshot pixel analysis
   fontSize: {
-    xs: 11,    // micro badges, tags, chips
-    sm: 13,    // secondary text, captions, subtitles (Uber standard)
-    base: 14,  // standard body regular
-    md: 16,    // body bold, place names, item titles (Uber standard)
-    lg: 18,    // card headers, prominent actions (Uber standard)
-    xl: 20,    // modal headers, sub-section titles
-    "2xl": 22, // Uber section titles ("For you", "Everything in minutes")
-    "3xl": 26, // screen titles, greetings
-    "4xl": 32, // display / hero headings
-    "5xl": 36, // splash / large hero
+    xs: 10,    // bottom nav labels, micro badges
+    sm: 12,    // captions, old prices, category card labels
+    base: 13,  // secondary text, addresses, bullet descriptions
+    md: 14,    // body text, search placeholder, button text
+    lg: 15,    // menu items, prices, item titles
+    xl: 16,    // sub-section titles ("Your information")
+    "2xl": 18, // section headings ("Grocery & Kitchen", "Snacks & Drinks")
+    "3xl": 22, // page titles ("Your account")
+    "4xl": 24, // ETA headline ("23 minutes")
+    "5xl": 28, // display headings ("Print Store")
   },
 
-  // Line heights
+  // Line heights — tighter than Inter, matching Gilroy's compact geometric feel
   lineHeight: {
-    tight: 1.2,
-    snug: 1.35,
-    normal: 1.45,
-    relaxed: 1.6,
+    tight: 1.15,    // display/hero text
+    snug: 1.25,     // headings, ETA
+    normal: 1.4,    // body text
+    relaxed: 1.55,  // long-form descriptions
   },
 
-  // Letter spacing (Uber's signature tight grotesque character spacing)
+  // Letter spacing — Blinkit's signature tight headings, neutral body
   letterSpacing: {
-    display: -0.8,
-    title: -0.5,
-    card: -0.3,
-    body: -0.15,
-    caption: 0,
-    badge: 0.15,
-    tighter: -0.5,
-    tight: -0.25,
-    normal: 0,
-    wide: 0.25,
-    wider: 0.5,
-    widest: 1,
+    display: -0.8,   // hero/display headings (28px+)
+    title: -0.6,     // ETA numbers, page titles (22-24px)
+    section: -0.3,   // section headings (18px)
+    card: -0.2,      // card/item titles (15-16px)
+    body: 0,         // body text, descriptions (13-14px)
+    caption: 0,      // captions, labels (10-12px)
+    badge: 0.2,      // context labels ("Blinkit in"), small badges
+    wide: 0.4,       // uppercase micro-badges
+    widest: 0.8,     // tracking-wide decorative elements
   },
 
-  // Uber Character Presets
-  uber: {
+  // Blinkit Character Presets (pixel-accurate from screenshot analysis)
+  blinkit: {
+    // "Print Store" — largest display heading
     display: {
-      fontSize: 32,
-      fontFamily: "Inter_700Bold",
-      fontWeight: "700" as const,
+      fontSize: 28,
+      fontFamily: "Poppins_800ExtraBold",
+      fontWeight: "800" as const,
       letterSpacing: -0.8,
-      color: "#1C1C1C",
-      lineHeight: 38,
-    },
-    screenTitle: {
-      fontSize: 26,
-      fontFamily: "Inter_700Bold",
-      fontWeight: "700" as const,
-      letterSpacing: -0.6,
       color: "#1C1C1C",
       lineHeight: 32,
     },
-    sectionTitle: {
-      fontSize: 22,
-      fontFamily: "Inter_700Bold",
-      fontWeight: "700" as const,
-      letterSpacing: -0.4,
+    // "23 minutes" — hero ETA number
+    etaHeadline: {
+      fontSize: 24,
+      fontFamily: "Poppins_800ExtraBold",
+      fontWeight: "800" as const,
+      letterSpacing: -0.6,
       color: "#1C1C1C",
       lineHeight: 28,
     },
-    cardTitle: {
+    // "Your account" — page-level titles
+    pageTitle: {
+      fontSize: 22,
+      fontFamily: "Poppins_800ExtraBold",
+      fontWeight: "800" as const,
+      letterSpacing: -0.4,
+      color: "#1C1C1C",
+      lineHeight: 26,
+    },
+    // "Grocery & Kitchen" — section headings
+    sectionTitle: {
       fontSize: 18,
-      fontFamily: "Inter_700Bold",
+      fontFamily: "Poppins_700Bold",
       fontWeight: "700" as const,
       letterSpacing: -0.3,
       color: "#1C1C1C",
-      lineHeight: 24,
-    },
-    itemTitle: {
-      fontSize: 16,
-      fontFamily: "Inter_600SemiBold",
-      fontWeight: "600" as const,
-      letterSpacing: -0.2,
-      color: "#1C1C1C",
       lineHeight: 22,
     },
+    // "Your information" — sub-section headings
+    subSectionTitle: {
+      fontSize: 16,
+      fontFamily: "Poppins_700Bold",
+      fontWeight: "700" as const,
+      letterSpacing: -0.2,
+      color: "#1C1C1C",
+      lineHeight: 20,
+    },
+    // "Address book", "Payment settings" — menu items
+    menuItem: {
+      fontSize: 15,
+      fontFamily: "Poppins_400Regular",
+      letterSpacing: 0,
+      color: "#1C1C1C",
+      lineHeight: 20,
+    },
+    // Body text, descriptions
     body: {
       fontSize: 14,
-      fontFamily: "Inter_400Regular",
-      letterSpacing: -0.15,
+      fontFamily: "Poppins_400Regular",
+      letterSpacing: 0,
       color: "#5E6470",
       lineHeight: 20,
     },
+    // Address, location line
     bodyMedium: {
-      fontSize: 14,
-      fontFamily: "Inter_500Medium",
+      fontSize: 13,
+      fontFamily: "Poppins_500Medium",
       fontWeight: "500" as const,
-      letterSpacing: -0.15,
+      letterSpacing: 0,
       color: "#1C1C1C",
-      lineHeight: 20,
+      lineHeight: 18,
     },
+    // "Blinkit in" — small context label above ETA
+    contextLabel: {
+      fontSize: 11,
+      fontFamily: "Poppins_600SemiBold",
+      fontWeight: "600" as const,
+      letterSpacing: 0.2,
+      color: "#1C1C1C",
+      lineHeight: 14,
+    },
+    // Captions, category labels, old prices
     caption: {
       fontSize: 12,
-      fontFamily: "Inter_400Regular",
+      fontFamily: "Poppins_400Regular",
       letterSpacing: 0,
       color: "#5E6470",
       lineHeight: 16,
     },
+    // Bottom nav labels, micro badges
     badge: {
-      fontSize: 11,
-      fontFamily: "Inter_700Bold",
-      fontWeight: "700" as const,
-      letterSpacing: 0.15,
+      fontSize: 10,
+      fontFamily: "Poppins_500Medium",
+      fontWeight: "500" as const,
+      letterSpacing: 0,
       lineHeight: 14,
+    },
+    // Button text
+    button: {
+      fontSize: 14,
+      fontFamily: "Poppins_700Bold",
+      fontWeight: "700" as const,
+      letterSpacing: 0,
+      lineHeight: 18,
+    },
+    // Price display
+    price: {
+      fontSize: 15,
+      fontFamily: "Poppins_700Bold",
+      fontWeight: "700" as const,
+      letterSpacing: -0.2,
+      color: "#1C1C1C",
+      lineHeight: 18,
     },
   },
 } as const;

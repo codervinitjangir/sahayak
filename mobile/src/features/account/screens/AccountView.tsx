@@ -556,8 +556,7 @@ const styles = StyleSheet.create({
   },
   yourAccountTitle: {
     fontSize: 22,
-    fontFamily: Typography.fontFamily.bold,
-    fontWeight: "800",
+    fontFamily: Typography.fontFamily.extraBold,
     color: "#1C1C1C",
     letterSpacing: -0.4,
   },

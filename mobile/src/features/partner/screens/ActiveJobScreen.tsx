@@ -14,22 +14,27 @@ import {
   Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useRoute } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import type { RouteProp } from "@react-navigation/native";
 
 import { Colors, Typography, Spacing, Radius, Shadows } from "../../../constants/theme";
 import Button from "../../../components/ui/Button";
 import SharedMapCanvas from "../../../components/map/SharedMapCanvas";
 import { MOCK_INCOMING_OFFER } from "../../../services/api";
+import { jobsApi } from "../../../services/api/jobs";
 import type { PartnerStackParamList } from "../../../types";
 
 type Nav = NativeStackNavigationProp<PartnerStackParamList, "ActiveJob">;
+type Route = RouteProp<PartnerStackParamList, "ActiveJob">;
 
 const PARTNER_LOC = { latitude: 12.9756, longitude: 77.5906 };
 const USER_LOC = { latitude: 12.9716, longitude: 77.5946 };
 
 export default function ActiveJobScreen() {
   const nav = useNavigation<Nav>();
+  const route = useRoute<Route>();
+  const currentJobId = route.params?.jobId || MOCK_INCOMING_OFFER.jobId;
   const job = MOCK_INCOMING_OFFER.job;
   const slideAnim = useRef(new Animated.Value(100)).current;
 
@@ -37,6 +42,13 @@ export default function ActiveJobScreen() {
   const [partnerStep, setPartnerStep] = useState<"en_route" | "arrived" | "in_progress">("arrived");
   const [otp, setOtp] = useState(["", "", "", ""]);
   const otpRefs = useRef<(TextInput | null)[]>([]);
+
+  useEffect(() => {
+    // Notify en_route when screen opens if real job
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(currentJobId)) {
+      void jobsApi.updateJobStatus(currentJobId, "partner_en_route").catch(() => {});
+    }
+  }, [currentJobId]);
 
   useEffect(() => {
     Animated.spring(slideAnim, {
@@ -78,18 +90,31 @@ export default function ActiveJobScreen() {
     }
   };
 
-  const handleVerifyStartCode = () => {
+  const handleVerifyStartCode = async () => {
     const code = otp.join("");
     if (code.length < 4) {
       Alert.alert("Incomplete Code", "Please enter the 4-digit start code provided by customer.");
       return;
     }
-    // Any 4-digit code or "4821" accepts
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(currentJobId)) {
+      try {
+        await jobsApi.updateJobStatus(currentJobId, "in_progress");
+      } catch (err) {
+        console.warn("Could not sync in_progress status:", err);
+      }
+    }
     setPartnerStep("in_progress");
   };
 
-  const handleDone = () => {
-    nav.navigate("PartnerJobDone", { jobId: MOCK_INCOMING_OFFER.jobId });
+  const handleDone = async () => {
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(currentJobId)) {
+      try {
+        await jobsApi.updateJobStatus(currentJobId, "completed", 450);
+      } catch (err) {
+        console.warn("Could not sync completed status:", err);
+      }
+    }
+    nav.navigate("PartnerJobDone", { jobId: currentJobId });
   };
 
   return (
