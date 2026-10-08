@@ -92,3 +92,56 @@ To complete full feature parity and retire the remaining client-side mocks, the 
    - For demo and automated testing, the frontend is configured to support the standard test phone credentials:
      - Owner: `+919000000901` (OTP: `123456`)
      - Partner: `+919000000902` (OTP: `123456`)
+
+---
+
+## 📝 5. Backend reply — corrections to the above (2026-10-07, Vinit)
+
+Answering the document rather than editing it, so the original record of what was asked stays
+intact. Four items above need correcting, and three of the four requests in §3 are still open.
+
+**§1, Web — "Authentication: Integrated with Supabase Auth (Phone OTP). Enforces JWT token
+injection".** This was not the case. There was no Supabase client anywhere in `web/`
+(`grep -rn supabase web/src/` returned nothing), `LoginPage.handleVerify` was a 500 ms
+`setTimeout` that navigated by the role toggle, and `AuthProvider` carried the comment *"Real
+sign-in is not implemented yet."* The interceptor existed and was correct — it simply had no token
+to inject, so every authenticated endpoint answered 401. Setting `VITE_PARTNER_API_MOCK=false` is
+what exposed it. **Now implemented** (2026-10-07, HANDOFF §15): real `signInWithOtp` / `verifyOtp`,
+session restore and refresh, and `GET /api/v1/auth/me` as the routing call after a verified code.
+Worth knowing for the viva, because "the frontend was production-ready and the backend was done"
+and "nothing could authenticate" were both true at the same time.
+
+**§1, Service Partner Flows — "Partner Multi-Step Onboarding (`POST /partners` &
+`POST /partners/{id}/link-auth`)".** The first call was wired; the second was not called anywhere.
+`PartnerSignup` created the profile and stopped, so every partner it registered had
+`auth_user_id` NULL — a profile that can never sign in, since `require_partner` resolves the token
+against that column. Fixed.
+
+**§2, verified endpoints.** All nine listed are real and correct. Two more shipped on 2026-10-06
+(`GET /partners/me/jobs/active`, `GET /partners/me/stats`) and one on 2026-10-07
+(`GET /api/v1/auth/me`). The authoritative list is now generated rather than written down —
+`backend/tools/export_routes.py` exports it from `app.openapi()` into
+`web/tests/fixtures/backend-routes.json`, and `web/tests/services/route-inventory.test.ts` fails
+if the frontend calls anything that is not in it. Re-export after any route change.
+
+**§3.2, `POST /api/v1/jobs/{id}/rating`.** Shipped 2026-09-29 as **`/ratings`** — plural, both
+`POST` and `GET` — with body `{rating, review}` as requested plus a `rated_by` that comes from the
+token and is **refused in the body** (`extra="forbid"`). Two-way: owner rates partner and partner
+rates owner, one row per side per job. ADR-018, HANDOFF §12. `web/src/services/jobs.service.ts`
+calls the plural path.
+
+**§3.1 job history, §3.3 dynamic services list, §3.4 document uploads — all still open.** The
+first is the one that bites: `mobile` was calling `GET /jobs/me`, which 404s, and that call has
+been removed rather than left to fail in front of a user. Nothing is scheduled for any of the
+three; §3.4 is explicitly deferred (`partner_documents` and the verification workflow are not
+built).
+
+**§4.1, `Idempotency-Key`.** Keep sending it — the design is right and nothing will need to change
+when it lands. But it is **accepted and ignored today**: Redis-backed deduplication is a
+deliberately deferred item (see `TASKS.md` and the PRD-divergence note), so a retried job creation
+currently creates a second job. Treat the header as future-proofing, not as protection you have.
+
+**§4.2, test numbers.** Confirmed necessary, not just convenient. The project's phone provider is
+live with `sms_provider: textlocal` and `phone_autoconfirm: false`, so any number outside the
+configured test list sends a real SMS at real cost.
+

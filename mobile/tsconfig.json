@@ -1,6 +1,10 @@
 {
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
-    "strict": true
-  }
+    "strict": true,
+    "types": [
+      "node"
+    ]
+  },
+  "_comment": "types:[node] is needed because tests/services/route-inventory.test.ts reads the source tree from disk. expo/tsconfig.base sets customConditions:[react-native], under which @types/node is not picked up automatically."
 }

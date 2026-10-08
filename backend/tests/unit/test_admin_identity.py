@@ -34,12 +34,22 @@ PARTNER_ID = uuid.UUID("55555555-5555-5555-5555-555555555555")
 ADMIN_ID = uuid.UUID("66666666-6666-6666-6666-666666666666")
 
 
-class Row:
-    """Stands in for a User, Partner or Admin — only `.id` is ever read."""
+QA_PHONE = "+919000000950"
 
-    def __init__(self, row_id: uuid.UUID) -> None:
+
+class Row:
+    """Stands in for a User, Partner or Admin.
+
+    `.phone` is read by both link-auth functions since 2026-10-07 — they bind on
+    the token's verified phone claim, so a stub without a number fails the check
+    before reaching the admin guard these tests are about. Defaults to QA_PHONE,
+    which the claims below also carry.
+    """
+
+    def __init__(self, row_id: uuid.UUID, phone: str = QA_PHONE) -> None:
         self.id = row_id
         self.auth_user_id = None
+        self.phone = phone
 
 
 class FakeSession:
@@ -248,7 +258,7 @@ class TestAdminAccountCannotBeBoundAgain:
         with pytest.raises(AppError) as exc:
             asyncio.run(
                 auth_service.link_user_auth(
-                    session, USER_ID, TokenClaims(auth_user_id=AUTH_ID)
+                    session, USER_ID, TokenClaims(auth_user_id=AUTH_ID, phone=QA_PHONE)
                 )
             )
         assert exc.value.code == ErrorCode.AUTH_ALREADY_LINKED
@@ -274,7 +284,7 @@ class TestAdminAccountCannotBeBoundAgain:
         with pytest.raises(AppError) as exc:
             asyncio.run(
                 auth_service.link_partner_auth(
-                    session, PARTNER_ID, TokenClaims(auth_user_id=AUTH_ID)
+                    session, PARTNER_ID, TokenClaims(auth_user_id=AUTH_ID, phone=QA_PHONE)
                 )
             )
         assert exc.value.code == ErrorCode.AUTH_ALREADY_LINKED

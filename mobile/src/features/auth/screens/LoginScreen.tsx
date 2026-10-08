@@ -24,8 +24,15 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors, Typography, Radius, Spacing } from "../../../constants/theme";
 import Button from "../../../components/ui/Button";
-import { authApi, MOCK_USER_OWNER, MOCK_USER_PARTNER } from "../../../services/api";
-import { useAuthStore } from "../../../store/authStore";
+import { MOCK_USER_OWNER, MOCK_USER_PARTNER } from "../../../services/api";
+import { identityService } from "../../../services/identity";
+import {
+  IS_SUPABASE_CONFIGURED,
+  sendPhoneOtp,
+  toE164,
+  verifyPhoneOtp,
+} from "../../../services/supabase";
+import { appRoleFor, useAuthStore } from "../../../store/authStore";
 import type { UserRole } from "../../../types";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -42,7 +49,7 @@ export default function LoginScreen() {
 
   const otpRefs = useRef<(TextInput | null)[]>([]);
   const slideAnim = useRef(new Animated.Value(0)).current;
-  const { setUser } = useAuthStore();
+  const { setUser, setToken, setDemoUser } = useAuthStore();
 
   const isOwner = role === "owner";
 
@@ -59,18 +66,31 @@ export default function LoginScreen() {
       Alert.alert("Invalid Phone Number", "Please enter a valid 10-digit mobile number.");
       return;
     }
+    if (!IS_SUPABASE_CONFIGURED) {
+      Alert.alert(
+        "Sign-in not configured",
+        "Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY in mobile/.env, then restart the dev server."
+      );
+      return;
+    }
     setLoading(true);
     try {
-      await authApi.sendOTP(phone);
+      // A real code to a real number. This used to call a mock that returned
+      // `{success: true}` without a network request, then pre-fill the boxes with
+      // 123456 — so the screen reached "verified" whether or not anything had been
+      // sent, and produced no token either way.
+      const outcome = await sendPhoneOtp(toE164("+91", phone));
+      if (!outcome.ok) {
+        Alert.alert("Could not send code", outcome.message ?? "Please try again.");
+        return;
+      }
+      setOtp(["", "", "", "", "", ""]);
       setStep("otp");
-      setOtp(["1", "2", "3", "4", "5", "6"]); // Pre-fill for instant demo convenience
       Animated.timing(slideAnim, {
         toValue: 1,
         duration: 350,
         useNativeDriver: true,
       }).start();
-    } catch {
-      Alert.alert("Error", "Failed to send OTP. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -84,11 +104,64 @@ export default function LoginScreen() {
     }
     setLoading(true);
     try {
-      const res = await authApi.verifyOTP(phone, code, role);
-      setUser(res.user, res.token);
-    } catch {
-      // Fallback for demo
-      handleQuickDemo(role);
+      const verified = await verifyPhoneOtp(toE164("+91", phone), code);
+      if (!verified.ok || !verified.accessToken) {
+        // Previously this branch called handleQuickDemo(role), so a wrong code —
+        // or a Supabase outage — signed the user in as a hardcoded mock profile.
+        // A failed sign-in has to look like a failed sign-in.
+        Alert.alert("Verification failed", verified.message ?? "That code did not work.");
+        return;
+      }
+
+      // Stored before the next call, because that call needs it as its bearer.
+      setToken(verified.accessToken);
+
+      // The role toggle on the previous screen only seeded a phone number. What
+      // this account actually *is* comes from our own tables, and only
+      // GET /api/v1/auth/me knows — so a mechanic who tapped "Owner" still lands
+      // in the partner screens.
+      const resolution = await identityService.resolve();
+
+      switch (resolution.kind) {
+        case "registered":
+          setUser(
+            {
+              ...(resolution.identity.role === "partner" ? MOCK_USER_PARTNER : MOCK_USER_OWNER),
+              id: resolution.identity.id,
+              phone: toE164("+91", phone),
+              role: appRoleFor(resolution.identity.role),
+            },
+            verified.accessToken
+          );
+          return;
+
+        case "needs-signup":
+          // The token is good; there is simply no profile behind it yet. Mobile has
+          // no registration screen, and POST /api/v1/users needs exactly this token
+          // — so say what is missing rather than signing them into empty screens.
+          Alert.alert(
+            "Finish signing up",
+            "This number is verified but has no Sahayak profile yet. Complete signup on the Sahayak web app, then sign in here."
+          );
+          return;
+
+        case "needs-linking":
+          // An unclaimed profile exists for this number. link-auth needs its id,
+          // which this account has no way to learn — deliberately, since link-auth
+          // binds on the verified phone claim and handing ids out would widen that.
+          Alert.alert(
+            "Account not linked",
+            "A Sahayak profile is already registered with this number but is not yet linked to this login. Ask the Sahayak team to finish linking it."
+          );
+          return;
+
+        default:
+          Alert.alert(
+            "Signed in, but…",
+            resolution.message || "Could not load your profile. Please try again."
+          );
+          return;
+      }
     } finally {
       setLoading(false);
     }
@@ -114,8 +187,11 @@ export default function LoginScreen() {
   };
 
   const handleQuickDemo = (demoRole: UserRole) => {
+    // Browses the mocked screens; does **not** sign anyone in. It used to pass
+    // "mock_jwt_token" as a bearer, which the request interceptor would now put on
+    // every call to a backend that verifies tokens against the project's JWKS.
     const mockUser = demoRole === "owner" ? MOCK_USER_OWNER : MOCK_USER_PARTNER;
-    setUser(mockUser, "mock_jwt_token");
+    setDemoUser(mockUser);
   };
 
   return (
@@ -304,14 +380,18 @@ export default function LoginScreen() {
                 ))}
               </View>
 
-              {/* Quick prefill demo chip */}
+              {/* Fills the fixed code that Supabase's *configured test numbers*
+                  accept. It is still useful — those numbers bypass SMS entirely,
+                  which is how the flow gets demoed without sending a message — but
+                  it is no longer a way past verification: a real number will reject
+                  this code, and the label says so rather than implying otherwise. */}
               <TouchableOpacity
                 style={styles.prefillChip}
                 onPress={() => setOtp(["1", "2", "3", "4", "5", "6"])}
                 activeOpacity={0.8}
               >
                 <Ionicons name="flash-outline" size={13} color={Colors.brand700} />
-                <Text style={styles.prefillChipText}>Auto-fill Code: 123456</Text>
+                <Text style={styles.prefillChipText}>Test numbers only: 123456</Text>
               </TouchableOpacity>
 
               {/* Primary Verify Button */}

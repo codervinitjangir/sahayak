@@ -99,10 +99,19 @@ export const jobsApi = {
   getJob: (jobId: string) =>
     apiClient.get<BackendJob>(`/jobs/${jobId}`).then((r) => r.data),
 
-  /** Cancel a job (POST /api/v1/jobs/{jobId}/cancel) */
-  cancelJob: (jobId: string, reason?: string) =>
+  /**
+   * Cancel a pending or active job (POST /api/v1/jobs/{jobId}/cancel)
+   *
+   * The field is `cancellation_reason`, not `reason`. JobCancelRequest sets
+   * `extra="forbid"`, so the shorter name was not ignored — it made every cancel
+   * a 422 naming the offending field, on a screen whose whole job is to let
+   * somebody back out.
+   */
+  cancelJob: (jobId: string, cancellationReason?: string) =>
     apiClient
-      .post<BackendJob>(`/jobs/${jobId}/cancel`, reason ? { reason } : {})
+      .post<BackendJob>(`/jobs/${jobId}/cancel`, {
+        cancellation_reason: cancellationReason,
+      })
       .then((r) => r.data),
 
   /** Partner: respond to assignment offer (POST /api/v1/job-assignments/{assignmentId}/respond) */
@@ -149,3 +158,9 @@ export const jobsApi = {
       .post(`/jobs/${jobId}/ratings`, { rating, comment: comment || undefined })
       .then((r) => r.data),
 };
+
+// Removed 2026-10-06: listMyJobs() called GET /jobs/me, which does not exist —
+// there is no job-history route on the backend for either role, and asking for one
+// is tracked in BACKEND_COMMUNICATION.md §3.1. Until it ships, a history screen
+// has nothing to call; leaving the method here only meant the 404 was found by a
+// user rather than by this file.

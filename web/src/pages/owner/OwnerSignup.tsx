@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { ArrowLeft, AlertCircle, Shield, CheckCircle2 } from 'lucide-react';
 import { usersService } from '../../services/users.service';
 import { useAuth } from '../../app/AuthProvider';
+import { getAuthToken } from '../../services/authToken';
+import { getSupabase, IS_SUPABASE_CONFIGURED } from '../../services/supabase';
 import { Button } from '../../components/ui/Button';
 
 export const OwnerSignup: React.FC = () => {
@@ -16,6 +18,42 @@ export const OwnerSignup: React.FC = () => {
   const [email, setEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  /**
+   * `POST /api/v1/users` is authenticated: it creates the profile *and* binds it
+   * to the caller's Supabase account in one step, so the token has to exist
+   * before the form is submitted. Reaching this page without one is not a state
+   * the form can recover from — the only outcome would be a 401 after the user
+   * has typed everything — so send them to sign in first and come back.
+   */
+  useEffect(() => {
+    if (!getAuthToken()) {
+      navigate(`/login?redirect=${encodeURIComponent(`/owner/signup?redirect=${redirectPath}`)}`, {
+        replace: true,
+      });
+    }
+  }, [navigate, redirectPath]);
+
+  /**
+   * Prefill the number the token already proves.
+   *
+   * The backend sets `phone_verified` from the token's phone claim, not from this
+   * field, so a user who types a different number here gets a profile whose phone
+   * is silently unverified. Prefilling makes the common case correct and the
+   * mismatch visible.
+   */
+  useEffect(() => {
+    if (!IS_SUPABASE_CONFIGURED) return;
+    void getSupabase()
+      .auth.getUser()
+      .then(({ data }) => {
+        const verified = data.user?.phone;
+        if (verified) setPhone(verified.replace(/^(\+?91)/, ''));
+      })
+      .catch(() => {
+        // Nothing to prefill; the user types it as before.
+      });
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

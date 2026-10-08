@@ -194,24 +194,16 @@ export const MOCK_INCOMING_OFFER: IncomingOffer = {
   expiresAt: new Date(Date.now() + 30000).toISOString(),
 };
 
-// ─── API Functions (will switch from mock to real on Phase 4) ─────────────────
-export const authApi = {
-  sendOTP: async (phone: string) => {
-    // Mock: always succeeds
-    return { success: true, message: `OTP sent to ${phone}` };
-  },
-  verifyOTP: async (phone: string, otp: string, role: "owner" | "partner") => {
-    // Mock: any 6-digit OTP passes
-    if (otp.length === 6) {
-      return {
-        success: true,
-        token: "mock_jwt_token_" + Date.now(),
-        user: role === "partner" ? MOCK_USER_PARTNER : MOCK_USER_OWNER,
-      };
-    }
-    throw new Error("Invalid OTP");
-  },
-};
+// Removed 2026-10-07: `authApi.sendOTP` / `authApi.verifyOTP`. The first returned
+// `{success: true}` without calling anything; the second accepted any six digits
+// and handed back `"mock_jwt_token_" + Date.now()`, which the backend rejects on
+// sight since it verifies every bearer against the project's JWKS. Real sign-in
+// lives in src/services/supabase.ts.
+//
+// Deleted rather than left beside the real one. A mock that still compiles is a
+// mock someone wires back in — and the failure mode here is the worst kind: the
+// app looks signed in and every authenticated call 401s.
+
 
 // ─── Idempotency Key Generator ────────────────────────────────────────────────
 export function createIdempotencyKey(): string {

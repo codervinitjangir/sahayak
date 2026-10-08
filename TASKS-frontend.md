@@ -1,12 +1,154 @@
 # Sahayak — Frontend Task Backlog
 
-**Last updated:** 2026-10-06
+**Last updated:** 2026-10-07
 **See also:** `TASKS.md` (backend), `docs/FRONTEND-GUIDE.md` (screen/endpoint guide),
 `HANDOFF-frontend-contract.md` (API contract log).
 
 ---
 
 ## Done
+
+### [x] Mobile sign-in — 2026-10-07
+
+Mobile now obtains a real token the same way web does. Before this, `authApi.sendOTP`
+returned `{success: true}` without calling anything, `authApi.verifyOTP` accepted any six
+digits and returned `"mock_jwt_token_" + Date.now()`, and the screen pre-filled the boxes with
+123456 — so it reached "verified" whether or not a code had ever been sent.
+
+| Change | File |
+|---|---|
+| Supabase client: OTP send/verify, AsyncStorage session, URL polyfill | `src/services/supabase.ts` (new) |
+| `GET /auth/me` as the four-way routing union (same shape as web) | `src/services/identity.ts` (new) |
+| `toE164`, extracted so it is testable outside React Native | `src/services/phone.ts` (new) |
+| Real OTP; routes on the backend's role, not the role toggle | `src/features/auth/screens/LoginScreen.tsx` |
+| Session restore + refresh subscription; `setDemoUser` (tokenless) | `src/store/authStore.ts` |
+| `initSession()` mounted once at the root | `App.tsx` |
+| `EXPO_PUBLIC_API_BASE_URL` override | `src/constants/index.ts` |
+| Mock auth removed outright | `src/services/api.ts` |
+
+**Three things React Native needs that the web client does not:**
+
+1. **`react-native-url-polyfill/auto`, imported first.** supabase-js builds URLs with the WHATWG
+   `URL` API, which Hermes does not implement. Without it every auth call fails at runtime with
+   "URL.protocol is not implemented" — a typecheck and a bundle both pass, so the failure only
+   appears on a device.
+2. **`storage: AsyncStorage`.** The web client defaults to `localStorage`. With no storage the
+   session lives in memory and a mechanic whose app gets killed in the background is back at the
+   OTP screen.
+3. **`EXPO_PUBLIC_*` env vars**, inlined at build time. Restart with `npx expo start -c` after
+   changing `.env` — a running bundler will not pick it up.
+
+**Four forged-bearer paths removed.** The request interceptor now sends whatever is in
+`token`, which turned every placeholder into a real `Authorization` header: the store's default
+`"mock_jwt_owner"`, the login screen's `handleQuickDemo`, and role-switch buttons in
+`HomeScreen` and `OwnerHelpFlowScreen` that passed `"mock_jwt_partner"`. All now use
+`setDemoUser(user)`, which sets a profile with **no token** — browsing the mocked screens and
+being signed in no longer share a code path.
+
+**`handleVerifyOTP` no longer falls back to a mock user.** Its `catch` called
+`handleQuickDemo(role)`, so a wrong code — or a Supabase outage — silently signed you in as a
+hardcoded profile. Same family as the web's swallowed `link-auth`.
+
+**`API_BASE_URL` was hardcoded to `10.0.2.2:8000`**, the Android *emulator's* alias for the host.
+It resolves to nothing on a physical phone — which is the only place an OTP SMS can arrive — so
+it is now overridable. Set `EXPO_PUBLIC_API_BASE_URL` to the host's LAN address and start
+uvicorn with `--host 0.0.0.0`.
+
+**Tests: 15, in a runner mobile did not have.** Vitest, for the pure logic only — the routing
+fork and the phone shaping. Those are what repay a test: three outcomes, two arriving as the
+*same* 403, reached only on cold paths (a first-ever sign-in; a mechanic ops registered before
+they installed the app) that nobody hits by tapping through. Reverting the fork to read the
+status alone fails exactly three. `tests/services/route-inventory.test.ts` is the mobile twin of
+web's and catches a reintroduced `GET /jobs/me` by name. Screens remain untested — jest-expo is
+a bigger change than this task, and they were untested before.
+
+`tsc --noEmit` passes, which it did **not** before: three declared dependencies
+(`expo-linear-gradient`, `react-native-svg`, `expo-splash-screen`) had never been installed, so
+the typecheck failed with 7 errors on `node_modules` that were simply absent. `npm install`
+fixed that; `@types/node` and `"types": ["node"]` were added for the route test, which reads the
+source tree.
+
+**What is still not verified, stated plainly:** nothing here proves the client works *on a
+device*. The URL polyfill and the AsyncStorage session are exactly the kind of thing that
+typechecks and then fails at runtime. Run it on a real phone with a configured Supabase test
+number before relying on it.
+
+---
+
+### [x] Real Supabase sign-in — 2026-10-07
+
+The repoint below was correct about every path, and none of it could work, because the app had
+no way to obtain a token. There was no Supabase client in `web/` at all; `LoginPage.handleVerify`
+was a `setTimeout` that navigated by the role toggle, and `AuthProvider` said as much in its own
+comment. So `apiClient` sent no `Authorization` header and all six "fixed and verified" partner
+endpoints answered **401** in a browser. Setting `VITE_PARTNER_API_MOCK=false` is what made that
+visible: it stopped the console using its mock and started it making calls that could not succeed.
+
+| Change | File |
+|---|---|
+| Supabase client, OTP send/verify, session restore, token refresh | `src/services/supabase.ts` (new) |
+| `GET /auth/me` wrapped as a four-way routing union | `src/services/identity.service.ts` (new) |
+| Real OTP; routes on the backend's role, not the toggle | `src/pages/auth/LoginPage.tsx` |
+| Real OTP; **calls `link-auth`**; surfaces failures instead of showing success over them | `src/pages/partner/PartnerSignup.tsx` |
+| Redirects to `/login` when unauthenticated; prefills the verified phone | `src/pages/owner/OwnerSignup.tsx` |
+| Placeholder bearer removed; `USER_NOT_REGISTERED` opens the register modal | `src/pages/owner/RequestHelpPage.tsx` |
+| Token kept in step with the Supabase session | `src/app/AuthProvider.tsx` |
+| Supabase URL + **publishable** key | `web/.env`, `web/.env.example` |
+
+**Three bugs this surfaced, all fixed:**
+
+1. **`PartnerSignup` never called `POST /partners/{id}/link-auth`** — it created the profile and
+   stopped, leaving `auth_user_id` NULL. That is a partner nobody can ever sign in to, because
+   every partner route resolves the token against that column. It was also wrapped in
+   `catch { console.warn }` and fell through to the success screen, so a registration that failed
+   looked exactly like one that worked.
+2. **`RequestHelpPage` substituted the string `'demo-token-owner-asha'`** for a real bearer under
+   `IS_DEMO_MODE`. The backend verifies every token against the project's JWKS, so the demo path
+   was a 401 with extra steps. It now sends the user to `/login`.
+3. **An infinite retry loop I introduced and the tests caught** — the auto-submit effect fires
+   whenever six digits are present and the form is idle, and a failed verification necessarily
+   returns to idle with all six digits still on screen. Guarded with a `attemptedCode` ref,
+   cleared when any digit is edited.
+
+**Four calls removed — the routes do not exist:**
+
+| Call | Where | Note |
+|---|---|---|
+| `GET /users/{id}` | `users.service.ts` | No per-user read. Callers wanted `GET /auth/me` |
+| `PATCH /vehicles/{id}` | `vehicles.service.ts` | Deferred backend work; no call sites |
+| `DELETE /vehicles/{id}` | `vehicles.service.ts` | Same |
+| `GET /jobs/me` | `mobile/src/services/api/jobs.ts` | No job-history route — still wanted, §3.1 of BACKEND_COMMUNICATION |
+
+Plus two mobile contract fixes: `cancelJob` sent `{ reason }` where the schema declares
+`cancellation_reason` **with `extra="forbid"`**, making every cancel a 422; and the axios auth
+interceptor was commented out behind a TODO while the store held a hardcoded `"mock_jwt_owner"`.
+
+**Why none of it was caught, and what now catches it.** `tests/services/contract.test.ts` is
+named for checking the backend contract and asserts against a mocked `fetch` — a mocked transport
+answers any URL, so it was green while asserting a `PATCH /vehicles/{id}` that has never existed.
+`tests/services/route-inventory.test.ts` now reads every `apiClient` path out of `src/` and diffs
+it against `tests/fixtures/backend-routes.json`, generated from the backend's own OpenAPI schema.
+**Re-export the fixture whenever a route changes:**
+
+```bash
+cd backend && python tools/export_routes.py
+```
+
+**Tests:** 103 passing (was 89). Twelve existing tests were rewritten rather than patched,
+because each asserted the broken behaviour — the owner-signup contract test expected a `token`
+field in the registration response that has never existed, and the LoginPage tests asserted a
+timer. Typecheck and production build clean. `@types/node` added as a devDependency (the new test
+reads files).
+
+**Two things still needed from you:**
+
+1. Drive the OTP with the Supabase **test numbers** (BACKEND_COMMUNICATION §4.2). The phone
+   provider is live on the project with `sms_provider: textlocal` and `phone_autoconfirm: false`,
+   so an arbitrary number sends a real SMS.
+2. Mobile has no sign-in — `LoginScreen` calls `setUser()` with no session, so authenticated
+   calls there 401 by design. `src/services/supabase.ts` is the reference.
+
+---
 
 ### [x] Repoint partner.service.ts at real backend endpoints — 2026-10-06
 
@@ -71,6 +213,25 @@ separate `payments` table entry per payout?). This is explicitly a deferred feat
 (TASKS.md backlog: "Payments — test-mode stub only, low priority").
 
 **Do not add a fake real-path to this function.** The mock is the honest state here.
+
+---
+
+### ⚠️ No admin console — three analytics endpoints have no consumer
+
+**Evidence:** `web/AGENTS.md` §1.3 promises `/admin/*` routes ("verification queue, live jobs
+board, manual dispatch override"). `src/pages/` has `auth`, `landing`, `owner`, `partner` and no
+`admin`. The backend shipped `GET /api/v1/admin/analytics/{overview,dispatch,matching}` on
+2026-10-03 (ADR-020, ADR-021) and nothing reads them.
+
+**Current state:** `homeRouteForRole()` sends an `admin` token to `/owner` rather than a 404, so an
+ops account can at least sign in. `AuthProvider` still carries `ops` and `super_admin` in its
+`UserRole` union from the demo role switcher.
+
+**What it would take:** three read-only screens over existing endpoints, no new backend work. The
+`notes[]` vocabulary in each response is meant to be rendered verbatim — HANDOFF §14.6.
+
+**Not scheduled.** Flagged so it is a decision rather than an oversight: the demo loop is
+owner + partner, and an admin console is not on the critical path to it.
 
 ---
 

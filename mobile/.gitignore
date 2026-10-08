@@ -31,6 +31,9 @@ yarn-error.*
 *.pem
 
 # local env files
+# .env itself is ignored too: it holds the Supabase publishable key today, and a
+# file that is committed is a file someone will eventually put a secret in.
+.env
 .env*.local
 
 # typescript

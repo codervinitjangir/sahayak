@@ -7,6 +7,14 @@ import {
   Globe,
 } from 'lucide-react';
 import { useAuth } from '../../app/AuthProvider';
+import { setAuthToken } from '../../services/authToken';
+import { homeRouteForRole, identityService } from '../../services/identity.service';
+import {
+  IS_SUPABASE_CONFIGURED,
+  sendPhoneOtp,
+  toE164,
+  verifyPhoneOtp,
+} from '../../services/supabase';
 import './auth.css';
 
 const OTP_LENGTH = 6;
@@ -59,7 +67,7 @@ const IndiaFlag: React.FC = () => (
 
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
-  const { setRole } = useAuth();
+  const { setRole, setToken } = useAuth();
 
   const [loginRole, setLoginRole] = useState<LoginRole>('owner');
   const [step, setStep] = useState<Step>('identify');
@@ -74,6 +82,16 @@ export const LoginPage: React.FC = () => {
 
   const otpRefs = useRef<Array<HTMLInputElement | null>>([]);
   const timeouts = useRef<Array<ReturnType<typeof setTimeout>>>([]);
+  /**
+   * The last code the auto-submit effect already tried.
+   *
+   * The effect fires whenever six digits are present and the form is idle, and a
+   * failed verification necessarily returns to idle with all six digits still on
+   * screen — so without this it re-submits the same wrong code in a loop, against
+   * a rate-limited auth server. Cleared when the user edits a digit, so correcting
+   * one and re-filling it submits again as expected.
+   */
+  const attemptedCode = useRef<string | null>(null);
 
   const phoneComplete = phone.length === dial.digits;
   const otpValue = otp.join('');
@@ -98,14 +116,6 @@ export const LoginPage: React.FC = () => {
     return () => clearTimeout(id);
   }, [step, resendIn]);
 
-  const goToRole = useCallback(
-    (target: LoginRole) => {
-      setRole(target);
-      navigate(target === 'owner' ? '/owner' : '/partner/preferences', { replace: true });
-    },
-    [navigate, setRole]
-  );
-
   const handleRoleChange = (next: LoginRole) => {
     setLoginRole(next);
     setStep('identify');
@@ -118,32 +128,57 @@ export const LoginPage: React.FC = () => {
   };
 
   /**
-   * Step 1 → 2. The button reports its own progress by label, so the card
-   * never swaps out under the user and nothing on the page has to spin.
+   * Step 1 → 2. Asks Supabase to send the code, and only advances if it did.
+   *
+   * Before 2026-10-06 this advanced on a timer without calling anything, so the
+   * screen reached the OTP boxes whether or not a code had been sent — and the
+   * verify step below accepted any six digits. Nothing in the flow produced a
+   * token, which is why every authenticated endpoint answered 401.
    */
-  const handleSendCode = (event?: React.FormEvent) => {
+  const handleSendCode = async (event?: React.FormEvent) => {
     if (event) event.preventDefault();
     if (!phoneComplete) {
       setError(`Enter your ${dial.digits}-digit mobile number to continue.`);
+      return;
+    }
+    if (!IS_SUPABASE_CONFIGURED) {
+      setError(
+        'Sign-in is not configured in this build. Copy web/.env.example to web/.env and set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY.'
+      );
       return;
     }
 
     setError(null);
     setStatus('sending');
 
+    const outcome = await sendPhoneOtp(toE164(dial.code, phone));
+    if (!outcome.ok) {
+      setStatus('idle');
+      setError(outcome.message ?? 'Could not send the code. Try again.');
+      return;
+    }
+
+    setStatus('sent');
     defer(() => {
-      setStatus('sent');
-      defer(() => {
-        setStep('verify');
-        setStatus('idle');
-        setResendIn(RESEND_SECONDS);
-        defer(() => otpRefs.current[0]?.focus(), 60);
-      }, 420);
-    }, 620);
+      setStep('verify');
+      setStatus('idle');
+      setResendIn(RESEND_SECONDS);
+      defer(() => otpRefs.current[0]?.focus(), 60);
+    }, 420);
   };
 
+  /**
+   * Step 2. Verifies the code with Supabase, stores the access token, then asks
+   * the backend who this account is and routes on the answer.
+   *
+   * The role the user picked on the previous screen is *not* what decides where
+   * they land. That toggle only seeds a phone number; a token resolves to a row
+   * in our own tables, and `GET /api/v1/auth/me` is the only thing that knows
+   * which. A mechanic who taps "Vehicle owner" by mistake still reaches the
+   * partner console.
+   */
   const handleVerify = useCallback(
-    (code: string) => {
+    async (code: string) => {
       if (code.length < OTP_LENGTH) {
         setOtpError(true);
         setError('Enter all six digits of the code we sent you.');
@@ -151,16 +186,62 @@ export const LoginPage: React.FC = () => {
       }
       setError(null);
       setStatus('sending');
-      defer(() => goToRole(loginRole), 500);
+
+      const verified = await verifyPhoneOtp(toE164(dial.code, phone), code);
+      if (!verified.ok || !verified.accessToken) {
+        setStatus('idle');
+        setOtpError(true);
+        setError(verified.message ?? 'That code did not work. Try again.');
+        return;
+      }
+
+      // Stored before the next call, because that call needs it as its bearer.
+      setAuthToken(verified.accessToken);
+      setToken(verified.accessToken);
+
+      const resolution = await identityService.resolve();
+      setStatus('idle');
+
+      switch (resolution.kind) {
+        case 'registered':
+          setRole(resolution.identity.role === 'partner' ? 'partner' : 'owner');
+          navigate(homeRouteForRole(resolution.identity.role), { replace: true });
+          return;
+
+        case 'needs-signup':
+          // The token is good; there is simply no profile behind it yet. The
+          // signup form posts to POST /api/v1/users, which requires exactly this
+          // token — so this screen must not be reachable before sign-in.
+          navigate(loginRole === 'partner' ? '/partner/signup' : '/owner/signup', {
+            replace: true,
+          });
+          return;
+
+        case 'needs-linking':
+          // A profile registered with this number exists and is unclaimed. The
+          // link-auth endpoints need its id, which this account has no way to
+          // learn — so the honest answer is to say so rather than loop them
+          // through a signup form that will reject their number as taken.
+          setError(
+            'A Sahayak profile is already registered with this number but is not yet linked to this login. Ask the Sahayak team to finish linking your account.'
+          );
+          return;
+
+        case 'error':
+        default:
+          setError(resolution.message || 'Signed in, but could not load your profile.');
+          return;
+      }
     },
-    [defer, goToRole, loginRole]
+    [dial.code, loginRole, navigate, phone, setRole, setToken]
   );
 
   // Auto-submit the moment the sixth digit lands — no extra tap on a roadside.
   useEffect(() => {
-    if (step === 'verify' && otpValue.length === OTP_LENGTH && status === 'idle') {
-      handleVerify(otpValue);
-    }
+    if (step !== 'verify' || otpValue.length !== OTP_LENGTH || status !== 'idle') return;
+    if (attemptedCode.current === otpValue) return;
+    attemptedCode.current = otpValue;
+    void handleVerify(otpValue);
   }, [step, otpValue, status, handleVerify]);
 
   const writeOtp = (startIndex: number, digits: string) => {
@@ -176,6 +257,9 @@ export const LoginPage: React.FC = () => {
   const handleOtpInput = (index: number, raw: string) => {
     setError(null);
     setOtpError(false);
+    // Editing any digit makes this a different code, so the auto-submit guard is
+    // released and a corrected code is tried again.
+    attemptedCode.current = null;
     const digits = raw.replace(/\D/g, '');
 
     if (!digits) {

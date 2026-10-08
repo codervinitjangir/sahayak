@@ -43,22 +43,17 @@ from app.utils.errors import (
     InternalError,
 )
 from app.utils.logging import log_event
+from app.utils.phone import digits_only
 
 
 def _digits(value: Optional[str]) -> str:
     """Reduce a phone number to its digits, for comparison only.
 
-    Supabase reports the phone claim without a leading '+' ("919000000801")
-    while the schema stores E.164 ("+919000000801"), so the two never compare
-    equal as strings even when they are the same number. Stripping to digits is
-    the smallest normalisation that makes them comparable without inventing a
-    phone-number library's worth of parsing.
-
-    Deliberately *not* used to rewrite what gets stored. The row keeps exactly
-    what the client sent, so the database holds one canonical format that the
-    client chose rather than a stripped variant this function invented.
+    Thin alias over app/utils/phone.digits_only, which is where this moved when
+    both link-auth endpoints started needing the same comparison. Kept as a name
+    in this module because the call sites below read better for it.
     """
-    return "".join(character for character in (value or "") if character.isdigit())
+    return digits_only(value)
 
 
 async def register_user(

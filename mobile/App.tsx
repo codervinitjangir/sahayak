@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { View, Text, StyleSheet, Platform } from "react-native";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -16,6 +16,7 @@ import * as SplashScreen from "expo-splash-screen";
 import RootNavigator from "./src/navigation/RootNavigator";
 import AppLaunchSequence from "./src/components/splash/AppLaunchSequence";
 import { Colors } from "./src/constants/theme";
+import { useAuthStore } from "./src/store/authStore";
 
 // Keep native splash screen visible until our identical JS layer takes over
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -79,6 +80,13 @@ export default function App() {
   });
 
   const [splashFinished, setSplashFinished] = useState(false);
+
+  // Restore the persisted Supabase session, and follow it from here on. Mounted at
+  // the root and exactly once: the subscription has to outlive any single screen,
+  // because token refreshes arrive while the user is deep in a job, and a
+  // per-screen listener would unsubscribe the moment they navigated away.
+  const initSession = useAuthStore((s) => s.initSession);
+  useEffect(() => initSession(), [initSession]);
 
   return (
     <GestureHandlerRootView style={styles.flex}>

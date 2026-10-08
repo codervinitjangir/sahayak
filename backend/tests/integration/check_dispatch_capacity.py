@@ -86,6 +86,7 @@ import asyncio
 import sys
 import time
 import uuid
+from typing import Optional
 from pathlib import Path
 
 # Windows consoles default to cp1252, which cannot encode the arrows below, and
@@ -118,6 +119,11 @@ PUB = S.SUPABASE_PUBLISHABLE_KEY
 REVERTED = "--reverted" in sys.argv
 
 USER_ID = "75e138ea-e39a-48da-8717-f4287099ddcc"      # Test Driver QA
+# The shared "Test Driver QA" users row every harness links its owner identity to.
+# link-auth binds on the token's phone claim as of 2026-10-07, so the owner account
+# has to be created carrying this number.
+TEST_DRIVER_PHONE = "+919000000001"
+
 VEHICLE_ID = "4c1c0c88-1d14-44d2-b21d-eba9d38c7453"   # their Maruti Swift
 
 SERVICE_CODE = "battery_jumpstart"   # requires_vehicle_equipment = False
@@ -375,13 +381,45 @@ def purge_supabase_accounts() -> None:
             _supa_call("DELETE", f"/auth/v1/admin/users/{u['id']}", headers=_admin_headers)
 
 
-def supabase_identity(label: str) -> tuple[str, str]:
-    """Create a real Supabase account and sign in. Returns (auth_user_id, token)."""
+def _reclaim_phone(phone: str) -> None:
+    """Delete any existing Supabase account holding `phone`.
+
+    Only QA numbers ever reach here (every caller passes a +9190000xxxxx test
+    number), so this cannot touch a real account.
+    """
+    digits = phone.lstrip("+")
+    r = _supa_call("GET", "/auth/v1/admin/users", headers=_admin_headers,
+                    params={"per_page": 200})
+    if r.status_code != 200:
+        return
+    for u in r.json().get("users", []):
+        if (u.get("phone") or "").lstrip("+") == digits:
+            _supa_call("DELETE", f"/auth/v1/admin/users/{u['id']}", headers=_admin_headers)
+
+
+def supabase_identity(label: str, phone: Optional[str] = None) -> tuple[str, str]:
+    """Create a real Supabase account and sign in. Returns (auth_user_id, token).
+
+    `phone`, when given, is set on the account and confirmed, so the access token
+    carries a phone claim alongside the email one. Both link-auth endpoints bind
+    on that claim as of 2026-10-07 — a token that has not proved the profile's
+    number gets a 404 — so every identity that links something must pass the
+    number of the row it is about to link. Measured: one account can hold an
+    email and a phone, and an email+password sign-in still carries the phone
+    claim, which is why the sign-in below and the cleanup above are unchanged.
+    """
+    if phone:
+        # Supabase enforces phone uniqueness project-wide, and every harness's
+        # owner identity carries the same shared test-driver number. A previous
+        # run that crashed before cleanup leaves that number taken, which would
+        # fail this harness for something the previous one did — so reclaim it.
+        _reclaim_phone(phone)
     email = f"dcapqa-{label}@{QA_DOMAIN}"
     password = "Qa!" + uuid.uuid4().hex[:20]
     r = _supa_call(
         "POST", "/auth/v1/admin/users", headers=_admin_headers,
-        json={"email": email, "password": password, "email_confirm": True},
+        json={"email": email, "password": password, "email_confirm": True,
+              **({"phone": phone, "phone_confirm": True} if phone else {})},
     )
     if r.status_code not in (200, 201):
         raise SystemExit(f"could not create {email}: {r.status_code} {r.text[:300]}")
@@ -612,14 +650,14 @@ async def main() -> None:                          # noqa: C901 - one linear scr
         # ------------------------------------------------------------------
         section("1. One owner, eight verified partners")
         # ------------------------------------------------------------------
-        _, owner_token = supabase_identity("owner")
+        _, owner_token = supabase_identity("owner", TEST_DRIVER_PHONE)
         r = await c.post(f"/api/v1/users/{USER_ID}/link-auth", headers=hdr(owner_token))
         check("owner linked to the test driver", r.status_code == 200,
               f"HTTP {r.status_code} {code_of(r)}")
 
         offsets = {**NAMED_OFFSETS_KM, **FLEET_OFFSETS_KM}
         for label in LABELS:
-            _, token = supabase_identity(label)
+            _, token = supabase_identity(label, PARTNER_PHONES[label])
             r = await c.post("/api/v1/partners", json={
                 "name": f"Dispatch Capacity QA {label}",
                 "phone": PARTNER_PHONES[label],

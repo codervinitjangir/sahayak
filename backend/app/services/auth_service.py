@@ -41,6 +41,7 @@ from app.utils.errors import (
     UnauthorizedError,
 )
 from app.utils.logging import log_event
+from app.utils.phone import same_number
 
 Role = Literal["user", "partner", "admin"]
 
@@ -406,9 +407,17 @@ async def link_partner_auth(
 ) -> Partner:
     """Bind a verified Supabase account to a partner profile.
 
-    Owns the transaction. Allowed only while partners.auth_user_id is null,
-    which is the whole security property: an unlinked profile is unclaimed, and
-    once claimed it cannot be taken over by presenting a different token.
+    Owns the transaction. Two things have to hold: the profile must be unclaimed
+    (`auth_user_id IS NULL`), and **the token must have proved the profile's own
+    phone number**.
+
+    The second condition is what makes the first one mean anything. Until
+    2026-10-07 only the first was checked, so an unclaimed profile was protected
+    by nothing but the secrecy of its UUID — any verified account that learned an
+    id could claim the profile behind it. For an owner row seeded from
+    db/seed.sql that is untidy; for a partner row it is a privilege grant, since
+    a linked partner receives dispatch offers and sees the owner's name, phone
+    and coordinates once assigned (ADR-017). See ADR-011.
 
     Re-linking the *same* account is treated as success rather than a conflict.
     A client that retries after a dropped response should not get an error for a
@@ -418,9 +427,40 @@ async def link_partner_auth(
     if partner is None:
         raise NotFoundError(ErrorCode.PARTNER_NOT_FOUND, "Partner not found")
 
+    # Checked before the claim comparison so a client retrying its own
+    # successful call still gets a 200, even in the unlikely case that the row's
+    # number was edited after the link.
+    if partner.auth_user_id is not None and partner.auth_user_id == claims.auth_user_id:
+        return partner
+
+    if not same_number(claims.phone, partner.phone):
+        # 404, not 403 and not PHONE_MISMATCH, and the same body a missing row
+        # produces. Principle 6: a distinct code here would answer "that id
+        # exists, wrong number" and turn UUID guessing into an enumeration
+        # oracle for exactly the rows this check exists to protect. The real
+        # reason goes to the log, where an operator can read it and an attacker
+        # cannot.
+        #
+        # Nothing legitimate lands here. A mechanic whose number does not match
+        # any profile never learns an id to send: they get USER_NOT_REGISTERED
+        # from resolve_identity instead. A client that just created a profile is
+        # sending the number it registered. So this is a bug or an attempt.
+        log_event(
+            "auth_link_rejected",
+            level=logging.WARNING,
+            partner_id=str(partner_id),
+            auth_user_id=str(claims.auth_user_id),
+            reason="phone_claim_does_not_match_profile",
+            claim_present=bool(claims.phone),
+            outcome="failure",
+        )
+        raise NotFoundError(ErrorCode.PARTNER_NOT_FOUND, "Partner not found")
+
     if partner.auth_user_id is not None:
-        if partner.auth_user_id == claims.auth_user_id:
-            return partner
+        # Same number, different account — a real case, not an attack: a mechanic
+        # who lost their phone and re-verified the same number on a new Supabase
+        # account. 409 rather than 404 because the remedy is a person unlinking
+        # the old account, and a 404 would hide a situation that needs one.
         log_event(
             "auth_link_rejected",
             level=logging.WARNING,
@@ -494,7 +534,8 @@ async def link_user_auth(
 ) -> User:
     """Bind a verified Supabase account to a vehicle-owner profile.
 
-    Mirror of link_partner_auth. Note what this is *not*: it does not create the
+    Mirror of link_partner_auth, including the phone-claim binding — see that
+    function for the argument. Note what this is *not*: it does not create the
     users row, so it is not registration. See the module note in
     app/api/users.py for the gap that leaves.
     """
@@ -502,9 +543,22 @@ async def link_user_auth(
     if user is None:
         raise NotFoundError(ErrorCode.USER_NOT_FOUND, "User not found")
 
+    if user.auth_user_id is not None and user.auth_user_id == claims.auth_user_id:
+        return user
+
+    if not same_number(claims.phone, user.phone):
+        log_event(
+            "auth_link_rejected",
+            level=logging.WARNING,
+            user_id=str(user_id),
+            auth_user_id=str(claims.auth_user_id),
+            reason="phone_claim_does_not_match_profile",
+            claim_present=bool(claims.phone),
+            outcome="failure",
+        )
+        raise NotFoundError(ErrorCode.USER_NOT_FOUND, "User not found")
+
     if user.auth_user_id is not None:
-        if user.auth_user_id == claims.auth_user_id:
-            return user
         log_event(
             "auth_link_rejected",
             level=logging.WARNING,

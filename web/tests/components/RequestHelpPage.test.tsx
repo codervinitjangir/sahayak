@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RequestHelpPage } from '../../src/pages/owner/RequestHelpPage';
 import { jobsService } from '../../src/services/jobs.service';
 import { vehiclesService } from '../../src/services/vehicles.service';
+import { getAuthToken, setAuthToken } from '../../src/services/authToken';
 
 vi.mock('../../src/services/jobs.service', () => ({
   jobsService: {
@@ -67,6 +68,13 @@ function renderWithProviders(ui: React.ReactElement) {
 describe('RequestHelpPage Component', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
+    // Being signed in is a precondition for dispatching, not scaffolding. The page
+    // used to inject the literal string 'demo-token-owner-asha' under
+    // IS_DEMO_MODE when no token was present, which the backend rejects on sight —
+    // so the demo path was a 401, and these tests passed only because the mocked
+    // service never saw the header. A real token has to come from the OTP flow.
+    setAuthToken('supabase-access-token');
     vi.mocked(jobsService.listServices).mockResolvedValue(mockServices);
     vi.mocked(vehiclesService.listVehicles).mockResolvedValue(mockVehicles);
   });
@@ -90,6 +98,22 @@ describe('RequestHelpPage Component', () => {
       expect(screen.getByText(/Please select the roadside assistance service needed/i)).toBeInTheDocument();
     });
     expect(jobsService.createJob).not.toHaveBeenCalled();
+  });
+
+  it('never dispatches without a real token, and never invents one', async () => {
+    // The fix for a demo shortcut: with no token the page used to store the string
+    // 'demo-token-owner-asha' and submit anyway, producing a 401 from the backend
+    // and a dead screen. Signing in first is the only way through.
+    setAuthToken(null);
+    renderWithProviders(<RequestHelpPage />);
+
+    await waitFor(() => expect(screen.getByText('Flat-Tyre Support')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Flat-Tyre Support'));
+    fireEvent.click(screen.getByRole('button', { name: /Dispatch Verified Partner/i }));
+
+    await waitFor(() => expect(window.location.pathname).toBe('/login'));
+    expect(jobsService.createJob).not.toHaveBeenCalled();
+    expect(getAuthToken()).toBeNull();
   });
 
   it('submits successfully with Idempotency-Key when valid inputs are selected', async () => {

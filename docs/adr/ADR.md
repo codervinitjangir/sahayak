@@ -303,6 +303,49 @@ Owner signup is a single authenticated call, and no code path now produces a `us
 
 Clients must handle three codes on an authenticated route instead of one. `USER_NOT_REGISTERED` was added rather than repurposing an existing code precisely so that older clients fail loudly on something they do not recognise, instead of quietly routing a mechanic into owner signup.
 
+### Amendment, 2026-10-07: the two codes needed something to be *asked*, so `GET /api/v1/auth/me` exists
+
+A client could act on this fork only after provoking it. The codes arrive on whatever authenticated route the app happened to call first, so every sign-in made its routing decision out of the wreckage of a request that was meant to do something else — and a freshly signed-in app has no safe request to try, since it does not yet know whether it is holding an owner's token or a mechanic's.
+
+`GET /api/v1/auth/me` returns `{role, id}` and nothing else: the role (`user` | `partner` | `admin`) and our own local id. It depends on `get_current_identity`, so it raises exactly the two 403s above, unchanged — the endpoint adds no behaviour and no security surface, it only makes the question askable.
+
+Three things about its shape follow from the table above rather than from preference:
+
+- **Not scoped to a role.** A `require_user` here would 403 every mechanic and admin on the one route whose purpose is to tell them what they are. The unit test pins the dependency by name for that reason.
+- **No name, phone or email.** Every signed-in account on the platform can call this, so a field added here is published to all of them. Contact details stay behind ADR-017's read-time gate, and `auth_user_id` is omitted because the caller already holds it.
+- **It cannot report "not registered".** That is a 403, raised before the handler runs. A nullable field here would collapse `USER_NOT_REGISTERED` and `IDENTITY_NOT_LINKED` into one answer and throw away the only information the call exists to deliver.
+
+The `IDENTITY_NOT_LINKED` branch was also asserted live for the first time in this change. Every integration harness signs in with email and password, and an email token carries no phone claim — so `_find_unlinked_profile`, which searches *by phone*, could never match, and the branch was unreachable from any harness despite being reasoned about here since 2026-09-19. `check_auth_flow.py` now mints a phone-based Supabase account (`phone_identity`, admin-create plus password grant — a real token with a real phone claim and no SMS sent) and walks the whole ops-onboarding path: register by phone, discover `IDENTITY_NOT_LINKED`, link, resolve. The measured claim is `919000000809` for `+919000000809`, confirming the un-prefixed spelling this ADR describes.
+
+**Still open, and flagged rather than fixed here:** neither `link-auth` endpoint compares the token's phone claim against the target row's phone. An unlinked profile is therefore protected only by the secrecy of its UUID — anyone holding any verified token can claim any unclaimed profile whose id they learn. For an owner row seeded from `db/seed.sql` that is untidy; for a partner row it is a privilege grant, since a linked partner receives offers and sees owner contact details once assigned. ADR-020 noticed the same gap from the admin side and declined to act on it there. Closing it means requiring `claims.phone` to match, which in turn means converting every harness identity from email to phone — so it is its own task, not a rider on this one.
+
+### Amendment, 2026-10-07 (later the same day): the gap above is closed — `link-auth` binds on the verified phone claim
+
+Both endpoints now refuse unless the token has proved the number on the row. The check order matters and is deliberate:
+
+1. **Already linked to *this* account → 200, no write.** First, so a client retrying after a dropped response still gets its success even if the row's number was edited since.
+2. **Claim does not match the row → `404`, with the same body a missing row produces.** Not 403, and not `PHONE_MISMATCH`.
+3. **Claim matches but the row belongs to another account → `409 AUTH_ALREADY_LINKED`.**
+4. Otherwise link.
+
+**Why a mismatch answers 404 rather than naming the reason.** A distinct code would answer "that id exists, wrong number", which turns UUID guessing into an existence oracle for exactly the rows this check protects. Principle 6 in `CLAUDE.md` covers it: 404, not 403, when the alternative leaks existence. The real reason goes to the log — `auth_link_rejected` with `reason="phone_claim_does_not_match_profile"` and `claim_present` — where an operator can read it and an attacker cannot.
+
+Nothing legitimate lands on that branch. A mechanic whose number matches no profile never learns an id to send: they get `USER_NOT_REGISTERED` from `resolve_identity` instead. A client that has just created a profile is sending back the number it registered. So a mismatch is a bug or an attempt, and neither deserves a helpful error.
+
+**Why the 409 survives, and why it sits *after* the phone check.** Same number, different account is a real situation rather than an attack — a mechanic who lost their phone and re-verified the same number on a new Supabase account. The remedy needs a person to unlink the old account, so hiding it behind a 404 would conceal something that needs attention. Putting it after the claim check is what keeps the oracle shut: a stranger probing ids cannot tell a claimed profile from one that does not exist, because both answer 404 for them, while the rightful holder of the number still gets the actionable 409.
+
+**A token with no phone claim can now link nothing.** This Supabase project can issue email and OAuth sessions, and such a token has proved no number. `same_number` treats a missing claim as equal to nothing — including to a missing column, which would otherwise hand every email session a link to any row with a null phone.
+
+**The comparison lives in one place.** `app/utils/phone.py` (`digits_only`, `same_number`), moved out of `user_service` where owner registration's `phone_verified` check had it privately. Three call sites now ask the same question, and three private copies would stay consistent right up until one of them was changed. Comparison is exact equality on digits: Supabase omits the leading `+` that the schema stores, and suffix matching was rejected because `+1 9000000801` is a suffix of `+91 9000000801`.
+
+**What it cost in the harnesses, which is the interesting part.** Every one of the thirteen integration harnesses mints identities with admin-create(email) + password grant, and an email-only token carries no phone claim — so the new check failed all twelve that link anything. The cheap fix came from a two-minute probe before any of them was touched: **one Supabase account can hold both an email and a confirmed phone, and an email+password sign-in still carries the phone claim.** So each harness's `supabase_identity(label, phone=None)` gained two fields on its admin-create call, every sign-in path stayed as it was, and the email-domain-based Supabase cleanup needed no change at all. Without that probe the alternative was phone-only accounts in thirteen files plus rewritten cleanup in each.
+
+One consequence worth recording, because it bit during the regression: **Supabase enforces phone uniqueness project-wide**, and every harness's owner identity now carries the same shared `Test Driver QA` number. Sequential clean runs are fine, since each harness purges its own accounts — but a run that crashes before cleanup leaves the number taken and fails the *next* harness with `phone_exists`, for something it did not do. Each helper now reclaims the number first (`_reclaim_phone`), so a crash costs nothing downstream.
+
+**Evidence:** 14 unit tests in `test_link_auth_phone_binding.py` — five of which fail with `DID NOT RAISE` when the guard is reverted, and they are exactly the five refusal cases — plus `check_auth_flow.py` scenario 2b (7 assertions, **77/77** total), which aims a genuine token for one number at another number's unclaimed profile, confirms the row is still unclaimed afterwards, then links it with the account that actually proved the number. Full regression: **399 unit/api**, **763 live across fourteen harnesses**, database back to baseline.
+
+One assertion changed meaning rather than being added: "hijacking a linked partner is refused" expected 409 and now expects 404, because partner B's token proves partner B's number and so cannot distinguish partner A's profile from a nonexistent one. The 409 it used to cover is asserted separately, in the case where the number does match.
+
 ---
 
 # ADR-012: The Job Lifecycle Endpoint — a Cancelled Assignment Gets Its Own Status, and What Actually Frees a Partner

@@ -4,6 +4,9 @@ import { Platform, NativeModules } from "react-native";
 // modules call ("/jobs", "/jobs/:id") is relative to it. Without it every
 // request 404s.
 function getDevApiUrl(): string {
+  if (process.env.EXPO_PUBLIC_API_BASE_URL) {
+    return process.env.EXPO_PUBLIC_API_BASE_URL;
+  }
   if (process.env.EXPO_PUBLIC_API_URL) {
     return process.env.EXPO_PUBLIC_API_URL;
   }
@@ -26,7 +29,7 @@ function getDevApiUrl(): string {
 
 export const API_BASE_URL = __DEV__
   ? getDevApiUrl()
-  : (process.env.EXPO_PUBLIC_API_URL || "https://api.sahayak.app/api/v1");
+  : (process.env.EXPO_PUBLIC_API_BASE_URL || process.env.EXPO_PUBLIC_API_URL || "https://api.sahayak.app/api/v1");
 
 export const APP_NAME = "Sahayak";
 export const APP_VERSION = "0.1.0";

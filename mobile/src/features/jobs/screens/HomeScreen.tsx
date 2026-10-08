@@ -161,7 +161,7 @@ const RECENT_PLACES: RecentPlace[] = [
 
 export default function HomeScreen() {
   const nav = useNavigation<NativeStackNavigationProp<OwnerStackParamList>>();
-  const { user, setUser, logout } = useAuthStore();
+  const { user, setDemoUser, logout } = useAuthStore();
   const { setDraftPickupLocation, setDraftService } = useJobStore();
 
   const [activeTab, setActiveTab] = useState<BottomTab>("home");
@@ -811,7 +811,11 @@ export default function HomeScreen() {
               style={styles.switchRoleCard}
               onPress={() => {
                 setShowProfileModal(false);
-                setUser(MOCK_USER_PARTNER, "mock_jwt_partner");
+                // A role switch for demoing the partner screens, not a sign-in:
+                // setDemoUser carries no token, because the request interceptor
+                // sends whatever is in `token` and "mock_jwt_partner" would go out
+                // as a real bearer against a backend that verifies them.
+                setDemoUser(MOCK_USER_PARTNER);
               }}
               activeOpacity={0.8}
             >

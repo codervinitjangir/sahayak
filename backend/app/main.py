@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.admin import router as admin_router
+from app.api.auth import router as auth_router
 from app.api.health import router as health_router
 from app.api.job_assignments import router as job_assignments_router
 from app.api.jobs import router as jobs_router
@@ -58,6 +59,12 @@ register_error_handlers(app)
 
 # Include the health router (unversioned /health, for container probes)
 app.include_router(health_router)
+
+# Include the auth router (GET /api/v1/auth/me). First of the versioned routers
+# because it is the first call a client makes after sign-in: every other route
+# here needs an identity, and this is the one that reports what the token
+# resolves to instead of leaving the client to infer it from a failure.
+app.include_router(auth_router)
 
 # Include the jobs router (POST /api/v1/jobs, GET /api/v1/jobs/{job_id})
 app.include_router(jobs_router)

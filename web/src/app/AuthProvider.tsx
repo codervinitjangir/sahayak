@@ -1,6 +1,11 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { getAuthToken, setAuthToken } from '../services/authToken';
 import { UNAUTHORIZED_EVENT } from '../services/api';
+import {
+  IS_SUPABASE_CONFIGURED,
+  getSupabase,
+  signOut as supabaseSignOut,
+} from '../services/supabase';
 import { IS_DEMO_MODE } from './config';
 
 export type UserRole = 'owner' | 'partner' | 'ops' | 'super_admin';
@@ -18,6 +23,10 @@ interface AuthContextType {
   role: UserRole;
   setRole: (role: UserRole) => void;
   token: string | null;
+  /** Store a freshly issued access token. Called by the login screen. */
+  setToken: (token: string | null) => void;
+  /** True until the stored Supabase session has been restored on first load. */
+  isRestoringSession: boolean;
   logout: () => void;
 }
 
@@ -76,6 +85,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // hardcoded fake JWT that was persisted and then sent as a real bearer header.
   const [token, setToken] = useState<string | null>(() => getAuthToken());
 
+  // The Supabase session is read asynchronously, so on first paint we do not yet
+  // know whether there is one. Route guards need to tell "signed out" apart from
+  // "not checked yet" — without this they redirect to /login on every reload.
+  const [isRestoringSession, setIsRestoringSession] = useState<boolean>(
+    () => IS_SUPABASE_CONFIGURED
+  );
+
   const [user, setUser] = useState<UserProfile | null>(() =>
     IS_DEMO_MODE ? DEMO_IDENTITIES[readStoredRole()] : null
   );
@@ -96,6 +112,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(null);
     setToken(null);
     setAuthToken(null);
+    // Ends the Supabase session too, otherwise the listener below immediately
+    // restores the token we just cleared.
+    void supabaseSignOut();
   }, []);
 
   // The API client clears the stale token and signals here on a 401, so session
@@ -106,12 +125,58 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => window.removeEventListener(UNAUTHORIZED_EVENT, handleUnauthorized);
   }, [logout]);
 
+  /**
+   * Keep the bearer token in step with the Supabase session.
+   *
+   * Two jobs, and both matter on a roadside. On first load `getSession()` restores
+   * the session Supabase persisted, so a reload — or a phone that locked itself
+   * while the mechanic was under a car — does not send them back to the OTP
+   * screen. After that, `onAuthStateChange` fires on every token refresh, and
+   * Supabase access tokens are short-lived: without this the app would hold a
+   * valid session whose token had expired and start taking 401s mid-job.
+   */
+  useEffect(() => {
+    if (!IS_SUPABASE_CONFIGURED) {
+      setIsRestoringSession(false);
+      return undefined;
+    }
+
+    let cancelled = false;
+    const supabase = getSupabase();
+
+    void supabase.auth
+      .getSession()
+      .then(({ data }) => {
+        if (cancelled) return;
+        const restored = data.session?.access_token ?? null;
+        // Only overwrite when Supabase has something. A null here on a build
+        // where sign-in has not happened yet must not clear a token another
+        // path stored.
+        if (restored) setToken(restored);
+      })
+      .finally(() => {
+        if (!cancelled) setIsRestoringSession(false);
+      });
+
+    const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (cancelled) return;
+      setToken(session?.access_token ?? null);
+    });
+
+    return () => {
+      cancelled = true;
+      subscription.subscription.unsubscribe();
+    };
+  }, []);
+
   useEffect(() => {
     setAuthToken(token);
   }, [token]);
 
   return (
-    <AuthContext.Provider value={{ user, role, setRole, token, logout }}>
+    <AuthContext.Provider
+      value={{ user, role, setRole, token, setToken, isRestoringSession, logout }}
+    >
       {children}
     </AuthContext.Provider>
   );

@@ -43,8 +43,14 @@ export const notificationsService = {
     if (options.unreadOnly !== undefined) params.set('unread_only', String(options.unreadOnly));
 
     const qs = params.toString();
-    const endpoint = `/notifications${qs ? `?${qs}` : ''}`;
-    const res = await apiClient<NotificationListResponse>(endpoint, { method: 'GET' });
+    // The query string is assembled into its own variable so the path itself
+    // stays a literal at the call site. route-inventory.test.ts reads these paths
+    // out of the source to check them against the backend's route list, and a
+    // path hidden behind an identifier is a path nothing checks.
+    const query = qs ? `?${qs}` : '';
+    const res = await apiClient<NotificationListResponse>(`/notifications${query}`, {
+      method: 'GET',
+    });
     return res.data;
   },
 

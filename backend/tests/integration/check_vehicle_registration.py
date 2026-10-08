@@ -37,6 +37,7 @@ their baseline.
 import asyncio
 import sys
 import uuid
+from typing import Optional
 from pathlib import Path
 
 # Windows consoles default to cp1252, which cannot encode the arrows below, and
@@ -216,13 +217,45 @@ def purge_supabase_accounts() -> None:
             _supa_call("DELETE", f"/auth/v1/admin/users/{u['id']}", headers=_admin_headers)
 
 
-def supabase_identity(label: str) -> tuple[str, str]:
-    """Create a real Supabase account and sign in. Returns (auth_user_id, token)."""
+def _reclaim_phone(phone: str) -> None:
+    """Delete any existing Supabase account holding `phone`.
+
+    Only QA numbers ever reach here (every caller passes a +9190000xxxxx test
+    number), so this cannot touch a real account.
+    """
+    digits = phone.lstrip("+")
+    r = _supa_call("GET", "/auth/v1/admin/users", headers=_admin_headers,
+                    params={"per_page": 200})
+    if r.status_code != 200:
+        return
+    for u in r.json().get("users", []):
+        if (u.get("phone") or "").lstrip("+") == digits:
+            _supa_call("DELETE", f"/auth/v1/admin/users/{u['id']}", headers=_admin_headers)
+
+
+def supabase_identity(label: str, phone: Optional[str] = None) -> tuple[str, str]:
+    """Create a real Supabase account and sign in. Returns (auth_user_id, token).
+
+    `phone`, when given, is set on the account and confirmed, so the access token
+    carries a phone claim alongside the email one. Both link-auth endpoints bind
+    on that claim as of 2026-10-07 — a token that has not proved the profile's
+    number gets a 404 — so every identity that links something must pass the
+    number of the row it is about to link. Measured: one account can hold an
+    email and a phone, and an email+password sign-in still carries the phone
+    claim, which is why the sign-in below and the cleanup above are unchanged.
+    """
+    if phone:
+        # Supabase enforces phone uniqueness project-wide, and every harness's
+        # owner identity carries the same shared test-driver number. A previous
+        # run that crashed before cleanup leaves that number taken, which would
+        # fail this harness for something the previous one did — so reclaim it.
+        _reclaim_phone(phone)
     email = f"vehicleqa-{label}@{QA_DOMAIN}"
     password = "Qa!" + uuid.uuid4().hex[:20]
     r = _supa_call(
         "POST", "/auth/v1/admin/users", headers=_admin_headers,
-        json={"email": email, "password": password, "email_confirm": True},
+        json={"email": email, "password": password, "email_confirm": True,
+              **({"phone": phone, "phone_confirm": True} if phone else {})},
     )
     if r.status_code not in (200, 201):
         raise SystemExit(f"could not create {email}: {r.status_code} {r.text[:300]}")
@@ -454,7 +487,7 @@ async def main() -> None:
         # ------------------------------------------------------------------
         section("7. Who may call these endpoints at all")
         # ------------------------------------------------------------------
-        _, partner_token = supabase_identity("partner")
+        _, partner_token = supabase_identity("partner", PARTNER_PHONE)
         r = await c.post("/api/v1/partners", json={
             "name": "Vehicle QA Mechanic", "phone": PARTNER_PHONE,
             "primary_category_code": "mechanical",

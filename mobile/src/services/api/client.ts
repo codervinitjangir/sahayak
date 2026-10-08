@@ -1,6 +1,5 @@
 import axios from "axios";
 import { API_BASE_URL } from "../../constants";
-
 import { useAuthStore } from "../../store/authStore";
 
 // ─── Axios instance ───────────────────────────────────────────────────────────
@@ -11,6 +10,12 @@ export const apiClient = axios.create({
 });
 
 // ─── Auth token interceptor ───────────────────────────────────────────────────
+// Reads the token out of the auth store on every request rather than capturing it
+// once at module load: Supabase rotates the access token on refresh, and a header
+// baked in at startup would start 401ing partway through a shift.
+//
+// `getState()` rather than the `useAuthStore` hook — this is not a component, and
+// a hook call here would throw.
 apiClient.interceptors.request.use((config) => {
   const token = useAuthStore.getState().token;
   if (token) {

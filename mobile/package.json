@@ -7,9 +7,11 @@
     "@expo-google-fonts/poppins": "^0.4.1",
     "@expo/vector-icons": "^15.1.1",
     "@gorhom/bottom-sheet": "^5.2.14",
+    "@react-native-async-storage/async-storage": "^3.1.1",
     "@react-navigation/bottom-tabs": "^7.18.18",
     "@react-navigation/native": "^7.3.18",
     "@react-navigation/native-stack": "^7.18.10",
+    "@supabase/supabase-js": "^2.117.2",
     "@tanstack/react-query": "^5.102.8",
     "axios": "^1.20.0",
     "expo": "~57.0.20",
@@ -29,18 +31,23 @@
     "react-native-safe-area-context": "^5.9.1",
     "react-native-screens": "^4.27.0",
     "react-native-svg": "15.15.4",
+    "react-native-url-polyfill": "^4.0.0",
     "react-native-web": "^0.21.2",
     "zustand": "^5.0.15"
   },
   "devDependencies": {
+    "@types/node": "^26.6.4",
     "@types/react": "~19.2.2",
-    "typescript": "~6.0.3"
+    "typescript": "~6.0.3",
+    "vitest": "^5.0.3"
   },
   "scripts": {
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
   },
   "private": true
 }

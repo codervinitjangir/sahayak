@@ -23,30 +23,6 @@ export function useCreateVehicle() {
   });
 }
 
-export function useUpdateVehicle() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: ({
-      vehicleId,
-      payload,
-    }: {
-      vehicleId: string;
-      payload: Partial<CreateVehiclePayload>;
-    }) => vehiclesService.updateVehicle(vehicleId, payload),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: VEHICLES_QUERY_KEY });
-    },
-  });
-}
-
-export function useDeleteVehicle() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (vehicleId: string) => vehiclesService.deleteVehicle(vehicleId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: VEHICLES_QUERY_KEY });
-    },
-  });
-}
+// Removed 2026-10-06 with the service methods behind them: useUpdateVehicle and
+// useDeleteVehicle pointed at PATCH and DELETE /vehicles/{id}, routes that do not
+// exist. No screen used either hook.

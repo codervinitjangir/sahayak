@@ -3,14 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, AlertCircle, Camera, CheckCircle2, ShieldAlert } from 'lucide-react';
 import { useVehicles } from '../../features/vehicles/hooks';
 import { useServices, useCreateJob } from '../../features/jobs/hooks';
-import { createIdempotencyKey } from '../../services/api';
+import { ApiError, createIdempotencyKey } from '../../services/api';
 import { IS_DEMO_MODE } from '../../app/config';
 import { LocationPicker } from '../../components/LocationPicker';
 import { ServiceCard } from '../../components/ServiceCard';
 import { VehicleSelector } from '../../components/VehicleSelector';
 import { Button } from '../../components/ui/Button';
 import { AddVehicleModal } from '../../components/AddVehicleModal';
-import { getAuthToken, setAuthToken } from '../../services/authToken';
+import { getAuthToken } from '../../services/authToken';
 import { usersService } from '../../services/users.service';
 import { LocationPoint, Service } from '../../types/jobs';
 import { Vehicle } from '../../types/vehicles';
@@ -126,6 +126,15 @@ export const RequestHelpPage: React.FC = () => {
       // Redirect to live matching / tracking page
       navigate(`/owner/jobs/${newJob.id}`);
     } catch (err: unknown) {
+      // A verified account with no profile yet is not an error to report, it is a
+      // form to show: the token is good and registration is one POST away. The
+      // backend says so with its own code rather than leaving us to guess from a
+      // 403 (ADR-011), so this is the one failure that opens the modal instead of
+      // printing a sentence the driver cannot act on.
+      if (err instanceof ApiError && err.code === 'USER_NOT_REGISTERED') {
+        setShowAuthModal(true);
+        return;
+      }
       const errorMsg = err instanceof Error ? err.message : 'Failed to dispatch request. Please try again.';
       setFormError(errorMsg);
     }
@@ -164,15 +173,14 @@ export const RequestHelpPage: React.FC = () => {
       return;
     }
 
-    // Backend requires an auth token
+    // Backend requires an auth token, and it must be a real one. A placeholder
+    // string here used to stand in for sign-in under IS_DEMO_MODE: the backend
+    // verifies every bearer against the project's JWKS, so that token produced a
+    // 401 on the very next call and the demo path was never a working path.
     const token = getAuthToken();
     if (!token) {
-      if (IS_DEMO_MODE) {
-        setAuthToken('demo-token-owner-asha');
-      } else {
-        setShowAuthModal(true);
-        return;
-      }
+      navigate(`/login?redirect=${encodeURIComponent('/owner/request')}`);
+      return;
     }
 
     await dispatchJob(selectedService.code);

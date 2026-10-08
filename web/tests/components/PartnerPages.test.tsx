@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -12,10 +12,71 @@ import { LoginPage } from '../../src/pages/auth/LoginPage';
 import { AuthProvider } from '../../src/app/AuthProvider';
 import { DEFAULT_PARTNER_PROFILE, saveStoredPartnerProfile, PartnerProfile } from '../../src/types/partner';
 
+/**
+ * Step 0 of the partner wizard is a real phone OTP as of 2026-10-06 — it used to
+ * flip a flag and accept any six digits, which is how a mechanic could reach the
+ * end of signup with no Supabase account and a profile nobody could ever sign in
+ * to. Supabase is mocked here so these tests keep covering the wizard's steps
+ * without putting an SMS in the loop.
+ */
+const sendPhoneOtp = vi.fn(async () => ({ ok: true }));
+const verifyPhoneOtp = vi.fn(async () => ({ ok: true, accessToken: 'partner-access-token' }));
+
+vi.mock('../../src/services/supabase', () => ({
+  IS_SUPABASE_CONFIGURED: true,
+  sendPhoneOtp: (...args: unknown[]) => sendPhoneOtp(...(args as [])),
+  verifyPhoneOtp: (...args: unknown[]) => verifyPhoneOtp(...(args as [])),
+  toE164: (dial: string, local: string) => `${dial}${local.replace(/\D/g, '')}`,
+  getSupabase: () => ({
+    auth: {
+      getSession: async () => ({ data: { session: null } }),
+      onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => undefined } } }),
+    },
+  }),
+  signOut: async () => undefined,
+}));
+
+/** By default: verified, but no Sahayak profile yet — so the wizard continues. */
+const resolveIdentity = vi.fn(async () => ({ kind: 'needs-signup' as const }));
+
+vi.mock('../../src/services/identity.service', async () => {
+  const actual = await vi.importActual<typeof import('../../src/services/identity.service')>(
+    '../../src/services/identity.service'
+  );
+  return {
+    ...actual,
+    identityService: { resolve: () => resolveIdentity() },
+  };
+});
+
 describe('Partner Flow', () => {
   beforeEach(() => {
     localStorage.clear();
+    vi.clearAllMocks();
+    sendPhoneOtp.mockResolvedValue({ ok: true });
+    verifyPhoneOtp.mockResolvedValue({ ok: true, accessToken: 'partner-access-token' });
+    resolveIdentity.mockResolvedValue({ kind: 'needs-signup' });
   });
+
+  /**
+   * Walks step 0: type the number, request a code, enter six digits, verify.
+   * Both halves now await a network round trip, so each needs to be wrapped.
+   */
+  const completeOtpStep = async () => {
+    await userEvent.type(screen.getByPlaceholderText('98765 43210'), '9876543210');
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Send OTP/i }));
+    });
+    await waitFor(() => expect(screen.getByText(/Verify your number/i)).toBeInTheDocument());
+
+    const otpInputs = screen.getAllByRole('textbox');
+    for (let i = 0; i < 6; i++) {
+      await userEvent.type(otpInputs[i], '1');
+    }
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Verify & Continue/i }));
+    });
+  };
 
   /** The console shell is data-connected (the sidebar shows the shift summary),
    *  so anything that renders it needs the provider the real app has at root. */
@@ -46,11 +107,58 @@ describe('Partner Flow', () => {
       await userEvent.type(phoneInput, '9876543210');
       expect(sendOtpBtn).not.toBeDisabled();
 
-      fireEvent.click(sendOtpBtn);
+      await act(async () => {
+        fireEvent.click(sendOtpBtn);
+      });
+
+      // A code was actually requested, for this number, in E.164.
+      expect(sendPhoneOtp).toHaveBeenCalledWith('+919876543210');
 
       // Now on OTP entry screen
       expect(screen.getByText(/Verify your number/i)).toBeInTheDocument();
       expect(screen.getByText(/Resend OTP in/i)).toBeInTheDocument();
+    });
+
+    it('stays on the number step when the code could not be sent', async () => {
+      sendPhoneOtp.mockResolvedValue({
+        ok: false,
+        message: 'Phone sign-in is turned off for this project.',
+      } as never);
+
+      render(
+        <MemoryRouter>
+          <PartnerSignup />
+        </MemoryRouter>
+      );
+
+      await userEvent.type(screen.getByPlaceholderText('98765 43210'), '9876543210');
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: /Send OTP/i }));
+      });
+
+      expect(screen.queryByText(/Verify your number/i)).not.toBeInTheDocument();
+      expect(await screen.findByText(/turned off for this project/i)).toBeInTheDocument();
+    });
+
+    it('sends an already-registered mechanic to the console instead of through signup', async () => {
+      // The common case, not the exception: ops register most partners by phone
+      // before the mechanic ever opens the app, so the first thing this screen sees
+      // is usually an account that already resolves to a partner profile.
+      resolveIdentity.mockResolvedValue({
+        kind: 'registered',
+        identity: { role: 'partner', id: 'ptr-1' },
+      } as never);
+
+      render(
+        <MemoryRouter>
+          <PartnerSignup />
+        </MemoryRouter>
+      );
+
+      await completeOtpStep();
+
+      // Not pushed into the document-upload step.
+      expect(screen.queryByText(/Upload Identity Documents/i)).not.toBeInTheDocument();
     });
 
     it('advances through reordered steps with Tier 1 Documents gating Category', async () => {
@@ -60,17 +168,7 @@ describe('Partner Flow', () => {
         </MemoryRouter>
       );
 
-      // 1. Enter phone
-      const phoneInput = screen.getByPlaceholderText('98765 43210');
-      await userEvent.type(phoneInput, '9876543210');
-      fireEvent.click(screen.getByRole('button', { name: /Send OTP/i }));
-
-      // 2. Enter OTP
-      const otpInputs = screen.getAllByRole('textbox');
-      for (let i = 0; i < 6; i++) {
-        await userEvent.type(otpInputs[i], '1');
-      }
-      fireEvent.click(screen.getByRole('button', { name: /Verify & Continue/i }));
+      await completeOtpStep();
 
       // 3. Step 1: Tier 1 Identity Documents (Prerequisite)
       expect(screen.getByText(/Upload Identity Documents/i)).toBeInTheDocument();
@@ -113,16 +211,7 @@ describe('Partner Flow', () => {
         </MemoryRouter>
       );
 
-      // Enter phone and submit OTP
-      const phoneInput = screen.getByPlaceholderText('98765 43210');
-      await userEvent.type(phoneInput, '9876543210');
-      fireEvent.click(screen.getByRole('button', { name: /Send OTP/i }));
-
-      const otpInputs = screen.getAllByRole('textbox');
-      for (let i = 0; i < 6; i++) {
-        await userEvent.type(otpInputs[i], '1');
-      }
-      fireEvent.click(screen.getByRole('button', { name: /Verify & Continue/i }));
+      await completeOtpStep();
 
       // Complete Tier 1 Documents
       fireEvent.click(screen.getByRole('button', { name: /Autofill sample docs/i }));

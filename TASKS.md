@@ -12,8 +12,12 @@ is high-risk per CLAUDE.md's testing-bar section.
 _Nothing in progress. Pick the top item from Next Up._
 
 ## Next Up
-_Nothing queued. The build backlog is empty — see `ROADMAP.md`; the frontend is the
-critical path, and the mechanic/owner interviews are overdue from week 3._
+_One named gap left. The frontend is still the critical path per `ROADMAP.md`, and the
+mechanic/owner interviews are overdue from week 3._
+
+- [ ] **Admin console** — three analytics endpoints shipped 2026-10-03 and nothing reads them;
+      `web/AGENTS.md` promises `/admin/*`. Three read-only screens, no new backend work. See
+      `TASKS-frontend.md` "Open Gaps".
 
 ## Backlog (not yet scheduled)
 - [ ] Payments — test-mode stub only, low priority
@@ -24,6 +28,168 @@ critical path, and the mechanic/owner interviews are overdue from week 3._
       scaling only, not needed for single-worker MVP
 
 ## Done (most recent first)
+- [x] Mobile sign-in — 2026-10-07: mobile now obtains a real token the same way web does, so the
+      last client that could not authenticate can. `authApi.sendOTP` returned `{success: true}`
+      without calling anything, `authApi.verifyOTP` accepted any six digits and returned
+      `"mock_jwt_token_" + Date.now()`, and the screen pre-filled 123456 — so it reached
+      "verified" whether or not a code had been sent. New `src/services/supabase.ts` (OTP
+      send/verify, AsyncStorage session, token refresh), `src/services/identity.ts` (the same
+      four-way `GET /auth/me` union web uses — two clients reading one endpoint should agree about
+      what its answers mean) and `src/services/phone.ts` (`toE164`, extracted so it is testable
+      outside React Native, mirroring `app/utils/phone.py`).
+      Three things React Native needs that the browser does not, all of which fail at *runtime*
+      only: `react-native-url-polyfill/auto` imported first (supabase-js builds URLs with the
+      WHATWG `URL` API, which Hermes lacks), `storage: AsyncStorage` (no `localStorage`, and
+      without it a backgrounded-and-killed app loses the session), and `EXPO_PUBLIC_*` env vars
+      inlined at build time.
+      **Four forged-bearer paths removed.** The request interceptor now sends whatever is in
+      `token`, which turned every placeholder into a real `Authorization` header: the store's
+      default `"mock_jwt_owner"`, the login screen's `handleQuickDemo`, and role-switch buttons in
+      `HomeScreen` and `OwnerHelpFlowScreen` passing `"mock_jwt_partner"`. All now use
+      `setDemoUser(user)`, which sets a profile with **no token** — browsing the mocked screens
+      and being signed in no longer share a code path. The mock `authApi` was deleted outright
+      rather than left beside the real one.
+      **`handleVerifyOTP` no longer falls back to a mock user** — its `catch` called
+      `handleQuickDemo(role)`, so a wrong code or a Supabase outage silently signed you in as a
+      hardcoded profile. Same family as the web's swallowed `link-auth`.
+      `API_BASE_URL` was hardcoded to `10.0.2.2:8000`, the Android *emulator's* alias for the
+      host — it resolves to nothing on a physical phone, which is the only place an OTP SMS can
+      arrive. Now overridable with `EXPO_PUBLIC_API_BASE_URL`; pair it with `uvicorn --host
+      0.0.0.0`.
+      **15 tests, in a runner mobile did not have.** Vitest, for the pure logic only: the routing
+      fork and the phone shaping. That fork is what repays a test — three outcomes, two arriving
+      as the *same* 403, reached only on cold paths (a first-ever sign-in; a mechanic ops
+      registered before they installed the app) that nobody hits by tapping through. Reverting it
+      to read the status alone fails exactly three. `tests/services/route-inventory.test.ts` is
+      the mobile twin of web's and catches a reintroduced `GET /jobs/me` by name;
+      `export_routes.py` now writes both fixtures from one generator, since two of the four dead
+      routes were mobile's. Screens stay untested — jest-expo is a bigger change than this task,
+      and they were untested before.
+      `tsc --noEmit` passes, which it did **not** beforehand: three declared dependencies
+      (`expo-linear-gradient`, `react-native-svg`, `expo-splash-screen`) had never been installed,
+      so the typecheck failed with 7 errors on absent `node_modules`. Backend untouched: 399
+      unit/api still green.
+      **Not verified, and worth saying plainly: nothing here proves it works on a device.** The
+      URL polyfill and the AsyncStorage session are exactly what typechecks and then fails at
+      runtime. Needs one run on a real phone with a configured Supabase test number.
+      `TASKS-frontend.md` has the file-by-file table.
+
+- [x] `link-auth` binds on the verified phone claim — 2026-10-07: closes the gap flagged the same
+      morning. Neither `POST /partners/{id}/link-auth` nor `POST /users/{id}/link-auth` compared
+      the token's phone claim against the target row, so an unclaimed profile was protected by
+      nothing but the secrecy of its UUID — any verified account that learned an id could claim
+      the profile behind it. Untidy for a seeded owner row; a **privilege grant** for a partner
+      row, which receives dispatch offers and sees the owner's name, phone and coordinates once
+      assigned (ADR-017).
+      Check order is deliberate: re-link by the same account → 200 with no write (so a retry after
+      a dropped response still succeeds); **claim does not match → 404 with the same body a
+      missing row produces**; claim matches but another account holds it → 409
+      `AUTH_ALREADY_LINKED`. The 404 rather than a named `PHONE_MISMATCH` is principle 6 — a
+      distinct code would answer "that id exists, wrong number" and turn UUID guessing into an
+      existence oracle for exactly the rows being protected. The reason goes to the log
+      (`reason="phone_claim_does_not_match_profile"`, `claim_present`), where an operator can read
+      it and an attacker cannot. Nothing legitimate reaches that branch: a mechanic whose number
+      matches no profile gets `USER_NOT_REGISTERED` and never learns an id to send.
+      The 409 survives *after* the phone check because same-number-different-account is a real
+      case — a mechanic who lost their phone and re-verified on a new Supabase account — and its
+      remedy needs a person. Ordering it second is what keeps the oracle shut: a stranger probing
+      ids sees 404 either way, while the rightful holder still gets the actionable 409.
+      **A token with no phone claim can now link nothing**, which is the whole point: this
+      project can issue email and OAuth sessions, and such a token has proved no number.
+      `same_number` treats a missing claim as equal to nothing, including to a missing column.
+      Comparison moved to `app/utils/phone.py` so the three call sites that ask "is this the same
+      number" share one answer instead of three private copies.
+      **The cheap path came from a two-minute probe run before touching any harness:** one
+      Supabase account can hold both an email and a confirmed phone, and an email+password
+      sign-in still carries the phone claim. So each harness's `supabase_identity(label, phone)`
+      gained two fields on its admin-create call, every sign-in path stayed as it was, and the
+      email-domain Supabase cleanup needed no change. Without that probe the alternative was
+      phone-only accounts across thirteen files plus rewritten cleanup in each — roughly double
+      the work.
+      One consequence found during regression, now handled: **Supabase enforces phone uniqueness
+      project-wide**, and every harness's owner identity carries the same shared `Test Driver QA`
+      number. Clean sequential runs are fine, but a run that crashes before cleanup leaves the
+      number taken and fails the *next* harness with `phone_exists` for something it did not do.
+      Each helper now calls `_reclaim_phone()` first.
+      14 unit tests (`test_link_auth_phone_binding.py`) — reverting the guard fails exactly five,
+      all and only the refusal cases, with `DID NOT RAISE` — plus `check_auth_flow.py` scenario 2b
+      (7 assertions, **77/77**), which aims a genuine token for one number at another number's
+      unclaimed profile, confirms the row is still unclaimed afterwards, then links it with the
+      account that actually proved the number. One existing assertion changed meaning rather than
+      being added: "hijacking a linked partner" expected 409 and now expects 404. Full regression:
+      **399 unit/api**, **763 live across fourteen harnesses**, DB at baseline. ADR-011 amended
+      again. No frontend change needed — `PartnerSignup` already registers and links with the same
+      number it verified.
+
+- [x] `GET /api/v1/auth/me` + the web app's missing sign-in — 2026-10-07: the frontend had no
+      Supabase client at all (`grep -rn supabase web/src/` → nothing). `LoginPage.handleVerify`
+      was a 500 ms `setTimeout` that navigated by the role toggle, and `AuthProvider` said so in
+      its own comment — *"Real sign-in is not implemented yet."* So `getAuthToken()` always
+      returned null, `apiClient` sent no `Authorization` header, and **every authenticated
+      endpoint answered 401**. `VITE_PARTNER_API_MOCK` had just been set to `false`, which
+      stopped the partner console using its mock and started it making calls that all failed —
+      the flip made it worse, not better. Fixed: real `signInWithOtp`/`verifyOtp`, session
+      restore and token refresh in `AuthProvider`, and `web/.env` carrying the **publishable**
+      key (never the secret one).
+      Backend side is one thin route. A client holding a fresh token knows nothing — not whether
+      we have a profile for it, which of the three kinds it is, nor our local id — and the only
+      way to find out was to fire a resource request and read the error code off the failure, so
+      every sign-in routed on the remains of a call meant to do something else.
+      `GET /api/v1/auth/me` returns `{role, id}` and nothing else: it depends on
+      `get_current_identity`, raises ADR-011's two 403s unchanged, and adds no security surface.
+      Not scoped to a role (a `require_user` there would 403 every mechanic on the one route that
+      tells them what they are), and no name or phone, because every signed-in account on the
+      platform can call it. No new ADR — it is a consequence of ADR-011's two-code fork, so it
+      extends that ADR.
+      **Three frontend bugs of the same family, all fixed.** (1) `PartnerSignup` never called
+      `link-auth`, so it created partner rows with `auth_user_id` NULL — profiles nobody can ever
+      sign in to — and wrapped the whole thing in `catch { console.warn }` before showing the
+      success screen, so a failed registration was indistinguishable from a successful one.
+      (2) `RequestHelpPage` stored the literal string `'demo-token-owner-asha'` as a bearer under
+      `IS_DEMO_MODE`; the backend verifies against JWKS, so the demo path was a 401 with extra
+      steps. (3) Mobile's `cancelJob` sent `{ reason }` where `JobCancelRequest` declares
+      `cancellation_reason` **with `extra="forbid"`** — every cancel was a 422. Mobile's axios
+      auth interceptor was also commented out behind a TODO while the store held a hardcoded
+      `"mock_jwt_owner"`; the interceptor now reads the store and the store starts empty, so
+      nothing ships a forged bearer.
+      **Four calls removed because the routes do not exist:** `GET /users/{id}`,
+      `PATCH /vehicles/{id}`, `DELETE /vehicles/{id}` (web) and `GET /jobs/me` (mobile).
+      **The reason none of that was caught:** `web/tests/services/contract.test.ts` is named for
+      checking the backend contract and asserts against a mocked `fetch`, so it was green while
+      asserting a `PATCH /vehicles/{id}` that has never existed — the same shape as the admin
+      analytics bug one task earlier, where a unit suite monkeypatching the repository stayed
+      green over nine unexecutable queries. Fixed structurally:
+      `web/tests/services/route-inventory.test.ts` reads every `apiClient` path out of `src/` and
+      diffs it against `tests/fixtures/backend-routes.json`, exported from `app.openapi()` by
+      `backend/tools/export_routes.py`. Failed-first on a reintroduced `PATCH /vehicles/{id}` —
+      and the first version of that test *passed* on it, because the trailing capture group was
+      consuming, so `matchAll` skipped every call site within one window of another (2 of 4 found
+      in one file). A lookahead fixed it; the comment records why.
+      `IDENTITY_NOT_LINKED` is asserted live for the first time. Every harness signs in with
+      email+password and an email token carries no phone claim, so `_find_unlinked_profile` —
+      which searches by phone — could never match, leaving the branch unreachable since
+      2026-09-19 despite being reasoned about in ADR-011. `check_auth_flow.py` now mints a
+      phone-based account (admin-create + password grant, real claim, no SMS) and walks the whole
+      ops path: register by phone → `IDENTITY_NOT_LINKED` → `link-auth` → resolves.
+      **Flagged, not fixed — neither `link-auth` endpoint compares the token's phone claim to the
+      target row.** An unclaimed profile is protected only by its UUID being unknown, so anyone
+      with any verified token can claim any unlinked profile whose id they learn. Untidy for a
+      seeded owner row; a privilege grant for a partner row, which receives offers and sees owner
+      contact details once assigned. ADR-020 saw the same gap from the admin side and declined to
+      act. Closing it requires converting every harness identity from email to phone, so it is
+      its own task. Also still open: no admin console consumes the three analytics endpoints, and
+      mobile has no sign-in flow (`LoginScreen` calls `setUser()` with no session).
+      7 unit tests + 11 live (check_auth_flow **70/70**). Web **103 tests**, typecheck and
+      production build clean. Full regression: **385 unit/api**, **756 live across fourteen
+      harnesses**, DB at baseline. ADR-011 amended; HANDOFF §15.
+      *Harness-running note worth keeping: leaving uvicorn on :8010 up while running the other
+      twelve harnesses cost three failures. A transient `RemoteProtocolError` from Supabase
+      killed `check_dispatch_flow` before its cleanup, which left one backend `idle in
+      transaction` holding a lock on the `users` row — the next two harnesses then died on
+      `QueryCanceled ... while updating tuple in relation "users"` rather than on anything they
+      had done. Kill the server first, and after any crashed harness check
+      `pg_stat_activity` for `idle in transaction` before blaming the code.*
+
 - [x] Partner active-job and trust stats endpoints — 2026-10-06: `GET /api/v1/partners/me/jobs/active`
       (returns full `JobDetailResponse` with contact-detail gate for caller's active assignment,
       or `data: null` with HTTP 200 on idle, closing the cold-refresh recovery gap) and

@@ -116,7 +116,7 @@ export default function OwnerHelpFlowScreen({
 }: OwnerHelpFlowScreenProps) {
   const nav = useNavigation<NativeStackNavigationProp<OwnerStackParamList>>();
   const route = useRoute<any>();
-  const { setUser, logout } = useAuthStore();
+  const { setDemoUser, logout } = useAuthStore();
 
   // Store bindings
   const {
@@ -1039,7 +1039,11 @@ export default function OwnerHelpFlowScreen({
               style={styles.switchRoleBtn}
               onPress={() => {
                 setShowProfileModal(false);
-                setUser(MOCK_USER_PARTNER, "mock_jwt_partner");
+                // A role switch for demoing the partner screens, not a sign-in:
+                // setDemoUser carries no token, because the request interceptor
+                // sends whatever is in `token` and "mock_jwt_partner" would go out
+                // as a real bearer against a backend that verifies them.
+                setDemoUser(MOCK_USER_PARTNER);
               }}
               activeOpacity={0.8}
             >

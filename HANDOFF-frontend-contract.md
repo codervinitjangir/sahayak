@@ -1929,3 +1929,132 @@ not reproduce the failure.
 
 Full regression after the change: **371 unit/api tests** and **745 live assertions across
 fourteen harnesses**, all green, database verified back to baseline.
+
+---
+
+## 15. Sign-in now actually produces a token, and `GET /auth/me` tells you who it belongs to (2026-10-07)
+
+This section is different from the fourteen above it. Those described new backend surface. This
+one describes a hole in the **web app** that made most of that surface unreachable, and the one
+new endpoint added to close it.
+
+### 15.1 What was wrong
+
+`web/` had no Supabase client. Not a misconfigured one — none: `grep -rn supabase web/src/`
+returned nothing. `LoginPage.handleVerify` was a 500 ms `setTimeout` that navigated to the
+owner or partner home depending on which role button was selected, and `PartnerSignup`'s OTP
+step did the same. `AuthProvider` said so in its own comment: *"Real sign-in is not implemented
+yet."*
+
+The consequences, in order of severity:
+
+1. **`getAuthToken()` always returned null, so `apiClient` sent no `Authorization` header and
+   every authenticated endpoint answered 401.** `VITE_PARTNER_API_MOCK` had just been flipped to
+   `false`, which stopped the partner console using its mock and started it making real calls —
+   so that flip made the console worse, not better.
+2. **`RequestHelpPage` stored the literal string `'demo-token-owner-asha'`** as a bearer when no
+   token was present and `IS_DEMO_MODE` was on. The backend verifies every bearer against the
+   project's JWKS, so the demo path was a 401 with extra steps.
+3. **`PartnerSignup` never called `link-auth`.** It created the profile with `POST /partners` and
+   stopped, so the row sat with `auth_user_id` NULL — a profile nobody can ever sign in to,
+   because every partner route resolves the token against that column. Worse, the call was
+   wrapped in `catch { console.warn }` and fell through to the success screen, so a failed
+   registration looked exactly like a successful one.
+
+### 15.2 The new endpoint
+
+```
+GET /api/v1/auth/me        →  200 { "data": { "role": "user"|"partner"|"admin", "id": "<uuid>" } }
+```
+
+Two fields, deliberately. Name, phone and email are **not** here: every signed-in account can
+call this route, so anything in the payload is published to all of them. Contact details stay
+behind the ADR-017 gate on `GET /jobs/{id}`.
+
+Call it immediately after a verified OTP, before routing. The three answers you must handle:
+
+| Response | Meaning | What your app should do |
+|---|---|---|
+| `200` + `role` | Registered | Route by role: `user` → owner app, `partner` → console, `admin` → (no console built yet) |
+| `403 USER_NOT_REGISTERED` | Token is valid, no profile exists | Show the signup form. `POST /users` needs this token, so signup is only reachable *after* sign-in |
+| `403 IDENTITY_NOT_LINKED` | An **unclaimed** profile is registered to this number | Tell them to contact the Sahayak team. Do **not** send them to signup — it will fail on a duplicate phone — and do not retry the OTP, the token is already fine |
+| `401` | No or bad token | Back to sign-in |
+
+`403` and not `401` on the middle two, and this is the case where it matters: the token verified.
+A client that reads 401 and returns the user to OTP entry loops them forever, because passing OTP
+again produces an identical token and an identical refusal. See ADR-011.
+
+**Why you cannot complete the link yourself on `IDENTITY_NOT_LINKED`:** `link-auth` needs the
+profile's id, and the error does not carry it. That is on purpose for now — neither `link-auth`
+endpoint checks that the token's phone matches the target row, so an unclaimed profile is
+currently protected only by its id being unknown. Handing the id out would widen that. Flagged in
+ADR-011's amendment as its own task.
+
+### 15.3 What changed in `web/`
+
+- `src/services/supabase.ts` — new. `signInWithOtp` / `verifyOtp`, session restore, token
+  refresh, and error text a stranded driver can act on. Reads `VITE_SUPABASE_URL` and
+  `VITE_SUPABASE_PUBLISHABLE_KEY`; `web/.env.example` is updated and `web/.env` is written.
+  The publishable key belongs in a browser bundle — the **secret** key must never appear here.
+- `src/services/identity.service.ts` — new. Wraps `GET /auth/me` into the four-way union above
+  so routing is a `switch`, not a status-code comparison.
+- `LoginPage` — real send/verify. **Routes on what the backend says the account is, not on the
+  role toggle**, so a mechanic who taps "Vehicle owner" still lands in the console.
+- `PartnerSignup` — real OTP; calls `link-auth` after `POST /partners`; surfaces failures instead
+  of showing success over them; sends an already-registered mechanic straight to the console,
+  which is the *common* case since ops register most partners by phone first.
+- `OwnerSignup` — redirects to `/login` when there is no token (the form posts to an
+  authenticated route), and prefills the phone from the verified session.
+- `RequestHelpPage` — no more placeholder token; `USER_NOT_REGISTERED` opens the registration
+  modal instead of printing an error.
+
+### 15.4 Four calls removed because the routes do not exist
+
+| Call | Where | Why it was removed |
+|---|---|---|
+| `GET /users/{id}` | `users.service.ts` | No per-user read exists. What callers wanted is `GET /auth/me` |
+| `PATCH /vehicles/{id}` | `vehicles.service.ts` | Not built, deferred backend work. No call sites |
+| `DELETE /vehicles/{id}` | `vehicles.service.ts` | Same |
+| `GET /jobs/me` | `mobile/.../api/jobs.ts` | No job-history route for either role. Still wanted — see BACKEND_COMMUNICATION §3.1 |
+
+Also fixed in mobile: `cancelJob` sent `{ reason }` where `JobCancelRequest` declares
+`cancellation_reason` **and sets `extra="forbid"`** — so every cancel was a 422 naming the field.
+And the axios auth interceptor was commented out with a TODO while the store held a hardcoded
+`"mock_jwt_owner"`; the interceptor now reads the store, and the store starts empty rather than
+shipping a forged bearer.
+
+### 15.5 The test that would have caught all of this
+
+`web/tests/services/route-inventory.test.ts` reads every `apiClient` path out of `src/` and
+compares it against `tests/fixtures/backend-routes.json`, exported from the backend's own
+`app.openapi()` by `backend/tools/export_routes.py`. Re-export it whenever a route is added,
+renamed or removed:
+
+```bash
+cd backend && python tools/export_routes.py
+```
+
+Worth saying plainly why this was needed. `tests/services/contract.test.ts` is named for exactly
+this job and asserts against a mocked `fetch` — and a mocked transport answers any URL you hand
+it, so that file sat green while asserting a `PATCH /vehicles/{id}` that has never existed. Same
+shape as the backend bug in §14: a test that stubs the layer below it cannot see that the layer
+below it is wrong.
+
+### 15.6 You still need to do two things
+
+1. **Drive the OTP with the configured Supabase test numbers.** The phone provider is enabled on
+   the project (`sms_provider: textlocal`, `phone_autoconfirm: false`), so a real number means a
+   real SMS. The test numbers in BACKEND_COMMUNICATION §4.2 bypass that.
+2. **Mobile still has no sign-in.** `LoginScreen` calls `setUser()` directly with no Supabase
+   session, so authenticated calls there will 401 by design until the same wiring lands. The web
+   implementation is the reference; the only additional work is React Native's URL/storage
+   polyfills.
+
+### 15.7 Verified by
+
+`backend/tests/unit/test_auth_me.py` (7) and `check_auth_flow.py` scenario 7 (11 new assertions,
+**70/70** total), which walks the whole ops path with a real phone-claim token: register by
+phone → `IDENTITY_NOT_LINKED` → `link-auth` → resolves. Web: **103 tests** green, typecheck and
+production build clean. Full regression: **385 unit/api** and **756 live assertions across
+fourteen harnesses**, database back to baseline.
+

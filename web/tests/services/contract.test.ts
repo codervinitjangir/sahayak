@@ -73,15 +73,21 @@ describe('Backend Contract Compliance Tests', () => {
   });
 
   describe('Owner Signup Contract (POST /api/v1/users)', () => {
-    it('submits owner registration and stores returned token', async () => {
+    it('submits owner registration with the caller already authenticated', async () => {
+      // The precondition, not an incidental detail: POST /users is an
+      // authenticated route. It creates the profile *and* binds it to the Supabase
+      // account the bearer token belongs to, so a request without a token is a 401
+      // and registration is impossible before sign-in.
+      setAuthToken('supabase-access-token');
+
       vi.mocked(fetch).mockResolvedValue(
         mockResponse(200, {
           data: {
             id: 'usr-new-001',
             name: 'Asha Sharma',
             phone: '+919876543210',
-            role: 'owner',
-            token: 'jwt-auth-token-from-signup',
+            phone_verified: true,
+            created_at: '2026-10-06T10:00:00Z',
           },
         })
       );
@@ -98,14 +104,45 @@ describe('Backend Contract Compliance Tests', () => {
       const [url, options] = vi.mocked(fetch).mock.calls[0];
       expect(url).toContain('/users');
       expect(options?.method).toBe('POST');
+      expect((options?.headers as Record<string, string>)?.Authorization).toBe(
+        'Bearer supabase-access-token'
+      );
 
       const parsedBody = JSON.parse(options?.body as string);
       expect(parsedBody.name).toBe('Asha Sharma');
       expect(parsedBody.phone).toBe('+919876543210');
       expect(parsedBody.role).toBe('owner');
+    });
 
-      // Check that token was stored in auth storage
-      expect(getAuthToken()).toBe('jwt-auth-token-from-signup');
+    it('does not replace the session token, because registration issues none', async () => {
+      // This test used to assert the opposite: that `createUser` read a `token`
+      // field off the response and stored it. No such field has ever existed.
+      // Sahayak's backend verifies Supabase tokens against the project's JWKS and
+      // never mints its own, so the only thing that can produce a bearer is the
+      // OTP exchange — and a registration response that appeared to carry one
+      // would mean something was impersonating the auth server.
+      setAuthToken('supabase-access-token');
+
+      vi.mocked(fetch).mockResolvedValue(
+        mockResponse(200, {
+          data: {
+            id: 'usr-new-002',
+            name: 'Asha Sharma',
+            phone: '+919876543210',
+            // Deliberately present, and deliberately ignored.
+            token: 'not-a-real-token',
+            access_token: 'also-not-a-real-token',
+          },
+        })
+      );
+
+      await usersService.createUser({
+        name: 'Asha Sharma',
+        phone: '+919876543210',
+        role: 'owner',
+      });
+
+      expect(getAuthToken()).toBe('supabase-access-token');
     });
   });
 
@@ -209,20 +246,22 @@ describe('Backend Contract Compliance Tests', () => {
       expect(list).toHaveLength(1);
       expect(list[0].make).toBe('Maruti Suzuki');
 
-      // 3. Update
+      // 3. Read one back
       vi.mocked(fetch).mockResolvedValueOnce(
         mockResponse(200, {
-          data: { ...created, model: 'Swift Dzire' },
+          data: created,
         })
       );
-      const updated = await vehiclesService.updateVehicle('veh-new-1', { model: 'Swift Dzire' });
-      expect(updated.model).toBe('Swift Dzire');
+      const fetched = await vehiclesService.getVehicle('veh-new-1');
+      expect(fetched.id).toBe('veh-new-1');
 
-      // 4. Delete
-      vi.mocked(fetch).mockResolvedValueOnce(
-        mockResponse(200, { data: null })
-      );
-      await expect(vehiclesService.deleteVehicle('veh-new-1')).resolves.toBeUndefined();
+      // There is deliberately no update or delete step. This block used to assert
+      // a PATCH and a DELETE on /vehicles/{id} — routes the backend has never
+      // exposed — and passed anyway, because every assertion here is made against
+      // a mocked `fetch`. A mocked transport cannot tell a real path from an
+      // imagined one; see route-inventory.test.ts, which checks the paths this
+      // app emits against the backend's own OpenAPI schema and is the test that
+      // catches this class of drift.
     });
   });
 

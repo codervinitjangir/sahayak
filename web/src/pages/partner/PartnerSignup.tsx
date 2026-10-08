@@ -32,6 +32,14 @@ import { OtpInput } from './components/OtpInput';
 import { FileUploadCard } from './components/FileUploadCard';
 import { Button } from '../../components/ui/Button';
 import { apiClient } from '../../services/api';
+import { setAuthToken } from '../../services/authToken';
+import { identityService } from '../../services/identity.service';
+import {
+  IS_SUPABASE_CONFIGURED,
+  sendPhoneOtp,
+  toE164,
+  verifyPhoneOtp,
+} from '../../services/supabase';
 import { IS_PARTNER_API_MOCK } from '../../services/partner.service';
 import './partner.css';
 
@@ -67,6 +75,8 @@ export const PartnerSignup: React.FC = () => {
   const [otpTimer, setOtpTimer] = useState<number>(OTP_COUNTDOWN_SECONDS);
   const [otpError, setOtpError] = useState<string | null>(null);
   const [docError, setDocError] = useState<string | null>(null);
+  /** Registration or link-auth failed. Shown on the final step; blocks success. */
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   // Tier 1 Identity Documents: Aadhaar, PAN, DL
   const [tier1Documents, setTier1Documents] = useState<DocumentUpload[]>(() =>
@@ -114,30 +124,86 @@ export const PartnerSignup: React.FC = () => {
   }, [isSuccess, navigate]);
 
   // Handlers
-  const handleSendOtp = (e: React.FormEvent) => {
+  /**
+   * Step 0, part one. Asks Supabase for a real code.
+   *
+   * Until 2026-10-06 this only flipped `otpSent`, and `handleVerifyOtp` below
+   * accepted any six digits — so a mechanic reached the end of this wizard with
+   * no Supabase account at all. The profile that POST /partners then created had
+   * `auth_user_id` NULL, which is a profile nobody can ever sign in to: every
+   * partner route depends on require_partner, and require_partner resolves the
+   * token against that column.
+   */
+  const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     if (phone.replace(/\D/g, '').length < 10) {
       setOtpError('Please enter a valid 10-digit mobile number.');
       return;
     }
+    if (!IS_SUPABASE_CONFIGURED) {
+      setOtpError(
+        'Sign-in is not configured in this build. Set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY in web/.env.'
+      );
+      return;
+    }
+
     setOtpError(null);
+    const outcome = await sendPhoneOtp(toE164('+91', phone));
+    if (!outcome.ok) {
+      setOtpError(outcome.message ?? 'Could not send the code. Try again.');
+      return;
+    }
     setOtpSent(true);
     setOtpTimer(OTP_COUNTDOWN_SECONDS);
   };
 
-  const handleResendOtp = () => {
+  const handleResendOtp = async () => {
     if (otpTimer > 0) return;
     setOtp('');
     setOtpError(null);
+    const outcome = await sendPhoneOtp(toE164('+91', phone));
+    if (!outcome.ok) {
+      setOtpError(outcome.message ?? 'Could not resend the code. Try again.');
+      return;
+    }
     setOtpTimer(OTP_COUNTDOWN_SECONDS);
   };
 
-  const handleVerifyOtp = () => {
+  /**
+   * Step 0, part two. Verifies the code and keeps the token for the rest of the
+   * wizard, which ends in a link-auth call that needs it.
+   *
+   * A mechanic who already has a profile is sent to the console instead of
+   * through five more steps: ops register most partners by phone before the
+   * mechanic ever opens the app, so "already registered" is the common case on
+   * this screen, not the exception.
+   */
+  const handleVerifyOtp = async () => {
     if (otp.length < 6) {
       setOtpError('Please enter all 6 digits of the OTP.');
       return;
     }
     setOtpError(null);
+
+    const verified = await verifyPhoneOtp(toE164('+91', phone), otp);
+    if (!verified.ok || !verified.accessToken) {
+      setOtpError(verified.message ?? 'That code did not work. Try again.');
+      return;
+    }
+    setAuthToken(verified.accessToken);
+
+    const resolution = await identityService.resolve();
+    if (resolution.kind === 'registered' && resolution.identity.role === 'partner') {
+      navigate('/partner/dashboard', { replace: true });
+      return;
+    }
+    if (resolution.kind === 'registered') {
+      setOtpError(
+        'This number is already registered as a vehicle owner. Use a different number to sign up as a partner.'
+      );
+      return;
+    }
+
     setCurrentStep(1); // Proceed to Tier 1 Identity Documents
   };
 
@@ -200,6 +266,7 @@ export const PartnerSignup: React.FC = () => {
   };
 
   const handleSubmit = async () => {
+    setSubmitError(null);
     // Generate verification items based on the Two-Tier model:
     // Tier 1 (Identity): in_progress (submitted for verification)
     // Tier 2 (Capabilities): not_started (gated by Tier 1 approval)
@@ -290,19 +357,46 @@ export const PartnerSignup: React.FC = () => {
           method: 'POST',
           body: JSON.stringify(payload),
         });
-        if (regRes?.data?.id) {
-          newProfile.id = regRes.data.id;
-          if (activeServices.length > 0) {
-            await apiClient(`/partners/${newProfile.id}/services`, {
-              method: 'POST',
-              body: JSON.stringify({
-                service_codes: activeServices.map((s) => s.code),
-              }),
-            }).catch(() => {});
-          }
+        const partnerId = regRes?.data?.id;
+        if (!partnerId) {
+          throw new Error('Registration did not return a partner id.');
+        }
+        newProfile.id = partnerId;
+
+        // The step this wizard used to skip. POST /partners creates an *inert*
+        // profile — unverified, off-shift, and bound to no account — and
+        // link-auth is what binds it to the Supabase account that just passed
+        // OTP. Without it the mechanic holds a valid token that resolves to
+        // nothing, so every partner route answers 403 IDENTITY_NOT_LINKED and
+        // the console they were just sent to is empty forever.
+        //
+        // Deliberately not caught separately: a partner whose profile exists but
+        // is unlinked is worse off than one who sees this screen fail, because
+        // the first state looks like success and takes a human to repair.
+        await apiClient(`/partners/${partnerId}/link-auth`, { method: 'POST' });
+
+        if (activeServices.length > 0) {
+          // Service coverage is the one call allowed to fail quietly: the profile
+          // exists and is linked, so the mechanic can sign in and fix coverage
+          // from the console. Losing it does not strand them.
+          await apiClient(`/partners/${partnerId}/services`, {
+            method: 'POST',
+            body: JSON.stringify({
+              service_codes: activeServices.map((s) => s.code),
+            }),
+          }).catch(() => {});
         }
       } catch (err) {
-        console.warn('[PartnerSignup] Backend registration fallback to local profile:', err);
+        // Previously a console.warn, after which the wizard saved a local profile
+        // and showed the success screen — so a failed registration was
+        // indistinguishable from a successful one until the mechanic's first
+        // offer never arrived.
+        setSubmitError(
+          err instanceof Error
+            ? `Could not complete registration: ${err.message}`
+            : 'Could not complete registration. Check your connection and try again.'
+        );
+        return;
       }
     }
 
@@ -946,6 +1040,19 @@ export const PartnerSignup: React.FC = () => {
                       Submit for Verification
                     </Button>
                   )}
+                </div>
+              )}
+
+              {/* Registration failed on the backend. Shown instead of the success
+                  screen, because a profile that was not created — or was created
+                  and never linked — cannot receive a single job offer. */}
+              {submitError && (
+                <div
+                  role="alert"
+                  className="mt-4 flex items-start gap-2 text-sm text-red-600 bg-red-50 p-3 rounded-xl border border-red-200"
+                >
+                  <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" aria-hidden="true" />
+                  <span>{submitError}</span>
                 </div>
               )}
             </div>
