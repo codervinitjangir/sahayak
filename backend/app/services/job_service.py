@@ -24,6 +24,8 @@ from app.schemas.job import (
     JobCancelResponse,
     JobCreateRequest,
     JobDetailResponse,
+    JobHistoryItem,
+    JobHistoryResponse,
     JobStatusTransitionRequest,
     JobStatusTransitionResponse,
     JobTimelineEntry,
@@ -870,4 +872,87 @@ async def cancel_job_by_owner(
         assignment_status=released_assignment_status,
         cancelled_at=job.cancelled_at,
         cancellation_reason=job.cancellation_reason,
+    )
+
+
+async def list_jobs(
+    db: AsyncSession, identity: Identity, *, limit: int, offset: int
+) -> JobHistoryResponse:
+    """The caller's own jobs, newest first, paginated.
+
+    The role branch lives here rather than in the handler or the repository,
+    because which question to ask *is* the business rule: an owner's history is
+    the jobs they requested, a partner's is the jobs they accepted, and those are
+    two different relations rather than one query with a parameter.
+
+    **There is no `role` query parameter, and that is a deliberate departure from
+    the shape the frontend asked for** (BACKEND_COMMUNICATION §3.1 requested
+    `?role=owner|partner`). The role comes from the token. Accepting it from the
+    query string would mean either ignoring it — a parameter that silently does
+    nothing is worse than none — or honouring it, which would let a partner ask for
+    an owner's view and hand the filter to the caller. Principle 5: never trust
+    identity from a request. A client that wants both views holds two tokens, and
+    then it already gets both.
+
+    An admin is refused rather than handed an empty list. An admins row is party to
+    no job, so `[]` is the literally correct answer and a misleading one — it reads
+    as "you have no jobs yet" on a screen that will never have any. The analytics
+    endpoints are the admin's view of jobs.
+    """
+    if identity.role == "user":
+        total = await job_repository.count_jobs_for_user(db, identity.local_id)
+        rows = await job_repository.list_jobs_for_user(
+            db, identity.local_id, limit=limit, offset=offset
+        )
+    elif identity.role == "partner":
+        total = await job_repository.count_jobs_for_partner(db, identity.local_id)
+        rows = await job_repository.list_jobs_for_partner(
+            db, identity.local_id, limit=limit, offset=offset
+        )
+    else:
+        raise ForbiddenError(
+            code=ErrorCode.FORBIDDEN,
+            message=(
+                "This endpoint lists the caller's own jobs, and an administrator "
+                "has none. Use the admin analytics endpoints instead."
+            ),
+        )
+
+    items = [
+        JobHistoryItem(
+            id=job.id,
+            status=job.status,
+            service_code=service.code,
+            service_name=service.name,
+            vehicle_id=job.vehicle_id,
+            vehicle_number=job.vehicle_number,
+            pickup_address_text=job.pickup_address_text,
+            issue_description=job.issue_description,
+            price_final=job.price_final,
+            requested_at=job.requested_at,
+            completed_at=job.completed_at,
+            cancelled_at=job.cancelled_at,
+            cancellation_reason=job.cancellation_reason,
+            # The partner for an owner, the owner for a partner — the repository
+            # returns whichever is the other side, so this reads the same for both.
+            counterpart_name=counterpart.name if counterpart else None,
+        )
+        for job, service, counterpart in rows
+    ]
+
+    log_event(
+        "job_history_read",
+        actor_role=identity.role,
+        actor_id=str(identity.local_id),
+        returned=len(items),
+        total=total,
+        outcome="success",
+    )
+
+    return JobHistoryResponse(
+        items=items,
+        total=total,
+        limit=limit,
+        offset=offset,
+        has_more=offset + len(items) < total,
     )

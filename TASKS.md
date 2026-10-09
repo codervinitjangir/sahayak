@@ -12,14 +12,25 @@ is high-risk per CLAUDE.md's testing-bar section.
 _Nothing in progress. Pick the top item from Next Up._
 
 ## Next Up
-_One named gap left. The frontend is still the critical path per `ROADMAP.md`, and the
-mechanic/owner interviews are overdue from week 3._
+_One build item left. The frontend is still the critical path per `ROADMAP.md`, the
+mechanic/owner interviews are overdue from week 3, and the mobile client has never been run on a
+device._
 
 - [ ] **Admin console** — three analytics endpoints shipped 2026-10-03 and nothing reads them;
       `web/AGENTS.md` promises `/admin/*`. Three read-only screens, no new backend work. See
       `TASKS-frontend.md` "Open Gaps".
 
 ## Backlog (not yet scheduled)
+- [ ] **Upfront pricing has no home in the schema** — found while building
+      `GET /services`. The `services` table has no price column, `jobs.price_estimate` is
+      nullable and **nothing in the application has ever written it**, so every job ever created
+      has a NULL estimate. Both frontends display prices from hardcoded local tables; those
+      numbers exist nowhere server-side and are not stored against a job, while
+      `mobile/AGENTS.md` lists "upfront fixed pricing" as a UI feature and the owner flow shows a
+      fare before dispatch. Either the prices are indicative copy — in which case the UI should
+      not imply they are quotes — or they are real, and then they need a column, a writer at job
+      creation, and a decision about who sets them. Not invented in the endpoint: it returns no
+      price rather than a fabricated one.
 - [ ] Payments — test-mode stub only, low priority
 - [ ] EV-specific breakdown flow — good-to-have, low priority
 - [ ] Unanswered-offer timeout (currently offers don't expire) — flagged, no task 
@@ -28,6 +39,47 @@ mechanic/owner interviews are overdue from week 3._
       scaling only, not needed for single-worker MVP
 
 ## Done (most recent first)
+- [x] `GET /api/v1/jobs` + `GET /api/v1/services` — 2026-10-08: the two reads both clients were
+      faking. Job history did not exist at all (mobile's `GET /jobs/me` 404'd and was removed on
+      2026-10-06, leaving no history screen on either client), and the service catalogue was a
+      hardcoded array in each frontend.
+      **History** returns the caller's own jobs, newest first, paginated **identically to
+      `GET /notifications`** — same field names, same `has_more`, because a client should not have
+      to learn two pagination styles in one API. An owner gets what they requested; a partner gets
+      what they **accepted**, identified by `accepted_at IS NOT NULL` and never by
+      `job_assignments.status`, which is overwritten as a job ends — a status predicate returns an
+      empty history for a partner who has completed work, which is the exact population the screen
+      exists for (ADR-021). An admin gets 403 rather than `[]`, which would read as "none yet" on
+      a screen that will never have any.
+      **No `role` query parameter**, departing from BACKEND_COMMUNICATION §3.1 which asked for
+      one: the role comes from the token, and accepting it from the query string means either
+      ignoring it or handing the ownership filter to the caller (principle 5). Flagged as a
+      deviation rather than silently implemented.
+      Three fields deliberately absent. No `counterpart_phone` — a name in your own history is
+      inside the release the assignment already made, but a phone number is an *action* and
+      belongs on `GET /jobs/{id}` where ADR-017's gate lives; a twenty-row page should not hand
+      out twenty phone numbers to render twenty dates. No `price_estimate`, because nothing writes
+      it. No `timeline`, which is the detail call's job.
+      **The catalogue** is unauthenticated: six seeded rows, no user data, needed by the landing
+      page and by the request grid before sign-in resolves. It returns **no price**, and that
+      surfaced a real gap now in the backlog — `services` has no price column and
+      `jobs.price_estimate` has never been written by anything, so the prices both UIs display
+      exist nowhere server-side. Returning an invented `estimated_price` would have made that look
+      authoritative, which is the one thing worse than its absence.
+      Web now calls both; `SEEDED_SERVICES` is demoted to a **fallback** so the grid still renders
+      for a driver whose request fails, and the two lists were verified identical against the
+      table. Mobile deliberately gained no methods — it has no history screen, and an unused call
+      would re-create the dead code removed on 2026-10-06.
+      11 unit tests + a live section in `check_job_lifecycle.py` (**76/76**, was 51) that reads
+      both roles against real rows and pins the one that matters: the completed job still names its
+      partner *after* its assignment status has been overwritten. The catalogue section diffs the
+      response against `SELECT code FROM services`, so API and table cannot drift apart silently.
+      While writing it I also replaced a vacuous assertion of my own — an `or True` in the
+      partner-rows check made it always pass; it now verifies each row has an accepted assignment
+      in the database. Full regression: **410 unit/api**, **788 live across fourteen harnesses**,
+      DB at baseline. Web 103 tests, typecheck clean, drift guard extended to 26 call sites.
+      HANDOFF §16. No new ADR — both are thin reads following established patterns.
+
 - [x] Mobile sign-in — 2026-10-07: mobile now obtains a real token the same way web does, so the
       last client that could not authenticate can. `authApi.sendOTP` returned `{success: true}`
       without calling anything, `authApi.verifyOTP` accepted any six digits and returned

@@ -6,7 +6,8 @@ import {
   getSupabase,
   signOut as supabaseSignOut,
 } from "../services/supabase";
-import type { BackendRole } from "../services/identity";
+import { identityService, type BackendRole } from "../services/identity";
+import { MOCK_USER_OWNER, MOCK_USER_PARTNER } from "../services/api";
 import type { User, UserRole } from "../types";
 
 interface AuthState {
@@ -37,25 +38,6 @@ interface AuthState {
   initSession: () => () => void;
 }
 
-/**
- * A placeholder profile so the mocked screens have a name and an avatar to render
- * before anyone signs in.
- *
- * It carries no token, and that distinction is the whole point: `token` is what
- * the request interceptor sends, and it is only ever set by a real Supabase
- * session. Until 2026-10-07 this store shipped `token: "mock_jwt_owner"` — which
- * went nowhere while the interceptor was commented out, and would have been sent
- * as a real bearer the moment it was not.
- */
-const DEFAULT_DEV_USER: User = {
-  id: "usr_mock_01",
-  name: "Arjun Sharma",
-  phone: "9876543210",
-  email: "arjun@example.com",
-  role: "owner",
-  createdAt: new Date().toISOString(),
-};
-
 /** The backend's role vocabulary, mapped onto this app's. */
 export function appRoleFor(role: BackendRole): UserRole {
   // "admin" has no mobile surface — there is no ops app — so an admin account
@@ -64,7 +46,7 @@ export function appRoleFor(role: BackendRole): UserRole {
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
-  user: DEFAULT_DEV_USER,
+  user: null,
   token: null,
   isAuthenticated: false,
   isLoading: false,
@@ -108,20 +90,42 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     void supabase.auth
       .getSession()
-      .then(({ data }) => {
+      .then(async ({ data }) => {
         if (cancelled) return;
         const restored = data.session?.access_token ?? null;
-        // Only overwrite when Supabase has something: a null here must not clear a
-        // token the sign-in screen has just stored, which is a race on first launch.
-        if (restored) get().setToken(restored);
+        if (restored) {
+          get().setToken(restored);
+          try {
+            const resolution = await identityService.resolve();
+            if (resolution.kind === "registered" && !cancelled) {
+              const role = appRoleFor(resolution.identity.role);
+              const mock = role === "partner" ? MOCK_USER_PARTNER : MOCK_USER_OWNER;
+              set({
+                user: {
+                  ...mock,
+                  id: resolution.identity.id,
+                  phone: data.session?.user?.phone || mock.phone,
+                  role,
+                },
+                isAuthenticated: true,
+              });
+            }
+          } catch {
+            // Leave user as is if offline
+          }
+        }
       })
       .finally(() => {
         if (!cancelled) set({ isRestoringSession: false });
       });
 
-    const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: subscription } = supabase.auth.onAuthStateChange((event, session) => {
       if (cancelled) return;
-      get().setToken(session?.access_token ?? null);
+      const nextToken = session?.access_token ?? null;
+      get().setToken(nextToken);
+      if (event === "SIGNED_OUT" || !nextToken) {
+        set({ user: null, token: null, isAuthenticated: false });
+      }
     });
 
     return () => {

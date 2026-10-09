@@ -92,7 +92,7 @@ export default function AccountView({
 
   const displayPhone = user?.phone
     ? user.phone.replace("+91", "").trim()
-    : "7355614478";
+    : "9876543210";
 
   return (
     <View style={styles.container}>

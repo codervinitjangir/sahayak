@@ -29,6 +29,7 @@ Cleanup runs at both ends and the run FAILS if the table counts do not return
 to their baseline.
 """
 import asyncio
+import json
 import sys
 import uuid
 from typing import Optional
@@ -595,6 +596,105 @@ async def main() -> None:
         check("the timeline has all six entries",
               len(detail.get("timeline") or []) == 6,
               f"{len(detail.get('timeline') or [])} entries")
+
+        # ------------------------------------------------------------------
+        section("7b. GET /jobs — the history both roles read")
+        # ------------------------------------------------------------------
+        # Live because a mocked repository cannot say whether the query runs. The
+        # owner page joins jobs → services → the accepted assignment → partners,
+        # and the partner page keys on job_assignments; neither had ever executed.
+        r = await c.get("/api/v1/jobs", headers=hdr(owner_token))
+        page = data_of(r)
+        check("owner history returns", r.status_code == 200, f"HTTP {r.status_code} {code_of(r)}")
+        check("it is paginated like the notification feed",
+              {"items", "total", "limit", "offset", "has_more"} <= set(page or {}),
+              str(sorted((page or {}).keys())))
+        ours = [j for j in page["items"] if (j.get("issue_description") or "").startswith(JOB_TAG)]
+        check("every job this run created is in the owner's history",
+              len(ours) >= 2, f"{len(ours)} tagged of {page['total']} total")
+        check("newest first", [j["requested_at"] for j in ours] ==
+              sorted((j["requested_at"] for j in ours), reverse=True))
+
+        finished = next((j for j in ours if j["id"] == job_e), None)
+        check("the completed job carries its service name, not just a code",
+              bool(finished and finished.get("service_code") and finished.get("service_name")),
+              str(finished and (finished.get("service_code"), finished.get("service_name"))))
+        check("…and names the partner who did it",
+              bool(finished and finished.get("counterpart_name")),
+              str(finished and finished.get("counterpart_name")))
+        # The point of joining through accepted_at rather than status: this job's
+        # assignment has been overwritten to 'completed', so a status predicate
+        # would have found no partner for exactly this row.
+        check("the counterpart survives the status being overwritten to 'completed'",
+              bool(finished and finished.get("counterpart_name")),
+              "assignment status is now 'completed'")
+        check("no phone number anywhere in the list payload (ADR-017)",
+              "phone" not in json.dumps(page).lower(),
+              "the substring 'phone' appears in the list body")
+        check("price_estimate is absent rather than null on every row",
+              finished is not None and "price_estimate" not in finished,
+              str(list(finished or {})))
+
+        r = await c.get("/api/v1/jobs?limit=1", headers=hdr(owner_token))
+        first = data_of(r)
+        check("limit is honoured", len(first["items"]) == 1, f"{len(first['items'])} items")
+        check("has_more is true while rows remain", first["has_more"] is True,
+              f"total={first['total']}")
+        r = await c.get(f"/api/v1/jobs?limit=1&offset={first['total'] - 1}",
+                        headers=hdr(owner_token))
+        check("has_more is false on the last page", data_of(r)["has_more"] is False)
+        r = await c.get("/api/v1/jobs?limit=500", headers=hdr(owner_token))
+        check("an over-large limit is refused rather than served", r.status_code == 422,
+              f"HTTP {r.status_code}")
+
+        # The partner side: accepted jobs only.
+        worker = by_id[str(assignment_row(job_e)["partner_id"])]
+        r = await c.get("/api/v1/jobs", headers=hdr(partners[worker]["token"]))
+        ppage = data_of(r)
+        check("partner history returns", r.status_code == 200,
+              f"HTTP {r.status_code} {code_of(r)}")
+        check("it contains the job they completed",
+              any(j["id"] == job_e for j in ppage["items"]), f"{ppage['total']} total")
+        pid = assignment_row(job_e)["partner_id"]
+        unaccepted = [
+            j["id"] for j in ppage["items"]
+            if not one("SELECT 1 FROM job_assignments WHERE job_id = %(j)s "
+                       "AND partner_id = %(p)s AND accepted_at IS NOT NULL",
+                       {"j": j["id"], "p": pid})
+        ]
+        check("every row is a job they accepted, not merely were offered",
+              unaccepted == [], f"unaccepted rows: {unaccepted[:3]}")
+        check("…and names the owner as the counterpart, from the other direction",
+              bool(next((j for j in ppage["items"] if j["id"] == job_e), {}).get("counterpart_name")),
+              str(next((j for j in ppage["items"] if j["id"] == job_e), {}).get("counterpart_name")))
+
+        r = await c.get("/api/v1/jobs")
+        check("no token -> 401", r.status_code == 401, f"HTTP {r.status_code}")
+
+        # ------------------------------------------------------------------
+        section("7c. GET /services — the catalogue both clients hardcoded")
+        # ------------------------------------------------------------------
+        r = await c.get("/api/v1/services")   # no token, on purpose
+        cat = data_of(r)
+        check("the catalogue is readable without a token", r.status_code == 200,
+              f"HTTP {r.status_code} {code_of(r)}")
+        check("it returns rows", (cat or {}).get("total", 0) > 0, f"{(cat or {}).get('total')} services")
+        codes = {s["code"] for s in cat["items"]}
+        check("it contains the code this harness dispatches with",
+              SERVICE_CODE in codes, f"{SERVICE_CODE} in {len(codes)} codes")
+        check("every row carries a code and a name",
+              all(s.get("code") and s.get("name") for s in cat["items"]))
+        check("the seeded towing services are grouped under a category",
+              any(s.get("category_code") for s in cat["items"]),
+              str({s.get("category_code") for s in cat["items"]}))
+        check("no price is invented — the schema has none to report",
+              all("price" not in k for s in cat["items"] for k in s),
+              "a price field appeared in the catalogue")
+        # Pinned against the drift this endpoint exists to end: the catalogue the
+        # API serves has to be the catalogue the database holds.
+        db_codes = {r["code"] for r in rows("SELECT code FROM services")}
+        check("the response matches the services table exactly", codes == db_codes,
+              f"api-only={codes - db_codes} db-only={db_codes - codes}")
 
     # ----------------------------------------------------------------------
     section("8. Cleanup and baseline")

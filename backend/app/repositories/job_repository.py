@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.job import Job, JobAssignment, JobStatusHistory
 from app.models.partner import Partner
+from app.models.user import User
 from app.models.service import Service
 
 # get_vehicle_by_id used to live here, because job creation was the only caller
@@ -349,3 +350,98 @@ async def set_assignment_status(
     assignment.status = status
     await db.flush()
     return assignment
+
+
+# ---------------------------------------------------------------- job history
+#
+# Two queries rather than one with a role branch inside it. The owner's history
+# and the partner's history are different questions about different tables —
+# "jobs I requested" is a column on jobs, "jobs I worked" is a row in
+# job_assignments — and a single query carrying both would need a predicate that
+# is true for whichever id was supplied, which is how an ownership filter
+# accidentally stops filtering.
+
+
+async def count_jobs_for_user(db: AsyncSession, user_id: uuid.UUID) -> int:
+    """How many jobs this owner has ever requested."""
+    result = await db.execute(
+        select(func.count()).select_from(Job).where(Job.user_id == user_id)
+    )
+    return int(result.scalar_one())
+
+
+async def list_jobs_for_user(
+    db: AsyncSession, user_id: uuid.UUID, *, limit: int, offset: int
+) -> Sequence[tuple[Job, Service, Optional[Partner]]]:
+    """One page of an owner's jobs, newest first, with service and partner.
+
+    The partner join goes through the *accepted* assignment, and `accepted_at IS
+    NOT NULL` is what identifies it — not `job_assignments.status = 'accepted'`.
+    That column is overwritten as a job ends: completing a job moves its accepted
+    assignment to 'completed' and cancelling moves it off 'offered', so a status
+    predicate finds no partner for exactly the finished jobs a history screen is
+    made of. Measured in the admin-analytics work; see ADR-021.
+
+    An outer join, because most statuses have no partner at all: a job in
+    `requested`, `matching` or `no_match_found` was never assigned, and a history
+    that omitted those would be a history of successes.
+    """
+    accepted = (
+        select(JobAssignment.job_id, JobAssignment.partner_id)
+        .where(JobAssignment.accepted_at.isnot(None))
+        .subquery()
+    )
+    result = await db.execute(
+        select(Job, Service, Partner)
+        .join(Service, Service.id == Job.service_id)
+        .outerjoin(accepted, accepted.c.job_id == Job.id)
+        .outerjoin(Partner, Partner.id == accepted.c.partner_id)
+        .where(Job.user_id == user_id)
+        .order_by(Job.requested_at.desc(), Job.id.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    return result.all()
+
+
+async def count_jobs_for_partner(db: AsyncSession, partner_id: uuid.UUID) -> int:
+    """How many jobs this partner has ever accepted."""
+    result = await db.execute(
+        select(func.count())
+        .select_from(JobAssignment)
+        .where(
+            JobAssignment.partner_id == partner_id,
+            JobAssignment.accepted_at.isnot(None),
+        )
+    )
+    return int(result.scalar_one())
+
+
+async def list_jobs_for_partner(
+    db: AsyncSession, partner_id: uuid.UUID, *, limit: int, offset: int
+) -> Sequence[tuple[Job, Service, Optional[User]]]:
+    """One page of a partner's accepted jobs, newest first, with the owner.
+
+    Keyed on the assignment, not the job: a partner's history is the set of jobs
+    they *took*, so an offer they declined or never answered must not appear. Again
+    `accepted_at IS NOT NULL` rather than a status, for the reason above — and here
+    it matters twice over, since a partner's completed work is precisely the rows
+    whose status has been overwritten.
+
+    The owner join is inner: every job has a user_id, and a job without one would
+    be a referential break rather than a state to render.
+    """
+    result = await db.execute(
+        select(Job, Service, User)
+        .join(JobAssignment, JobAssignment.job_id == Job.id)
+        .join(Service, Service.id == Job.service_id)
+        .join(User, User.id == Job.user_id)
+        .where(
+            JobAssignment.partner_id == partner_id,
+            JobAssignment.accepted_at.isnot(None),
+        )
+        .order_by(Job.requested_at.desc(), Job.id.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    return result.all()

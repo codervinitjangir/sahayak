@@ -6,6 +6,8 @@ import {
   Service,
   ServiceCategory,
   JobRatingsResponse,
+  ServiceCatalogResponse,
+  JobHistoryPage,
 } from '../types/jobs';
 
 /**
@@ -192,11 +194,77 @@ export const jobsService = {
     }
   },
 
+  /**
+   * The service catalogue, from the database rather than from this file.
+   *
+   * `GET /api/v1/services` is unauthenticated, so this works on the landing page
+   * and while sign-in is still resolving. `SEEDED_SERVICES` stays as a *fallback*,
+   * not as the source: this is an emergency app, and a driver on a roadside should
+   * see the service grid even if the catalogue request fails. The two lists match
+   * today (verified against the `services` table — same six codes, same three
+   * categories), so the fallback degrades to the same thing rather than to
+   * something different.
+   *
+   * **Prices come from the local table, because the backend has none.** The
+   * `services` table has no price column and `jobs.price_estimate` is never
+   * written, so `estimated_price` exists nowhere server-side. These numbers are
+   * indicative UI copy; nothing stores them against a job, and a completed job
+   * reports only the `price_final` its partner entered. Tracked in TASKS.md.
+   */
   async listServices(): Promise<Service[]> {
-    return Promise.resolve(SEEDED_SERVICES);
+    try {
+      const res = await apiClient<ServiceCatalogResponse>('/services', { method: 'GET' });
+      const priceByCode = new Map(SEEDED_SERVICES.map((s) => [s.code, s.estimated_price]));
+      return res.data.items.map((item) => ({
+        id: item.id,
+        category_id: item.category_id ?? 0,
+        code: item.code,
+        name: item.name,
+        requires_vehicle_equipment: item.requires_vehicle_equipment,
+        category:
+          item.category_code && item.category_id
+            ? { id: item.category_id, code: item.category_code, name: item.category_name ?? '' }
+            : undefined,
+        estimated_price: priceByCode.get(item.code),
+      }));
+    } catch {
+      // Offline, or the backend is down. The grid still renders.
+      return SEEDED_SERVICES;
+    }
   },
 
+  /**
+   * Categories, derived from the same call rather than fetched separately.
+   *
+   * There is no `GET /service-categories`: a category only ever appears attached
+   * to a service, so a second endpoint would be a second thing to keep in step
+   * with the first.
+   */
   async listServiceCategories(): Promise<ServiceCategory[]> {
-    return Promise.resolve(SEEDED_SERVICE_CATEGORIES);
+    try {
+      const services = await this.listServices();
+      const byId = new Map<number, ServiceCategory>();
+      for (const service of services) {
+        if (service.category) byId.set(service.category.id, service.category);
+      }
+      return byId.size > 0 ? [...byId.values()] : SEEDED_SERVICE_CATEGORIES;
+    } catch {
+      return SEEDED_SERVICE_CATEGORIES;
+    }
+  },
+
+  /**
+   * The caller's own job history, newest first — owner or partner, decided by the
+   * token. There is deliberately no `role` parameter: the backend reads the role
+   * from the token and would have to either ignore such a parameter or let a
+   * caller choose whose jobs to list.
+   */
+  async listMyJobs(options: { limit?: number; offset?: number } = {}): Promise<JobHistoryPage> {
+    const params = new URLSearchParams();
+    if (options.limit !== undefined) params.set('limit', String(options.limit));
+    if (options.offset !== undefined) params.set('offset', String(options.offset));
+    const query = params.toString() ? `?${params.toString()}` : '';
+    const res = await apiClient<JobHistoryPage>(`/jobs${query}`, { method: 'GET' });
+    return res.data;
   },
 };

@@ -336,3 +336,87 @@ class DispatchAssignmentResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+
+
+class JobHistoryItem(BaseModel):
+    """One row of GET /api/v1/jobs — a job the caller was party to.
+
+    Deliberately not JobDetailResponse. That shape carries the full status
+    timeline and the assignment's contact details, which a list does not need and
+    should not multiply: returning it per row would mean a twenty-row page hands
+    out twenty phone numbers to render twenty dates.
+
+    **What identity this does and does not carry.** `counterpart_name` is the other
+    side of the job — the partner for an owner, the owner for a partner — and there
+    is deliberately no `counterpart_phone`. ADR-017's rule is that contact release
+    follows the assignment, and for a job that reached an assignment it already
+    released; a name in your own history is within that. A phone number is not a
+    label, it is an action, and the action belongs on the screen that performs it —
+    `GET /jobs/{job_id}`, where the gate already lives. So a history row can say
+    "Ramesh Kumar helped you" and a client that wants to call him reads the job.
+
+    `price_final` is included and `price_estimate` is not, because the estimate is
+    never written: `jobs.price_estimate` is nullable and nothing in the application
+    sets it. Returning a column that is NULL on every row would read as "this job
+    had no estimate" rather than "this system has no estimates".
+    """
+
+    id: uuid.UUID
+    status: Literal[
+        "requested",
+        "matching",
+        "assigned",
+        "partner_en_route",
+        "in_progress",
+        "completed",
+        "cancelled",
+        "no_match_found",
+    ]
+    service_code: str
+    service_name: str
+    vehicle_id: Optional[uuid.UUID] = None
+    vehicle_number: Optional[str] = None
+    pickup_address_text: Optional[str] = None
+    issue_description: Optional[str] = None
+    price_final: Optional[Decimal] = Field(
+        None, description="Set when a partner completes the job; null otherwise."
+    )
+    requested_at: datetime
+    completed_at: Optional[datetime] = None
+    cancelled_at: Optional[datetime] = None
+    cancellation_reason: Optional[str] = None
+    counterpart_name: Optional[str] = Field(
+        None,
+        description=(
+            "The partner's name for an owner, the owner's name for a partner. "
+            "Null when no partner ever accepted — requested, matching and "
+            "no_match_found jobs have no counterpart. No phone number here by "
+            "design: read GET /jobs/{job_id} for contact details (ADR-017)."
+        ),
+    )
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class JobHistoryResponse(BaseModel):
+    """A page of the caller's jobs, newest first.
+
+    Field-for-field the shape NotificationListResponse uses, down to `has_more`.
+    Two paginated reads in one API that page differently is two things a client has
+    to learn, and the second one is always the one someone gets wrong.
+    """
+
+    items: List[JobHistoryItem]
+    total: int = Field(
+        ...,
+        description=(
+            "The caller's jobs in total, not on this page. For a partner this "
+            "counts accepted jobs only — offers declined or never answered are "
+            "not work they did."
+        ),
+    )
+    limit: int
+    offset: int
+    has_more: bool = Field(
+        ..., description="True when offset + len(items) < total."
+    )

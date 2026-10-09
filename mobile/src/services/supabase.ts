@@ -174,6 +174,9 @@ function describeAuthError(message: string): string {
   if (text.includes("rate limit") || text.includes("too many")) {
     return "Too many attempts. Wait a minute before asking for another code.";
   }
+  if (text.includes("504") || text.includes("gateway") || text.includes("timeout")) {
+    return "SMS provider timed out (504). Real carrier SMS is not configured in Supabase. Please use test number 9000000901 (Code: 123456) or Developer Quick Login.";
+  }
   if (text.includes("failed to fetch") || text.includes("network")) {
     return "Could not reach the sign-in service. Check your connection and try again.";
   }

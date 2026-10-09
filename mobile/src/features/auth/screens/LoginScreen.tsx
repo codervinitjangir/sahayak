@@ -42,7 +42,7 @@ type LoginStep = "phone" | "otp";
 export default function LoginScreen() {
   const [role, setRole] = useState<UserRole>("owner");
   const [step, setStep] = useState<LoginStep>("phone");
-  const [phone, setPhone] = useState("9876543210");
+  const [phone, setPhone] = useState("9000000901");
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [loading, setLoading] = useState(false);
   const [resendTimer, setResendTimer] = useState(30);
@@ -57,6 +57,7 @@ export default function LoginScreen() {
     const next: UserRole = role === "owner" ? "partner" : "owner";
     setRole(next);
     setStep("phone");
+    setPhone(next === "owner" ? "9000000901" : "9000000902");
     setOtp(["", "", "", "", "", ""]);
   };
 
@@ -269,6 +270,18 @@ export default function LoginScreen() {
                   autoFocus={false}
                 />
               </View>
+
+              {/* Quick Supabase Test Number Chip */}
+              <TouchableOpacity
+                style={[styles.prefillChip, { marginTop: 10, alignSelf: "flex-start" }]}
+                onPress={() => setPhone(isOwner ? "9000000901" : "9000000902")}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="sparkles" size={13} color={Colors.brand700} />
+                <Text style={styles.prefillChipText}>
+                  Test Number: {isOwner ? "9000000901" : "9000000902"} (OTP: 123456)
+                </Text>
+              </TouchableOpacity>
 
               {/* Primary Continue Button */}
               <TouchableOpacity

@@ -20,7 +20,7 @@ matching error envelope by app/middlewares/error_handlers.py.
 import uuid
 from typing import Optional
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api import API_V1_PREFIX
@@ -28,6 +28,7 @@ from app.config.database import get_db
 from app.schemas.common import ApiResponse, ErrorResponse, envelope
 from app.schemas.job import (
     JobCancelRequest,
+    JobHistoryResponse,
     JobCancelResponse,
     JobCreateRequest,
     JobDetailResponse,
@@ -38,6 +39,12 @@ from app.schemas.job import (
 from app.services import job_service
 from app.services.auth_service import Identity
 from app.utils.auth import get_current_identity, require_partner, require_user
+
+# Same caps as the notification feed. A history is unbounded in principle — it
+# grows for the life of an account — so an uncapped limit is a request that gets
+# slower forever and a page size nobody chose.
+_DEFAULT_PAGE_SIZE = 20
+_MAX_PAGE_SIZE = 100
 
 # Declared on the router so the OpenAPI document advertises the real error
 # envelope. Without this, /docs would still show FastAPI's default
@@ -88,6 +95,52 @@ async def create_job(
     """
     job = await job_service.create_job(db, payload, identity.local_id)
     return envelope(job)
+
+
+@router.get(
+    "",
+    response_model=ApiResponse[JobHistoryResponse],
+    status_code=status.HTTP_200_OK,
+    summary="List the caller's own jobs, newest first",
+)
+async def list_jobs(
+    limit: int = Query(
+        _DEFAULT_PAGE_SIZE,
+        ge=1,
+        le=_MAX_PAGE_SIZE,
+        description=f"Rows per page, 1–{_MAX_PAGE_SIZE}.",
+    ),
+    offset: int = Query(0, ge=0, description="Rows to skip, for the next page."),
+    identity: Identity = Depends(get_current_identity),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[JobHistoryResponse]:
+    """The caller's job history: what an owner requested, or what a partner worked.
+
+    Registered **before** `/{job_id}` is not required — the paths are distinct and
+    FastAPI matches the literal "" before a parameterised segment either way — but
+    it is placed here so the two reads on this prefix are read together.
+
+    `get_current_identity`, not `require_user`: both roles have a history, and they
+    are different queries. An admin is refused with 403, because an admins row is
+    party to no job and an empty list would read as "none yet" on a screen that
+    will never have any.
+
+    **No `role` parameter**, departing from the shape the frontend asked for: the
+    role comes from the token, and accepting it from the query string would hand
+    the ownership filter to the caller. See `job_service.list_jobs`.
+
+    Paginated by `limit`/`offset`, identical to `GET /api/v1/notifications` — same
+    field names, same `has_more`. A client should not have to learn two pagination
+    styles in one API.
+
+    A partner's list counts and returns **accepted** jobs only. An offer they
+    declined or never answered is not work they did, and it is identified by
+    `accepted_at`, never by `job_assignments.status` — that column is overwritten
+    as a job ends, so a status predicate would miss precisely the finished jobs a
+    history is made of (ADR-021).
+    """
+    history = await job_service.list_jobs(db, identity, limit=limit, offset=offset)
+    return envelope(history)
 
 
 @router.get(

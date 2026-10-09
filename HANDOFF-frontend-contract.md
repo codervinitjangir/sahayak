@@ -2058,3 +2058,120 @@ phone → `IDENTITY_NOT_LINKED` → `link-auth` → resolves. Web: **103 tests**
 production build clean. Full regression: **385 unit/api** and **756 live assertions across
 fourteen harnesses**, database back to baseline.
 
+
+---
+
+## 16. Job history and the service catalogue — the two reads both clients were faking (2026-10-08)
+
+Both existed only as hardcoded arrays in the frontends. Now they come from the database.
+
+### 16.1 `GET /api/v1/jobs` — the caller's own job history
+
+```
+GET /api/v1/jobs?limit=20&offset=0
+```
+
+Paginated **identically to `GET /api/v1/notifications`** — same field names, same `has_more`.
+A client should not have to learn two pagination styles in one API.
+
+```json
+{ "data": {
+    "items": [{
+      "id": "…", "status": "completed",
+      "service_code": "battery_jumpstart", "service_name": "Battery Jumpstart",
+      "vehicle_id": "…", "vehicle_number": "GJ-01-AB-1234",
+      "pickup_address_text": "SG Highway, Ahmedabad",
+      "issue_description": "battery dead",
+      "price_final": "450.00",
+      "requested_at": "…", "completed_at": "…",
+      "cancelled_at": null, "cancellation_reason": null,
+      "counterpart_name": "Ramesh Kumar"
+    }],
+    "total": 7, "limit": 20, "offset": 0, "has_more": false } }
+```
+
+**Who gets what.** An owner gets the jobs they requested. A partner gets the jobs they
+**accepted** — an offer they declined or never answered is not work they did. An admin gets
+`403 FORBIDDEN`, because an admins row is party to no job and `[]` would read as "none yet" on a
+screen that will never have any.
+
+**There is no `role` query parameter**, and this departs from BACKEND_COMMUNICATION §3.1, which
+asked for `?role=owner|partner`. The role comes from the token. Accepting it from the query
+string means either ignoring it — a parameter that silently does nothing is worse than none — or
+honouring it, which hands the ownership filter to the caller. If you need both views, hold both
+tokens; you then already have both.
+
+**Three things deliberately absent:**
+
+| Absent | Why |
+|---|---|
+| `counterpart_phone` | A name in your own history is inside the release the assignment already made. A phone number is an *action*, and it belongs on the screen that performs it — `GET /jobs/{job_id}`, where ADR-017's gate lives. A twenty-row page should not hand out twenty phone numbers to render twenty dates |
+| `price_estimate` | Nothing in the backend ever writes it. A column that is NULL on every row reads as "this job had no estimate" rather than "this system has no estimates" |
+| `timeline` | That is `GET /jobs/{job_id}`. A list does not need six history rows per item |
+
+`counterpart_name` is null for `requested`, `matching` and `no_match_found` — those were never
+assigned. They still appear in the list: a history that dropped them would be a history of
+successes.
+
+`limit` is capped at 100; over that is a `422`, not a slow success.
+
+### 16.2 `GET /api/v1/services` — the catalogue
+
+```
+GET /api/v1/services        (no token required)
+```
+
+```json
+{ "data": {
+    "items": [{
+      "id": 3, "code": "battery_jumpstart", "name": "Battery Jumpstart",
+      "requires_vehicle_equipment": false,
+      "category_id": 2, "category_code": "mechanical", "category_name": "Mechanical"
+    }],
+    "total": 6 } }
+```
+
+**Unauthenticated, on purpose.** It holds no user data — six seeded rows, identical for every
+caller, writable only by migration. The landing page lists services and the request screen
+renders its grid while sign-in is still resolving, so requiring a token would make the catalogue
+unavailable exactly where it is first needed. `POST /api/v1/partners` is already open for the
+same shape of reason.
+
+`code` is the field that matters: it is the value `POST /jobs` and
+`POST /partners/{id}/services` accept. Unpaginated — a dozen reference rows that change by
+migration, not by use; fetch it once at startup and keep it.
+
+**It carries no price, and that is not an oversight.** The `services` table has no price column,
+`jobs.price_estimate` is nullable, and **nothing in the application has ever written it**. So
+there is no pricing data on this side to return. The web client now takes codes, names and
+categories from this endpoint and keeps its own local table **only** for `estimated_price` —
+those numbers are indicative UI copy that exist nowhere server-side and are not stored against a
+job. A completed job reports only the `price_final` its partner entered. **If upfront pricing is
+meant to be real, it needs a schema column and a decision about who sets it** — flagged in
+TASKS.md, not invented here.
+
+### 16.3 What changed in `web/`
+
+`jobsService.listServices()` and `listServiceCategories()` now call the API, with the existing
+`SEEDED_SERVICES` array demoted to a **fallback** rather than the source — this is an emergency
+app, and the service grid should still render for a driver whose catalogue request fails. The two
+lists match today (verified against the `services` table: same six codes, same three categories),
+so the fallback degrades to the same thing rather than to something different.
+`jobsService.listMyJobs({limit, offset})` is new.
+
+Mobile deliberately gained **no** methods for these: it has no history screen, and adding an
+unused call would re-create the dead code removed on 2026-10-06. Wire them when the screens exist.
+
+### 16.4 Verified by
+
+`tests/unit/test_job_history.py` (11) and a live section in `check_job_lifecycle.py`
+(**76/76**, was 51) that reads both roles' histories against real rows — including the assertion
+that matters most: the completed job still names its partner **after** `job_assignments.status`
+has been overwritten to `'completed'`, because the join keys on `accepted_at`. A status predicate
+would find no partner for exactly the finished jobs a history is made of (ADR-021). The catalogue
+section compares the response against `SELECT code FROM services` so the API and the table cannot
+drift apart silently.
+
+Full regression: **410 unit/api**, **788 live assertions across fourteen harnesses**, database
+back to baseline. Web **103 tests** and typecheck clean; the route-drift guard now covers both new
+calls (26 web call sites, was 23).

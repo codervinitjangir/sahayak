@@ -11,6 +11,7 @@ from app.api.jobs import router as jobs_router
 from app.api.notifications import router as notifications_router
 from app.api.partners import router as partners_router
 from app.api.ratings import router as ratings_router
+from app.api.services import router as services_router
 from app.api.users import router as users_router
 from app.api.vehicles import router as vehicles_router
 from app.config.redis_client import close_redis
@@ -91,6 +92,11 @@ app.include_router(ratings_router)
 # Include the notifications router (the in-app feed both sides poll). Its own
 # prefix, /api/v1/notifications, shared with nothing.
 app.include_router(notifications_router)
+
+# Include the services router (/api/v1/services). Unauthenticated: a seeded
+# reference table with no user data, which both frontends need before a token
+# exists — see the module docstring for the argument.
+app.include_router(services_router)
 
 # Include the admin analytics router (/api/v1/admin/analytics). Last, and under
 # its own /admin prefix rather than beside the resource each report reads: the

@@ -141,3 +141,53 @@ export interface JobRatingsResponse {
   can_rate: boolean;
 }
 
+
+/** One row of `GET /api/v1/services`. No price — the backend holds none. */
+export interface ServiceCatalogItem {
+  id: number;
+  code: string;
+  name: string;
+  requires_vehicle_equipment: boolean;
+  category_id?: number | null;
+  category_code?: string | null;
+  category_name?: string | null;
+}
+
+export interface ServiceCatalogResponse {
+  items: ServiceCatalogItem[];
+  total: number;
+}
+
+/**
+ * One row of `GET /api/v1/jobs` — a job the caller was party to.
+ *
+ * `counterpart_name` is the partner for an owner and the owner for a partner.
+ * There is no phone number here by design: contact details are released on
+ * `GET /jobs/{id}`, where ADR-017's gate lives. And no `price_estimate`, because
+ * nothing server-side ever writes one.
+ */
+export interface JobHistoryItem {
+  id: string;
+  status: JobStatus;
+  service_code: string;
+  service_name: string;
+  vehicle_id?: string | null;
+  vehicle_number?: string | null;
+  pickup_address_text?: string | null;
+  issue_description?: string | null;
+  price_final?: number | string | null;
+  requested_at: string;
+  completed_at?: string | null;
+  cancelled_at?: string | null;
+  cancellation_reason?: string | null;
+  counterpart_name?: string | null;
+}
+
+/** Paginated exactly like the notification feed — same fields, same `has_more`. */
+export interface JobHistoryPage {
+  items: JobHistoryItem[];
+  total: number;
+  limit: number;
+  offset: number;
+  has_more: boolean;
+}

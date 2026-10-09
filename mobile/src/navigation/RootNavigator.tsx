@@ -142,13 +142,27 @@ function PartnerNavigator() {
   );
 }
 
+// ─── Auth Stack Navigator ─────────────────────────────────────────────────────
+function AuthNavigator() {
+  return (
+    <AuthStack.Navigator
+      screenOptions={{ headerShown: false }}
+      initialRouteName="Login"
+    >
+      <AuthStack.Screen name="Login" component={LoginScreen} />
+    </AuthStack.Navigator>
+  );
+}
+
 // ─── Root Navigator ───────────────────────────────────────────────────────────
 export default function RootNavigator() {
   const { user } = useAuthStore();
 
   return (
     <NavigationContainer>
-      {user?.role === "partner" ? (
+      {!user ? (
+        <AuthNavigator />
+      ) : user.role === "partner" ? (
         <PartnerNavigator />
       ) : (
         <OwnerNavigator />
@@ -156,4 +170,5 @@ export default function RootNavigator() {
     </NavigationContainer>
   );
 }
+
 
