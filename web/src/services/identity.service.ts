@@ -66,10 +66,7 @@ export function homeRouteForRole(role: BackendRole): string {
     case 'partner':
       return '/partner/dashboard';
     case 'admin':
-      // No admin console is built yet, so an ops account lands on the owner view
-      // rather than a 404. The three analytics endpoints exist on the backend and
-      // nothing in this app reads them — tracked in TASKS-frontend.md.
-      return '/owner';
+      return '/admin/overview';
     case 'user':
     default:
       return '/owner';

@@ -12,6 +12,7 @@ import { PartnerSignup } from '../pages/partner/PartnerSignup';
 import { PartnerConsole } from '../pages/partner/PartnerConsole';
 import { OffersPage } from '../pages/partner/OffersPage';
 import { ActiveJobPage } from '../pages/partner/ActiveJobPage';
+import { AdminConsole } from '../pages/admin/AdminConsole';
 
 export const AppRoutes: React.FC = () => {
   return (
@@ -43,16 +44,13 @@ export const AppRoutes: React.FC = () => {
       <Route path="/partner" element={<Navigate to="/partner/dashboard" replace />} />
       <Route path="/partner/*" element={<Navigate to="/partner/dashboard" replace />} />
 
-      {/* Admin placeholder */}
-      <Route
-        path="/admin/*"
-        element={
-          <div className="p-8 text-center">
-            <h2 className="text-xl font-bold">Admin Portal</h2>
-            <p className="text-sm text-slate-500">Admin interface will be built in the next pass.</p>
-          </div>
-        }
-      />
+      {/* Ops console over the three admin analytics endpoints.
+          Not wrapped in RequireRole: that guard reads client-side role state and
+          would bounce an admin whose local role has not been set yet, while
+          protecting nothing — `require_admin` on each endpoint is the real
+          boundary, and AdminConsole renders its 403 explicitly. */}
+      <Route path="/admin" element={<Navigate to="/admin/overview" replace />} />
+      <Route path="/admin/:tab" element={<AdminConsole />} />
 
       {/* Fallback */}
       <Route path="*" element={<Navigate to="/owner" replace />} />

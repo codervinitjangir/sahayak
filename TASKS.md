@@ -12,13 +12,16 @@ is high-risk per CLAUDE.md's testing-bar section.
 _Nothing in progress. Pick the top item from Next Up._
 
 ## Next Up
-_One build item left. The frontend is still the critical path per `ROADMAP.md`, the
-mechanic/owner interviews are overdue from week 3, and the mobile client has never been run on a
-device._
+_No build items queued. What remains is not code:_
 
-- [ ] **Admin console** — three analytics endpoints shipped 2026-10-03 and nothing reads them;
-      `web/AGENTS.md` promises `/admin/*`. Three read-only screens, no new backend work. See
-      `TASKS-frontend.md` "Open Gaps".
+- [ ] **5–8 mechanic + 5–8 owner interviews** — overdue since end of week 3, and per `ROADMAP.md`
+      the one item that cannot be recovered by working faster later. The dispatch radius, the
+      concurrency cap and the scoring weights are currently defended by engineering reasoning
+      only.
+- [ ] **One mobile run on a real device** with a configured Supabase test number. The URL polyfill
+      and the AsyncStorage session typecheck and bundle, then fail on hardware or do not.
+- [ ] **Look at the admin console in a browser** — built and tested, but the preview tool was
+      unavailable, so its layout has never been seen by anyone.
 
 ## Backlog (not yet scheduled)
 - [ ] **Upfront pricing has no home in the schema** — found while building
@@ -39,6 +42,43 @@ device._
       scaling only, not needed for single-worker MVP
 
 ## Done (most recent first)
+- [x] Admin console — 2026-10-09: three read-only panels (`/admin/{overview,dispatch,matching}`)
+      over the analytics endpoints that shipped 2026-10-03 and that nothing read. No backend
+      change; `homeRouteForRole('admin')` now routes an ops account here rather than to the owner
+      app.
+      **The chart palette was computed, and the first attempt failed.** Validating against
+      Sahayak's own surface (`#FFFFFF`) rejected `#0F766E` — the primary brand token — as **below
+      the chroma floor (0.086 < 0.1): it reads gray as a chart fill.** Snapping one step up its
+      own ramp to `#0D9488` (brand-600) passes all five checks, validated under `--pairs all`
+      rather than adjacent-only because a three-segment stack puts every pair beside another.
+      Three categorical slots and no more: a fourth puts yellow next to orange, which fails the
+      all-pairs floors.
+      Forms chosen by what the data is, not by habit: hero figures for the three headline rates
+      (a one-bar chart is a stat tile in costume); pipeline-ordered bars for the funnel, because
+      sorting by magnitude destroys the only thing the sequence says; **a range strip, not a
+      histogram**, for the duration summaries, because the backend returns five numbers and no
+      distribution so bins would be invented; an ordinal ramp for acceptance rank, since those
+      bins are ordered; grouped bars on **one shared 0–1 axis** for the two strategy arms, because
+      a second y-scale invents a correlation; diverging bars with a gray midpoint for the signed
+      component deltas. Constant components are drawn recessive and **labelled**, never
+      recoloured — a third hue would make "not applicable" look like a category.
+      Every chart ships a table twin and, above two series, a legend; one filter row scopes all
+      three panels; the nine-code `notes[]` vocabulary renders verbatim, which is ADR-021's whole
+      point.
+      **Two findings while building it.** A 403 was being *retried* — React Query's `retry: 1`
+      applied to "this account is not an admin", a refusal that will never change, so the reader
+      watched a spinner for a backoff interval first; 4xx is now never retried. And `RequireRole`
+      is deliberately not wrapping these routes: it reads client-side role state, so it would
+      bounce an admin whose local role was unset while protecting nothing — `require_admin` is the
+      real boundary and the console renders the 403 itself, saying plainly that admin access is
+      granted in SQL and cannot be self-claimed (ADR-020).
+      12 component tests (**115 web total**), typecheck and build clean, 410 backend unit
+      unchanged, DB at baseline. Live probe through the dev proxy with a real provisioned admin:
+      **19/19**, confirming every nested field path the panels read against the running server and
+      that no `*rate*` field falls outside 0..1.
+      **Unverified and flagged: the visual layout.** The browser preview tool was unavailable all
+      session, and jsdom has no layout engine, so label collisions, overflow and geometry have
+      never been looked at. `TASKS.md` Next Up carries it as an open item.
 - [x] `GET /api/v1/jobs` + `GET /api/v1/services` — 2026-10-08: the two reads both clients were
       faking. Job history did not exist at all (mobile's `GET /jobs/me` 404'd and was removed on
       2026-10-06, leaving no history screen on either client), and the service catalogue was a

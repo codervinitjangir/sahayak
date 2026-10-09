@@ -8,6 +8,77 @@
 
 ## Done
 
+### [x] Admin console — 2026-10-09
+
+Three read-only panels over the analytics endpoints that shipped on 2026-10-03 and that nothing
+read: `/admin/overview`, `/admin/dispatch`, `/admin/matching`. `homeRouteForRole('admin')` now
+sends an ops account here instead of to the owner app.
+
+**The palette was computed, not chosen.** Running the data-viz validator against Sahayak's own
+surface (`#FFFFFF`) failed on the first attempt: **`#0F766E` — the primary brand token — is below
+the chroma floor (0.086 < 0.1) and reads gray as a chart fill.** Snapping one step up its own
+ramp to `#0D9488` (brand-600) passes all five checks, and the three-slot set clears them under
+`--pairs all`, not merely adjacent, because a three-segment stack puts every pair beside another:
+
+```
+node scripts/validate_palette.js "#0D9488,#eb6834,#4a3aa7" --mode light --surface "#FFFFFF" --pairs all
+  Lightness band PASS · Chroma floor PASS · CVD ΔE 10.7 · normal-vision ΔE 26.8 · contrast PASS
+```
+
+Three categorical slots and no more. A fourth would put yellow beside orange, which fails the
+all-pairs floors — so if a chart here ever needs more series the answer is small multiples, never
+a generated hue. No dark mode: the app has no dark theme, and shipping dark steps nobody can
+select would be dead tokens.
+
+**Form decisions, each driven by what the data is:**
+
+| Data | Form | Why not the obvious thing |
+|---|---|---|
+| Completion / acceptance / divergence rate | **hero figure**, one per panel | A one-bar bar chart is a stat tile wearing a costume |
+| Jobs by status | horizontal bars, **pipeline order** | Sorting by magnitude would destroy the only thing the sequence says |
+| Partner supply (7 counts) | **stat tiles** | Seven bars would imply a shared axis they do not share |
+| Durations (min/p50/p95/max/mean) | **range strip** | Not a histogram — the backend returns five summary numbers and no distribution, so bins would be invented |
+| Offer outcomes, no-match split | stacked bar, 2px surface gaps | A donut makes close values hard to compare |
+| Acceptance rank 1/2/3+ | bars on an **ordinal ramp** | Ordered bins, so the ramp carries the order; a categorical palette would imply three unrelated identities |
+| Two strategy arms × 4 components | **grouped bars, one shared 0–1 axis** | Both arms are mean scores, so one scale is honest. A second y-axis would invent a correlation |
+| Component deltas | **diverging bars**, gray midpoint | Signed values; the midpoint must read as "nothing", not as a third category |
+
+Constant components are drawn recessive **and labelled `constant`** rather than recoloured — a
+third hue would make "not applicable" look like a category, and the backend excludes them from
+`driver` precisely because a component that never varied cannot have driven anything.
+
+**Every chart has a table twin** (the Table toggle), because a tooltip must never be the only way
+to read a value, and every chart with two or more series carries a legend. Text never wears the
+series colour — the swatch beside it carries identity. One filter row scopes all three panels;
+per-chart date pickers are how two charts end up showing different windows.
+
+**The `notes[]` vocabulary is rendered verbatim**, code and detail, in an amber panel on each
+tab. That is ADR-021's whole argument: a number ships with its caveat attached rather than being
+read beside a document nobody has open.
+
+**Two things found while building it:**
+
+1. **A 403 was being retried.** React Query's `retry: 1` applied to "this account is not an
+   admin" — a refusal that will never change — so the reader watched a spinner for a backoff
+   interval first. 4xx is now never retried; 5xx and network failures still get one attempt.
+2. `RequireRole` is deliberately **not** wrapping these routes. It reads client-side role state
+   and would bounce an admin whose local role had not been set, while protecting nothing —
+   `require_admin` on each endpoint is the real boundary, and the console renders the 403 itself
+   with the honest message that admin access is granted in SQL and cannot be self-claimed.
+
+**Verified:** 12 component tests (115 web total), typecheck and build clean, plus a live probe
+through the dev proxy with a real provisioned admin — **19/19** — confirming every nested field
+path the panels read (`conversion.rate`, `attribution.deltas`, both acceptance rates, both
+no-match rates) against the running server, and that no `*rate*` field falls outside 0..1.
+
+**Not verified: the visual layout.** The browser preview tool was unavailable for this session, so
+nobody has looked at the rendered page. jsdom has no layout engine — it reports every width as
+zero — so label collisions, overflow and geometry are untested. Open `/admin/overview` and look
+at it before using it in front of anyone.
+
+---
+
+
 ### [x] Mobile sign-in — 2026-10-07
 
 Mobile now obtains a real token the same way web does. Before this, `authApi.sendOTP`
@@ -216,24 +287,6 @@ separate `payments` table entry per payout?). This is explicitly a deferred feat
 
 ---
 
-### ⚠️ No admin console — three analytics endpoints have no consumer
-
-**Evidence:** `web/AGENTS.md` §1.3 promises `/admin/*` routes ("verification queue, live jobs
-board, manual dispatch override"). `src/pages/` has `auth`, `landing`, `owner`, `partner` and no
-`admin`. The backend shipped `GET /api/v1/admin/analytics/{overview,dispatch,matching}` on
-2026-10-03 (ADR-020, ADR-021) and nothing reads them.
-
-**Current state:** `homeRouteForRole()` sends an `admin` token to `/owner` rather than a 404, so an
-ops account can at least sign in. `AuthProvider` still carries `ops` and `super_admin` in its
-`UserRole` union from the demo role switcher.
-
-**What it would take:** three read-only screens over existing endpoints, no new backend work. The
-`notes[]` vocabulary in each response is meant to be rendered verbatim — HANDOFF §14.6.
-
-**Not scheduled.** Flagged so it is a decision rather than an oversight: the demo loop is
-owner + partner, and an admin console is not on the critical path to it.
-
----
 
 ## Next Up (frontend tasks, all completed and verified)
 
