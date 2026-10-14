@@ -128,13 +128,13 @@ export const OwnerHome: React.FC = () => {
                   </div>
 
                   <h3 className="text-base font-bold text-slate-900">
-                    {job.service?.name || `Service #${job.service_id}`}
+                    {job.service_name || job.service_code}
                   </h3>
 
                   <div className="flex items-center gap-1 text-xs text-slate-500">
                     <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                     <span className="truncate max-w-xs sm:max-w-md">
-                      {job.pickup_address_text || (job.pickup_location ? `${job.pickup_location.lat}, ${job.pickup_location.lng}` : 'Bengaluru')}
+                      {job.pickup_address_text || 'Bengaluru'}
                     </span>
                   </div>
                 </div>

@@ -31,4 +31,4 @@ export const vehiclesService = {
 // sites; the hooks that wrapped them were never consumed by a screen, so this
 // removes dead code rather than a feature. Re-add them in the same pass that adds
 // the routes, not before: a service method whose path 404s is worse than a missing
-// one, because it survives a typecheck and a mocked test.
+// one, because it survives a typecheck without live contract validation.

@@ -6,7 +6,6 @@ import {
   Eye,
   EyeOff,
   MapPin,
-  Plus,
   Power,
   RefreshCw,
   Settings,
@@ -14,10 +13,9 @@ import {
   TrendingUp,
   Truck,
   Wrench,
-  Zap,
 } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { Button } from '../../components/ui/Button';
-import { OfferTimer } from '../../components/OfferTimer';
 import { JobTimeline } from '../../components/JobTimeline';
 import { usePartnerAvailability } from '../../features/partners/usePartnerAvailability';
 import { usePartnerProfile } from '../../features/partners/partnerStore';
@@ -29,7 +27,7 @@ import {
   usePartnerTrustStats,
   usePendingOffer,
 } from '../../features/partners/useOffers';
-import { IS_PARTNER_API_MOCK, partnerService } from '../../services/partner.service';
+import { jobsService } from '../../services/jobs.service';
 import {
   capabilityLabel,
   derivePartnerCapability,
@@ -101,8 +99,7 @@ export const PartnerSidebar: React.FC<{
    *  route. Without it the same entries fall back to <Link>s, which is what
    *  keeps the standalone pages (and their tests) working on their own. */
   onNavigate?: (view: ConsoleView) => void;
-  onSimulate?: () => void;
-}> = ({ profile, isAvailable, activeNav = 'dispatches', onNavigate, onSimulate: _onSimulate }) => {
+}> = ({ profile, isAvailable, activeNav = 'dispatches', onNavigate }) => {
   // The sidebar is the one element on screen for all four views, so the shift
   // summary belongs here rather than on any single view. It also keeps the
   // column from collapsing into ~380px of empty cream between the nav and the
@@ -234,7 +231,7 @@ export const PartnerSidebar: React.FC<{
             {profile.name}
           </div>
           <div className="text-[10px] text-[#5B5346] font-medium truncate mt-0.5">
-            Speedy Mechanics
+            {profile.extraDetails.workshopName || 'Partner Garage'}
           </div>
           <div className="text-[9px] text-[#0F766E] font-semibold flex items-center gap-1 mt-0.5">
             <span className="w-1.5 h-1.5 rounded-full bg-[#0F766E]" />
@@ -251,9 +248,8 @@ import { PartnerTopBar } from './components/PartnerTopBar';
 const TopBar: React.FC<{
   profile: PartnerProfile;
   capability: string;
-  onSimulate?: () => void;
   hideTopRow?: boolean;
-}> = ({ profile, capability, onSimulate, hideTopRow }) => {
+}> = ({ profile, capability, hideTopRow }) => {
   return (
     <header className="w-full flex flex-col gap-4 mb-6">
       {!hideTopRow && <PartnerTopBar profile={profile} />}
@@ -290,23 +286,12 @@ const TopBar: React.FC<{
           </div>
         </div>
 
-        {/* Right Action: Capability Badge + Quick Add / Simulate Button */}
+        {/* Right Action: Capability Badge */}
         <div className="flex items-center gap-2 self-start sm:self-auto">
           <div className="hidden lg:flex items-center gap-1.5 bg-white rounded-[10px] px-3 py-1.5 border border-[#E7E0D2] shadow-2xs text-[11px] font-bold text-[#1B1712]">
             <Wrench className="w-3.5 h-3.5 text-[#0F766E]" />
             <span>{capability}</span>
           </div>
-
-          {onSimulate && (
-            <button
-              type="button"
-              onClick={onSimulate}
-              className="w-8 h-8 rounded-full bg-white hover:bg-[#FBF8F1] border border-[#E7E0D2] shadow-2xs flex items-center justify-center text-[#1B1712] hover:text-[#0F766E] transition-colors"
-              title="Simulate incoming dispatch offer"
-            >
-              <Plus className="w-4 h-4" />
-            </button>
-          )}
         </div>
       </div>
     </header>
@@ -321,7 +306,6 @@ interface LiveZoneMapProps {
   offer: PartnerOffer | null;
   activeJob: Job | null;
   onGoOnline: () => void;
-  onSimulate?: () => void;
   /** Whole seconds since the last position fix, or null when never located. */
   locationAgeSeconds: number | null;
   onRefreshLocation: () => void;
@@ -333,24 +317,16 @@ const LiveZoneMap: React.FC<LiveZoneMapProps> = ({
   offer,
   activeJob,
   onGoOnline,
-  onSimulate,
   locationAgeSeconds,
   onRefreshLocation,
 }) => {
   const navigate = useNavigate();
-  const { accept, reject, expire, isResponding } = useOfferResponse();
-  const [offerExpiredAnnouncement, setOfferExpiredAnnouncement] = useState(false);
+  const { accept, reject, isResponding } = useOfferResponse();
 
   const handleAccept = async () => {
     if (!offer) return;
     const job = await accept(offer.id);
     if (job) navigate(`/partner/jobs/${job.id}`);
-  };
-
-  const handleOfferExpire = () => {
-    if (!offer) return;
-    setOfferExpiredAnnouncement(true);
-    expire(offer.id);
   };
 
   const isOffDuty = liveState === 'off_duty';
@@ -363,9 +339,8 @@ const LiveZoneMap: React.FC<LiveZoneMapProps> = ({
     >
       {/* Screen Reader ARIA Live Announcements */}
       <div aria-live="assertive" className="sr-only">
-        {liveState === 'pending_offer' && 'New job offer received. 45 seconds to respond.'}
+        {liveState === 'pending_offer' && 'New job offer received.'}
         {liveState === 'active_job' && 'Job accepted and active. Check progress below.'}
-        {offerExpiredAnnouncement && 'Job offer expired and was reassigned.'}
       </div>
       <div aria-live="polite" className="sr-only">
         {liveState === 'off_duty' && 'You are now off duty. Dispatch is paused.'}
@@ -522,15 +497,19 @@ const LiveZoneMap: React.FC<LiveZoneMapProps> = ({
             <div className="space-y-1.5 text-[11px] text-[#5B5346] my-2.5">
               <div className="flex items-center gap-2">
                 <Truck className="w-3 h-3 text-[#0F766E] shrink-0" />
-                <span className="truncate">Unit: KA-01-MJ-8899 (Ready)</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <TrendingUp className="w-3 h-3 text-emerald-600 shrink-0" />
-                <span className="truncate">Avg SLA: 12–15m arrival</span>
+                <span className="truncate">
+                  {profile.extraDetails.towRegistrationNumber
+                    ? `Unit: ${profile.extraDetails.towRegistrationNumber}`
+                    : 'Readiness: On Standby'}
+                </span>
               </div>
               <div className="flex items-center gap-2">
                 <ShieldCheck className="w-3 h-3 text-[#0F766E] shrink-0" />
-                <span className="truncate">Verified Commercial Yellow Board</span>
+                <span className="truncate">
+                  {profile.extraDetails.operatingZone
+                    ? `Zone: ${profile.extraDetails.operatingZone}`
+                    : 'Commercial Roadside Partner'}
+                </span>
               </div>
             </div>
 
@@ -539,17 +518,6 @@ const LiveZoneMap: React.FC<LiveZoneMapProps> = ({
               <p className="text-xs font-semibold text-[#1B1712] leading-tight">
                 You're available. Waiting for the next job.
               </p>
-              {onSimulate && (
-                /* A demo affordance, so it is labelled as one and sits below the
-                   real status line rather than dressed up as a primary action. */
-                <button
-                  type="button"
-                  onClick={onSimulate}
-                  className="mt-1.5 text-[10px] font-semibold text-[#5B5346] hover:text-[#0F766E] underline underline-offset-2 decoration-[#C9C0AE] transition-colors"
-                >
-                  Demo: queue a test offer
-                </button>
-              )}
             </div>
           </div>
         )}
@@ -564,7 +532,9 @@ const LiveZoneMap: React.FC<LiveZoneMapProps> = ({
               <span className="text-[10px] font-bold uppercase tracking-wider text-accent bg-red-50 px-2 py-0.5 rounded-full border border-red-200">
                 Incoming Dispatch Offer
               </span>
-              <OfferTimer offeredAt={offer.offeredAt} onExpire={handleOfferExpire} />
+              <span className="text-[10px] font-bold text-[#0F766E] bg-teal-50 px-2 py-0.5 rounded-full border border-teal-200">
+                Awaiting response
+              </span>
             </div>
 
             <h2 className="font-['Fraunces'] text-sm font-semibold text-[#1B1712] truncate mb-0.5">{offer.serviceName}</h2>
@@ -675,22 +645,6 @@ const EarningsAndSettlementsCard: React.FC = () => {
   const { privacyMode } = useConsoleSettings();
   const { data: earnings } = usePartnerEarnings(window);
 
-  // 32 High-Density Bars representing weekly dispatch revenue flow
-  const DENSITY_BARS = [
-    // Tue 22
-    { h: 35, active: false }, { h: 55, active: false }, { h: 40, active: false }, { h: 60, active: false },
-    { h: 25, active: false }, { h: 48, active: false }, { h: 68, active: false }, { h: 50, active: false },
-    // Today 23 (Active Peak with highlighted brand accent cluster)
-    { h: 65, active: true }, { h: 80, active: true }, { h: 95, active: true }, { h: 72, active: true },
-    { h: 88, active: true }, { h: 78, active: true }, { h: 60, active: true }, { h: 70, active: true },
-    // Thu 24 (Estimated / Scheduled)
-    { h: 42, active: false }, { h: 58, active: false }, { h: 52, active: false }, { h: 45, active: false },
-    { h: 62, active: false }, { h: 75, active: false }, { h: 58, active: false }, { h: 65, active: false },
-    // Fri 25 (Estimated / Scheduled)
-    { h: 30, active: false }, { h: 45, active: false }, { h: 55, active: false }, { h: 70, active: false },
-    { h: 64, active: false }, { h: 52, active: false }, { h: 40, active: false }, { h: 35, active: false },
-  ];
-
   // Derived, not asserted. The previous window's settled total comes down with
   // the earnings payload, so this figure moves when the data moves instead of
   // being a percentage typed into the markup.
@@ -751,7 +705,7 @@ const EarningsAndSettlementsCard: React.FC = () => {
               callout, so the same figure was printed twice on one card. */}
           <span className="text-xs text-[#5B5346]">
             Settled to date:{' '}
-            <strong className="text-[#1B1712] tabular-nums">{privacyMode ? '₹••••' : '₹48,250'}</strong>
+            <strong className="text-[#1B1712] tabular-nums">{privacyMode ? '₹••••' : formatRupees(earnings?.amountEarned ?? 0)}</strong>
             <span className="text-[#C9C0AE] mx-1.5">·</span>
             <strong className="text-[#1B1712] tabular-nums">{earnings?.jobsCompleted ?? 0}</strong> jobs{' '}
             {window === 'today' ? 'today' : 'this week'}
@@ -778,171 +732,43 @@ const EarningsAndSettlementsCard: React.FC = () => {
         </div>
       </div>
 
-      {/* High-Density Bar Chart with Floating Leader Callout */}
-      <div className="relative pt-6 pb-2">
-        {/* Floating Callout Pill */}
-        <div className="absolute top-0 left-[36%] transform -translate-x-1/2 flex flex-col items-center pointer-events-none">
-          <div className="bg-[#FBF8F1] rounded-[10px] px-2.5 py-1 shadow-md border border-[#E7E0D2] text-center flex flex-col items-center">
-            <span className="text-[9px] font-bold text-[#9A917F] uppercase tracking-wider">
-              {window === 'today' ? "Today's Payout" : "This Week's Payout"}
-            </span>
-            <span className="font-['Fraunces'] text-sm font-semibold text-[#1B1712] tracking-tight tabular-nums">
-              {privacyMode ? '₹••••' : formatRupees(earnings?.amountEarned ?? 8400)}
-            </span>
+      {/* Honest Empty State / Real Payout Summary */}
+      <div className="relative pt-4 pb-2 flex-1 flex flex-col justify-center">
+        {(earnings?.amountEarned ?? 0) === 0 ? (
+          <div className="rounded-[12px] bg-[#F6F1E6]/70 border border-[#E7E0D2] p-5 text-center flex flex-col items-center justify-center my-auto">
+            <div className="text-xs font-semibold text-[#1B1712]">No settled payouts yet</div>
+            <p className="text-[11px] text-[#5B5346] mt-1 max-w-xs">
+              Payouts are settled automatically upon job completion. Active dispatch assignments will appear here.
+            </p>
           </div>
-          <div className="w-px h-4 bg-[#E7E0D2]" />
-        </div>
-
-        {/* 32 Thin Bars */}
-        <div className="flex items-end justify-between gap-1 h-32 px-1">
-          {DENSITY_BARS.map((bar, idx) => (
-            <div
-              key={idx}
-              className="flex-1 rounded-t-sm transition-all duration-200"
-              style={{
-                height: `${bar.h}%`,
-                backgroundColor: bar.active ? '#0F766E' : '#EFE8DA',
-                borderTop: bar.active ? '2px solid #115E59' : 'none',
-              }}
-            />
-          ))}
-        </div>
-
-        {/* Chronological Day Labels */}
-        <div className="flex items-center justify-between text-[10px] font-medium text-[#9A917F] pt-2 border-t border-[#E7E0D2]">
-          <span className="flex-1 text-center">Tue 22</span>
-          <span className="flex-1 text-center font-bold text-[#1B1712]">Today (23)</span>
-          <span className="flex-1 text-center">Thu 24</span>
-          <span className="flex-1 text-center">Fri 25</span>
-        </div>
+        ) : (
+          <div className="bg-[#FBF8F1] rounded-[12px] p-5 border border-[#E7E0D2] text-center my-auto">
+            <span className="text-[10px] font-bold text-[#9A917F] uppercase tracking-wider">
+              {window === 'today' ? "Today's Settled Payout" : "This Week's Settled Payout"}
+            </span>
+            <div className="font-['Fraunces'] text-2xl font-bold text-[#0F766E] mt-1.5 tabular-nums">
+              {privacyMode ? '₹••••' : formatRupees(earnings?.amountEarned ?? 0)}
+            </div>
+            <div className="text-xs text-[#5B5346] mt-1">
+              {earnings?.jobsCompleted ?? 0} jobs completed
+            </div>
+          </div>
+        )}
       </div>
     </section>
   );
 };
 
-/* ── 4. Center Bottom: Recent Dispatch Activity (Real Bengaluru Jobs) ──────── */
-
-/** One row per settled or running job. This was four copy-pasted blocks of
- *  near-identical markup — the shape is the same for every row, so it is one
- *  component and a list now. */
-interface DispatchLogEntry {
-  id: string;
-  day: string;
-  date: string;
-  Icon: typeof Truck;
-  iconTone: string;
-  title: string;
-  vehicle: string;
-  detail: string;
-  status: 'in_progress' | 'completed';
-}
-
-const DISPATCH_LOG: ReadonlyArray<{ heading: string; rows: ReadonlyArray<DispatchLogEntry> }> = [
-  {
-    heading: 'Today · 23 Sep',
-    rows: [
-      {
-        id: 'job_orr_8899',
-        day: 'Wed',
-        date: '23',
-        Icon: Truck,
-        iconTone: 'bg-[#0F766E]',
-        title: 'Outer Ring Road breakdown',
-        vehicle: 'KA-01-MJ-8899',
-        detail: 'Flatbed recovery · ₹1,850 · 14m to arrival',
-        status: 'in_progress',
-      },
-      {
-        id: 'job_ind_1290',
-        day: 'Wed',
-        date: '23',
-        Icon: Zap,
-        iconTone: 'bg-amber-600',
-        title: 'Indiranagar jumpstart',
-        vehicle: 'KA-05-NB-1290',
-        detail: 'Rapid battery jumpstart · ₹650 · Settled T+0',
-        status: 'completed',
-      },
-      {
-        id: 'job_kor_4002',
-        day: 'Wed',
-        date: '23',
-        Icon: Wrench,
-        iconTone: 'bg-[#0F766E]',
-        title: 'Koramangala flat tyre',
-        vehicle: 'KA-51-TR-4002',
-        detail: 'On-site tyre support · ₹500 · Settled T+0',
-        status: 'completed',
-      },
-    ],
-  },
-  {
-    heading: 'Yesterday · 22 Sep',
-    rows: [
-      {
-        id: 'job_mgr_3312',
-        day: 'Tue',
-        date: '22',
-        Icon: Wrench,
-        iconTone: 'bg-[#1B1712]',
-        title: 'MG Road minor repair',
-        vehicle: 'KA-03-HA-3312',
-        detail: 'Coolant leakage fix · ₹1,200 · Settled T+0',
-        status: 'completed',
-      },
-    ],
-  },
-];
-
-const DispatchLogRow: React.FC<{ entry: DispatchLogEntry; masked: boolean }> = ({ entry, masked }) => (
-  <div className="flex items-center gap-2.5 p-2 rounded-[10px] hover:bg-[#F6F1E6]/70 transition-colors">
-    <div className="text-center w-8 shrink-0">
-      <span className="block text-[9px] text-[#9A917F] font-semibold uppercase leading-none">{entry.day}</span>
-      <span className="block font-['Fraunces'] text-sm font-semibold text-[#1B1712] leading-none mt-0.5">
-        {entry.date}
-      </span>
-    </div>
-
-    {/* The service icon, which says what kind of job this was. It used to be
-        paired with a stock headshot that was the same face on every row. */}
-    <span
-      className={`w-7 h-7 rounded-full ${entry.iconTone} text-white flex items-center justify-center shrink-0`}
-    >
-      <entry.Icon className="w-3.5 h-3.5" />
-    </span>
-
-    <div className="min-w-0 flex-1">
-      <h3 className="text-xs font-bold text-[#1B1712] truncate leading-tight">
-        {entry.title} <span className="font-mono font-medium text-[#5B5346]">{entry.vehicle}</span>
-      </h3>
-      <p className="text-[10px] text-[#5B5346] truncate">
-        {masked ? entry.detail.replace(/₹[\d,]+/, '₹••••') : entry.detail}
-      </p>
-    </div>
-
-    {entry.status === 'in_progress' ? (
-      <span className="bg-[#1B1712] text-white text-[9px] font-bold px-2.5 py-0.5 rounded-full shrink-0">
-        In progress
-      </span>
-    ) : (
-      <span className="bg-emerald-50 text-emerald-800 text-[9px] font-semibold px-2 py-0.5 rounded-full shrink-0 border border-emerald-200">
-        Completed
-      </span>
-    )}
-
-    {/* One affordance, not a view/edit pair — a settled job is not editable. */}
-    <Link
-      to={`/partner/jobs/${entry.id}`}
-      aria-label={`Open ${entry.title}`}
-      className="p-1 text-[#9A917F] hover:text-[#1B1712] transition-colors shrink-0"
-    >
-      <ChevronRight className="w-3.5 h-3.5" />
-    </Link>
-  </div>
-);
+/* ── 4. Center Bottom: Recent Dispatch Activity (Real Jobs from API) ──────── */
 
 const RecentDispatchActivityCard: React.FC = () => {
   const { privacyMode } = useConsoleSettings();
+  const { data: jobHistory, isLoading } = useQuery({
+    queryKey: ['partner', 'recent-jobs'],
+    queryFn: () => jobsService.listMyJobs({ limit: 6 }),
+  });
+
+  const jobs = jobHistory?.items ?? [];
 
   return (
     <section
@@ -954,18 +780,85 @@ const RecentDispatchActivityCard: React.FC = () => {
       </h2>
 
       <div className="min-h-0 flex-1 overflow-y-auto -mx-1 px-1">
-        {DISPATCH_LOG.map((group) => (
-          <div key={group.heading}>
-            <div className="text-[10px] font-bold text-[#9A917F] uppercase tracking-wider mb-2 mt-3 first:mt-0">
-              {group.heading}
-            </div>
-            <div className="space-y-1">
-              {group.rows.map((entry) => (
-                <DispatchLogRow key={entry.id} entry={entry} masked={privacyMode} />
-              ))}
-            </div>
+        {isLoading ? (
+          <div className="space-y-2 py-2">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-12 rounded-[10px] bg-[#F6F1E6] animate-pulse" />
+            ))}
           </div>
-        ))}
+        ) : jobs.length === 0 ? (
+          <div className="flex-1 h-full flex flex-col items-center justify-center text-center p-4">
+            <Truck className="w-7 h-7 text-[#9A917F] mb-1.5 opacity-50" />
+            <p className="text-xs font-bold text-[#1B1712]">No recent dispatch activity</p>
+            <p className="text-[11px] text-[#5B5346] mt-0.5 max-w-[200px]">
+              Assigned and completed roadside jobs will appear here.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-1">
+            {jobs.map((job) => {
+              const reqDate = new Date(job.requested_at);
+              const day = reqDate.toLocaleDateString([], { weekday: 'short' });
+              const date = reqDate.toLocaleDateString([], { day: 'numeric' });
+              const priceText = job.price_final ? ` · ₹${job.price_final}` : '';
+              const detail = `${job.pickup_address_text || 'Bengaluru'}${privacyMode ? ' · ₹••••' : priceText}`;
+
+              return (
+                <div
+                  key={job.id}
+                  className="flex items-center gap-2.5 p-2 rounded-[10px] hover:bg-[#F6F1E6]/70 transition-colors"
+                >
+                  <div className="text-center w-8 shrink-0">
+                    <span className="block text-[9px] text-[#9A917F] font-semibold uppercase leading-none">
+                      {day}
+                    </span>
+                    <span className="block font-['Fraunces'] text-sm font-semibold text-[#1B1712] leading-none mt-0.5">
+                      {date}
+                    </span>
+                  </div>
+
+                  <span className="w-7 h-7 rounded-full bg-[#0F766E] text-white flex items-center justify-center shrink-0">
+                    <Truck className="w-3.5 h-3.5" />
+                  </span>
+
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-xs font-bold text-[#1B1712] truncate leading-tight">
+                      {job.service_name || 'Roadside Job'}{' '}
+                      {job.vehicle_number && (
+                        <span className="font-mono font-medium text-[#5B5346]">{job.vehicle_number}</span>
+                      )}
+                    </h3>
+                    <p className="text-[10px] text-[#5B5346] truncate">{detail}</p>
+                  </div>
+
+                  <span
+                    className={`text-[9px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${
+                      job.status === 'in_progress' || job.status === 'partner_en_route'
+                        ? 'bg-[#1B1712] text-white font-bold'
+                        : 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                    }`}
+                  >
+                    {job.status === 'in_progress'
+                      ? 'In progress'
+                      : job.status === 'partner_en_route'
+                        ? 'En route'
+                        : job.status === 'completed'
+                          ? 'Completed'
+                          : job.status}
+                  </span>
+
+                  <Link
+                    to={`/partner/jobs/${job.id}`}
+                    aria-label={`Open job ${job.id}`}
+                    className="p-1 text-[#9A917F] hover:text-[#1B1712] transition-colors shrink-0"
+                  >
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </Link>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </section>
   );
@@ -1073,8 +966,8 @@ const FleetAndEquipmentCard: React.FC<{ profile: PartnerProfile }> = ({ profile 
 const PartnerStandingCard: React.FC<{ profile: PartnerProfile }> = ({ profile }) => {
   const { data: stats } = usePartnerTrustStats();
 
-  const rating = stats?.ratingAvg ?? 4.8;
-  const acceptance = stats?.acceptanceRatePct ?? 92;
+  const rating = stats?.ratingAvg ?? 0;
+  const acceptance = stats?.acceptanceRatePct ?? 0;
 
   return (
     <section
@@ -1107,15 +1000,15 @@ const PartnerStandingCard: React.FC<{ profile: PartnerProfile }> = ({ profile })
         <div className="flex items-end justify-between gap-3 pt-3.5">
           <div>
             <div className="font-['Fraunces'] text-3xl font-semibold text-[#1B1712] tabular-nums leading-none">
-              {rating.toFixed(1)}
+              {rating > 0 ? rating.toFixed(1) : '—'}
             </div>
             <div className="text-[10px] text-[#9A917F] font-medium mt-1.5">
-              Rating over {stats?.ratingCount ?? 118} jobs
+              Rating over {stats?.ratingCount ?? 0} jobs
             </div>
           </div>
           <div className="text-right">
             <div className="font-['Fraunces'] text-3xl font-semibold text-[#1B1712] tabular-nums leading-none">
-              {stats?.lifetimeJobs ?? 142}
+              {stats?.lifetimeJobs ?? 0}
             </div>
             <div className="text-[10px] text-[#9A917F] font-medium mt-1.5">Jobs completed</div>
           </div>
@@ -1180,12 +1073,6 @@ export const PartnerDashboard: React.FC<{ embedded?: boolean }> = ({ embedded = 
   const liveState = resolveLiveState({ activeJob, offer, isAvailable });
   const capability = capabilityLabel(derivePartnerCapability(profile));
 
-  const simulate = IS_PARTNER_API_MOCK
-    ? () => {
-        void partnerService.simulateIncomingOffer().then(() => offerQuery.refetch());
-      }
-    : undefined;
-
   const content = (
     <>
       {/* Top Header Strip */}
@@ -1211,7 +1098,6 @@ export const PartnerDashboard: React.FC<{ embedded?: boolean }> = ({ embedded = 
             offer={offer}
             activeJob={activeJob}
             onGoOnline={() => setAvailable(true)}
-            onSimulate={simulate}
             locationAgeSeconds={locationAgeSeconds}
             onRefreshLocation={refreshLocation}
           />
@@ -1236,8 +1122,8 @@ export const PartnerDashboard: React.FC<{ embedded?: boolean }> = ({ embedded = 
 
   return (
     <div className="partner-shell">
-      {/* ── Left Sidebar (Mockup Match) ── */}
-      <PartnerSidebar profile={profile} isAvailable={isAvailable} onSimulate={simulate} />
+      {/* ── Left Sidebar (Navigation Sidebar) ── */}
+      <PartnerSidebar profile={profile} isAvailable={isAvailable} />
 
       {/* ── Main Content Area (Rounded Left White Canvas) ── */}
       <main className="partner-main-canvas flex flex-col">{content}</main>

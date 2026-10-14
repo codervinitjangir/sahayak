@@ -40,9 +40,35 @@ export default {
         },
         surface: '#FFFFFF',
         canvas: '#F8FAFC',
+        // Warm Paper Stationery tokens (from landing design system)
+        paper: {
+          DEFAULT: '#F6F1E6',
+          card: '#FBF8F1',
+        },
+        ink: {
+          DEFAULT: '#1B1712',
+          soft: '#5B5346',
+          muted: '#9A917F',
+        },
+        line: {
+          DEFAULT: '#E4DBC8',
+          subtle: '#E7E0D2',
+        },
+        pastel: {
+          blue: '#AFCBEA',
+          'blue-deep': '#28486B',
+          sage: '#C7DAB9',
+          'sage-deep': '#33502A',
+          butter: '#F3D98B',
+          'butter-deep': '#6B4F0E',
+          coral: '#F0BBA9',
+          'coral-deep': '#7A3421',
+          mint: '#9BD8A9',
+        },
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+        display: ['Fraunces', 'Georgia', 'serif'],
       },
       // `shadow-xs` / `shadow-2xs` are Tailwind v4 names and do not exist in
       // v3, so every one of the ~30 already written across App, Preferences,
@@ -52,6 +78,9 @@ export default {
       boxShadow: {
         '2xs': '0 1px rgb(0 0 0 / 0.05)',
         xs: '0 1px 2px 0 rgb(0 0 0 / 0.05)',
+        warm: '0 18px 40px -12px rgba(27, 23, 18, 0.16)',
+        'warm-sm': '0 8px 20px -6px rgba(27, 23, 18, 0.12)',
+        float: '0 12px 24px 2px rgba(0, 0, 0, 0.05)',
       },
       // Same story: `backdrop-blur-xs` is a v4 name (3 uses).
       backdropBlur: {

@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import {
   MapPin, Navigation, Wrench, Battery, Truck, Fuel,
   ShieldCheck, ArrowDown, FileText, CheckCircle, FolderOpen, Users
@@ -21,9 +22,9 @@ export const FeatureBlocks: React.FC = () => {
             We assign the nearest certified mechanic or tow truck
             and dispatch them to your doorstep — no waiting on hold.
           </p>
-          <a href="#features" className="feature-block__cta">
-            See how it works →
-          </a>
+          <Link to="/owner/request" className="feature-block__cta">
+            Request help →
+          </Link>
         </div>
 
         <div className="feature-block__visual">
@@ -43,15 +44,9 @@ export const FeatureBlocks: React.FC = () => {
               </div>
             ))}
           </div>
-          <div style={{ marginTop: 16, display: 'flex', gap: 8 }}>
-            <div style={{
-              flex: 1, height: 8, borderRadius: 4,
-              background: 'linear-gradient(90deg, #0F766E 72%, #E4DBC8 72%)',
-            }} />
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 11, color: '#5B5346', fontWeight: 600 }}>
-            <span>72% partners active now</span>
-            <span>Bengaluru</span>
+          <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#5B5346', fontWeight: 600 }}>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#0F766E', display: 'inline-block' }} />
+            <span>Active roadside dispatch network across Bengaluru</span>
           </div>
         </div>
       </div>
@@ -67,33 +62,39 @@ export const FeatureBlocks: React.FC = () => {
           </h3>
           <p className="feature-block__body" style={{ color: 'var(--sage-deep)' }}>
             Once dispatched, see your service partner's live location
-            on the map. Get accurate ETAs and instant status updates
-            — from "en route" to "job complete".
+            on the map. Get accurate status updates from dispatch to completion.
           </p>
-          <a href="#features" className="feature-block__cta">
+          <a href="#how-it-works" className="feature-block__cta">
             See how it works →
           </a>
         </div>
 
         <div className="feature-block__visual">
-          <div style={{ fontSize: 14, fontWeight: 600, color: '#1B1712', marginBottom: 12 }}>
-            Avg. Response Time by Zone
+          <div style={{ fontSize: 14, fontWeight: 600, color: '#1B1712', marginBottom: 16 }}>
+            Live Dispatch Telemetry
           </div>
-          <div className="decay-graph">
-            {[
-              { height: '85%', bg: '#0F766E', label: 'Indiranagar' },
-              { height: '72%', bg: '#15803D', label: 'HSR' },
-              { height: '48%', bg: '#B45309', label: 'Whitefield' },
-              { height: '28%', bg: '#B91C1C', label: 'E-City' },
-            ].map((bar, i) => (
-              <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <div className="decay-graph__bar" style={{ height: bar.height, background: bar.bg }} />
-                <div className="decay-graph__label">{bar.label}</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'rgba(255,255,255,0.7)', padding: '12px 16px', borderRadius: 12 }}>
+              <MapPin size={18} color="#0F766E" />
+              <div style={{ fontSize: 12 }}>
+                <div style={{ fontWeight: 600, color: '#1B1712' }}>Breakdown Location Pinpointed</div>
+                <div style={{ color: '#5B5346' }}>Precise GPS breakdown coordinates</div>
               </div>
-            ))}
-          </div>
-          <div style={{ marginTop: 12, fontSize: 12, color: '#5B5346' }}>
-            Avg. response under 15 min across all zones
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'rgba(255,255,255,0.7)', padding: '12px 16px', borderRadius: 12 }}>
+              <Navigation size={18} color="#15803D" />
+              <div style={{ fontSize: 12 }}>
+                <div style={{ fontWeight: 600, color: '#1B1712' }}>Partner Dispatched &amp; En Route</div>
+                <div style={{ color: '#5B5346' }}>Live turn-by-turn route tracking</div>
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'rgba(255,255,255,0.7)', padding: '12px 16px', borderRadius: 12 }}>
+              <ShieldCheck size={18} color="#0F766E" />
+              <div style={{ fontSize: 12 }}>
+                <div style={{ fontWeight: 600, color: '#1B1712' }}>On-Site Assistance &amp; Completion</div>
+                <div style={{ color: '#5B5346' }}>Verified service delivery confirmation</div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -105,16 +106,16 @@ export const FeatureBlocks: React.FC = () => {
             PARTNER WITH US
           </p>
           <h3 className="feature-block__heading" style={{ color: 'var(--butter-heading)' }}>
-            Earn more. Get matched to nearby jobs.
+            Join our network. Get matched to nearby jobs.
           </h3>
           <p className="feature-block__body" style={{ color: 'var(--butter-deep)' }}>
             If you're a mechanic, tow operator, or fuel delivery provider —
-            join our network. Get auto-matched to jobs near you,
-            accept with one tap, and grow your business.
+            join our network. Get matched to jobs in your area,
+            accept with one tap, and build your customer base.
           </p>
-          <a href="#features" className="feature-block__cta">
+          <Link to="/partner/signup" className="feature-block__cta">
             Become a partner →
-          </a>
+          </Link>
         </div>
 
         <div className="feature-block__visual">
@@ -123,8 +124,8 @@ export const FeatureBlocks: React.FC = () => {
               <FileText size={20} />
             </div>
             <div>
-              <div className="upload-card__text">Today's Earnings Summary</div>
-              <div className="upload-card__sub">12 jobs completed · ₹8,400 earned</div>
+              <div className="upload-card__text">Partner Operations Console</div>
+              <div className="upload-card__sub">Job dispatch alerts &amp; real-time job accept</div>
             </div>
           </div>
 
@@ -133,18 +134,18 @@ export const FeatureBlocks: React.FC = () => {
           </div>
 
           <div className="quiz-preview">
-            <div className="quiz-preview__title">Active Service Zones</div>
+            <div className="quiz-preview__title">Partner Capabilities</div>
             <div className="quiz-preview__item">
               <CheckCircle size={14} color="#15803D" />
-              <span>Indiranagar: 8 mechanics, 3 tow trucks</span>
+              <span>Mechanical breakdown and tyre support</span>
             </div>
             <div className="quiz-preview__item">
               <CheckCircle size={14} color="#15803D" />
-              <span>Koramangala: 6 mechanics, 4 fuel vans</span>
+              <span>Flatbed and towing transport</span>
             </div>
             <div className="quiz-preview__item">
-              <CheckCircle size={14} color="#B45309" />
-              <span>Whitefield: Hiring mechanics now</span>
+              <CheckCircle size={14} color="#0F766E" />
+              <span>Emergency jumpstart and fuel delivery</span>
             </div>
           </div>
         </div>
@@ -154,19 +155,18 @@ export const FeatureBlocks: React.FC = () => {
       <div className="feature-block feature-block--reverse" style={{ background: 'var(--coral-grad)' }}>
         <div>
           <p className="feature-block__eyebrow" style={{ color: '#591F11' }}>
-            SAFETY & TRUST
+            SAFETY &amp; TRUST
           </p>
           <h3 className="feature-block__heading" style={{ color: 'var(--coral-heading)' }}>
-            Transparent pricing. Verified partners. Warranty on every job.
+            Transparent pricing. Verified partners. Direct support.
           </h3>
           <p className="feature-block__body" style={{ color: 'var(--coral-deep)' }}>
-            Every service partner is KYC-verified and rated by real customers.
-            You see the price before you confirm — no surprises, no haggling.
-            All repairs carry a 30-day service warranty.
+            Every service partner is KYC-verified.
+            Final price is confirmed when the job is completed.
           </p>
-          <a href="#features" className="feature-block__cta">
-            Our trust promise →
-          </a>
+          <Link to="/owner/request" className="feature-block__cta">
+            Request help →
+          </Link>
         </div>
 
         <div className="feature-block__visual">
@@ -175,8 +175,8 @@ export const FeatureBlocks: React.FC = () => {
               <FolderOpen size={18} color="#28486B" />
             </div>
             <div>
-              <div className="folder-item__name">Indiranagar & Domlur</div>
-              <div className="folder-item__sub">14 verified partners · 238 jobs this month</div>
+              <div className="folder-item__name">Tier 1 Identity Verification</div>
+              <div className="folder-item__sub">Aadhaar, PAN &amp; Driving Licence checks</div>
             </div>
           </div>
           <div className="folder-item">
@@ -184,8 +184,8 @@ export const FeatureBlocks: React.FC = () => {
               <FolderOpen size={18} color="#33502A" />
             </div>
             <div>
-              <div className="folder-item__name">Koramangala & HSR Layout</div>
-              <div className="folder-item__sub">11 verified partners · 194 jobs this month</div>
+              <div className="folder-item__name">Vehicle &amp; Equipment Verification</div>
+              <div className="folder-item__sub">Tow trucks, mobile repair vans &amp; tools</div>
             </div>
           </div>
           <div className="folder-item">
@@ -193,16 +193,16 @@ export const FeatureBlocks: React.FC = () => {
               <FolderOpen size={18} color="#7A3421" />
             </div>
             <div>
-              <div className="folder-item__name">Whitefield & Mahadevapura</div>
-              <div className="folder-item__sub">6 verified partners · 87 jobs this month</div>
+              <div className="folder-item__name">Transparent Settlement</div>
+              <div className="folder-item__sub">Final price is confirmed when the job is completed</div>
             </div>
           </div>
 
           <div className="cohort-badges">
-            <span className="cohort-badge">🔧 Mechanics (32)</span>
-            <span className="cohort-badge">🚛 Tow Trucks (12)</span>
-            <span className="cohort-badge">⛽ Fuel Delivery (8)</span>
-            <span className="cohort-badge">🔋 Battery Service (6)</span>
+            <span className="cohort-badge">🔧 Certified Mechanics</span>
+            <span className="cohort-badge">🚛 Verified Tow Operators</span>
+            <span className="cohort-badge">⛽ Emergency Fuel Providers</span>
+            <span className="cohort-badge">🔋 Battery Specialists</span>
           </div>
         </div>
       </div>

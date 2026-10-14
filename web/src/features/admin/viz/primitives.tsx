@@ -48,21 +48,21 @@ export const ChartCard: React.FC<ChartCardProps> = ({
   return (
     <section
       aria-labelledby={headingId}
-      className="rounded-xl border border-slate-200 bg-white p-5"
+      className="rounded-[16px] border border-[#E7E0D2] bg-white p-5 shadow-2xs"
     >
       <div className="mb-4 flex items-start justify-between gap-4">
         <div>
-          <h3 id={headingId} className="text-sm font-semibold text-slate-900">
+          <h3 id={headingId} className="text-sm font-bold text-[#1B1712]">
             {title}
           </h3>
-          {subtitle && <p className="mt-0.5 text-xs text-slate-500">{subtitle}</p>}
+          {subtitle && <p className="mt-0.5 text-xs text-[#5B5346]">{subtitle}</p>}
         </div>
         {!empty && (
           <button
             type="button"
             onClick={() => setShowTable((v) => !v)}
             aria-pressed={showTable}
-            className="flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-700"
+            className="flex shrink-0 items-center gap-1.5 rounded-[8px] border border-[#E7E0D2] bg-white px-2.5 py-1.5 text-xs font-semibold text-[#5B5346] transition hover:bg-[#F6F1E6] hover:text-[#1B1712]"
           >
             {showTable ? (
               <>

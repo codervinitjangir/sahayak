@@ -4,7 +4,6 @@ import { ArrowLeft, AlertCircle, Camera, CheckCircle2, ShieldAlert } from 'lucid
 import { useVehicles } from '../../features/vehicles/hooks';
 import { useServices, useCreateJob } from '../../features/jobs/hooks';
 import { ApiError, createIdempotencyKey } from '../../services/api';
-import { IS_DEMO_MODE } from '../../app/config';
 import { LocationPicker } from '../../components/LocationPicker';
 import { ServiceCard } from '../../components/ServiceCard';
 import { VehicleSelector } from '../../components/VehicleSelector';
@@ -13,35 +12,15 @@ import { AddVehicleModal } from '../../components/AddVehicleModal';
 import { getAuthToken } from '../../services/authToken';
 import { usersService } from '../../services/users.service';
 import { LocationPoint, Service } from '../../types/jobs';
-import { Vehicle } from '../../types/vehicles';
 
-// Default seeded services per Sahayak specifications if API reference list is loading/empty
 const FALLBACK_SERVICES: Service[] = [
-  { id: 1, category_id: 3, code: 'flatbed_towing', name: 'Flatbed Towing', requires_vehicle_equipment: true, estimated_price: 1500 },
-  { id: 2, category_id: 3, code: 'wheel_lift_towing', name: 'Wheel-Lift Towing', requires_vehicle_equipment: true, estimated_price: 1200 },
-  { id: 3, category_id: 2, code: 'battery_jumpstart', name: 'Battery Jumpstart', requires_vehicle_equipment: false, estimated_price: 450 },
-  { id: 4, category_id: 2, code: 'flat_tyre', name: 'Flat Tyre Support', requires_vehicle_equipment: false, estimated_price: 350 },
-  { id: 5, category_id: 2, code: 'minor_repair', name: 'On-Site Minor Repair', requires_vehicle_equipment: false, estimated_price: 500 },
-  { id: 6, category_id: 1, code: 'fuel_delivery', name: 'Emergency Fuel Delivery', requires_vehicle_equipment: false, estimated_price: 300 },
+  { id: 1, category_id: 3, code: 'flatbed_towing', name: 'Flatbed Towing', requires_vehicle_equipment: true },
+  { id: 2, category_id: 3, code: 'wheel_lift_towing', name: 'Wheel-Lift Towing', requires_vehicle_equipment: true },
+  { id: 3, category_id: 2, code: 'battery_jumpstart', name: 'Battery Jumpstart', requires_vehicle_equipment: false },
+  { id: 4, category_id: 2, code: 'flat_tyre', name: 'Flat Tyre Support', requires_vehicle_equipment: false },
+  { id: 5, category_id: 2, code: 'minor_repair', name: 'On-Site Minor Repair', requires_vehicle_equipment: false },
+  { id: 6, category_id: 1, code: 'fuel_delivery', name: 'Emergency Fuel Delivery', requires_vehicle_equipment: false },
 ];
-
-// Placeholder vehicle so the form is explorable without a backend. Its id is never
-// accepted at submit time — see `isRealVehicleId` below.
-const DEMO_VEHICLE_ID_PREFIX = 'demo-';
-
-const DEMO_VEHICLES: Vehicle[] = [
-  {
-    id: `${DEMO_VEHICLE_ID_PREFIX}veh-1`,
-    user_id: 'owner-1',
-    vehicle_type: 'four_wheeler',
-    make: 'Hyundai',
-    model: 'i20',
-    vehicle_number: 'KA-01-MJ-4521',
-    created_at: new Date().toISOString(),
-  },
-];
-
-const isRealVehicleId = (id: string) => Boolean(id) && !id.startsWith(DEMO_VEHICLE_ID_PREFIX);
 
 export const RequestHelpPage: React.FC = () => {
   const navigate = useNavigate();
@@ -53,11 +32,7 @@ export const RequestHelpPage: React.FC = () => {
 
   // Active services list
   const services = serverServices.length > 0 ? serverServices : FALLBACK_SERVICES;
-
-  // Fall back to a placeholder vehicle only in demo mode. In a real build an owner
-  // with no saved vehicles sees VehicleSelector's empty state instead.
-  const vehicles =
-    serverVehicles.length > 0 ? serverVehicles : IS_DEMO_MODE ? DEMO_VEHICLES : [];
+  const vehicles = serverVehicles;
 
   // Emergency-first form state: Location is step 1
   const [pickupLocation, setPickupLocation] = useState<LocationPoint>({
@@ -91,16 +66,13 @@ export const RequestHelpPage: React.FC = () => {
     if (serverVehicles.length > 0) {
       const selectionIsStale =
         !selectedVehicleId ||
-        !isRealVehicleId(selectedVehicleId) ||
         !serverVehicles.some((v) => v.id === selectedVehicleId);
 
       if (selectionIsStale) {
         setSelectedVehicleId(serverVehicles[0].id);
       }
-    } else if (!selectedVehicleId && vehicles.length > 0) {
-      setSelectedVehicleId(vehicles[0].id);
     }
-  }, [serverVehicles, vehicles, selectedVehicleId]);
+  }, [serverVehicles, selectedVehicleId]);
 
   const dispatchJob = async (serviceCode: string) => {
     try {
@@ -162,21 +134,16 @@ export const RequestHelpPage: React.FC = () => {
     }
 
     if (!selectedVehicleId) {
-      setFormError('Please select which vehicle requires assistance.');
+      if (serverVehicles.length === 0) {
+        setFormError('Please add a saved vehicle before requesting assistance.');
+      } else {
+        setFormError('Please select which vehicle requires assistance.');
+      }
       return;
     }
 
-    // A placeholder vehicle exists only to make the form explorable offline; the
-    // backend has no such record, so submitting it would fail validation there.
-    if (!isRealVehicleId(selectedVehicleId)) {
-      setFormError('Please add a saved vehicle before requesting assistance.');
-      return;
-    }
-
-    // Backend requires an auth token, and it must be a real one. A placeholder
-    // string here used to stand in for sign-in under IS_DEMO_MODE: the backend
-    // verifies every bearer against the project's JWKS, so that token produced a
-    // 401 on the very next call and the demo path was never a working path.
+    // Backend requires an authenticated session with a valid JWT token.
+    // If not signed in, redirect to login page.
     const token = getAuthToken();
     if (!token) {
       navigate(`/login?redirect=${encodeURIComponent('/owner/request')}`);
@@ -454,6 +421,10 @@ export const RequestHelpPage: React.FC = () => {
 
         {/* Submit Button & Notice */}
         <div className="pt-4 space-y-3">
+          <div className="p-3 bg-amber-50/80 border border-amber-200/80 rounded-xl text-xs text-amber-900 text-center font-medium">
+            Final price is confirmed when the job is completed.
+          </div>
+
           <Button
             type="submit"
             size="lg"

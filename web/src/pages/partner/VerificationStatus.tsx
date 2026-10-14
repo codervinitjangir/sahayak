@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Link } from 'react-router-dom';
 import {
   AlertCircle,
@@ -6,8 +6,6 @@ import {
   CheckCircle2,
   FileText,
   Lock,
-  PlayCircle,
-  RefreshCw,
   SlidersHorizontal,
   Truck,
   Wrench,
@@ -18,7 +16,6 @@ import {
   VerificationItem,
   isTier1Complete,
 } from '../../types/partner';
-import { Button } from '../../components/ui/Button';
 import {
   getPartnerStoreState,
   updatePartnerProfile,
@@ -154,7 +151,6 @@ export const VerificationStatus: React.FC<{
   onNavigate?: (view: ConsoleView) => void;
 }> = ({ embedded = false, onNavigate }) => {
   const profile = usePartnerProfile();
-  const [showWalkthroughModal, setShowWalkthroughModal] = useState<boolean>(false);
   const { isAvailable } = usePartnerAvailability();
 
   // The toast and the dashboard Inbox read the same store events, so a status
@@ -185,71 +181,6 @@ export const VerificationStatus: React.FC<{
   const isFullyApproved = approvedCount === totalCount && totalCount > 0;
   const actionCount = items.filter((i) => i.status === 'requirements_due').length;
 
-  // Walkthrough appears once at least one Tier 2 capability has cleared
-  const firstTier2Cleared = tier2Items.some((i) => i.status === 'complete');
-
-  // Demo simulator helper to toggle approval state across tiers
-  const handleSimulateStatus = () => {
-    updateProfile((prev) => {
-      const allApproved = prev.verificationItems.every((i) => i.status === 'complete');
-
-      if (allApproved) {
-        // Simulate: Tier 1 approved, but Tier 2 vehicle equipment needs requirements_due
-        const newItems: VerificationItem[] = prev.verificationItems.map((item, idx) => {
-          if (item.type === 'equipment' || idx === prev.verificationItems.length - 1) {
-            return {
-              ...item,
-              status: 'requirements_due' as const,
-              rejectionReason: 'Vehicle RC image is blurred. Please provide a clear scan.',
-              requirementsDueReason: 'Vehicle RC still under review',
-            };
-          }
-          return { ...item, status: 'complete' as const, rejectionReason: undefined, requirementsDueReason: undefined };
-        });
-
-        return {
-          nextProfile: { ...prev, verificationItems: newItems },
-          notification: {
-            message: 'Status updated: Vehicle RC still under review — re-upload required.',
-            type: 'warning',
-          },
-        };
-      } else if (!isTier1Complete(prev)) {
-        // Step 1: Approve Tier 1 items to demonstrate Tier 2 unlocking
-        const newItems: VerificationItem[] = prev.verificationItems.map((item) => {
-          if (item.tier === 'tier_1_identity') {
-            return { ...item, status: 'complete' as const, rejectionReason: undefined, requirementsDueReason: undefined };
-          }
-          return { ...item, status: 'in_progress' as const };
-        });
-
-        return {
-          nextProfile: { ...prev, verificationItems: newItems },
-          notification: {
-            message: 'Tier 1 Identity documents approved! Tier 2 capabilities are now unlocked.',
-            type: 'success',
-          },
-        };
-      } else {
-        // Step 2: Approve all
-        const newItems: VerificationItem[] = prev.verificationItems.map((item) => ({
-          ...item,
-          status: 'complete' as const,
-          rejectionReason: undefined,
-          requirementsDueReason: undefined,
-        }));
-
-        return {
-          nextProfile: { ...prev, verificationItems: newItems },
-          notification: {
-            message: `All capabilities verified — ${newItems.length} of ${newItems.length} items complete!`,
-            type: 'success',
-          },
-        };
-      }
-    });
-  };
-
   const handleReupload = (itemId: string) => {
     const item = profile.verificationItems.find((i) => i.id === itemId);
     const itemName = item?.label || 'Item';
@@ -269,17 +200,6 @@ export const VerificationStatus: React.FC<{
         },
       };
     });
-  };
-
-  const handleCompleteWalkthrough = () => {
-    updateProfile((prev) => ({
-      nextProfile: { ...prev, sampleJobCompleted: true },
-      notification: {
-        message: 'Sample job completed! You are ready to handle live requests.',
-        type: 'success',
-      },
-    }));
-    setShowWalkthroughModal(false);
   };
 
   // One sentence for the whole account, chosen by state rather than stacked as
@@ -466,57 +386,6 @@ export const VerificationStatus: React.FC<{
             </div>
           </section>
 
-          {/* Sample Job Walkthrough — shown once the first Tier 2 item clears */}
-          {firstTier2Cleared && (
-            <section className="bento-card p-5">
-              {!profile.sampleJobCompleted ? (
-                <>
-                  <div className="flex items-start gap-3">
-                    <span className="w-8 h-8 rounded-[10px] bg-[#0F766E]/10 text-[#0F766E] flex items-center justify-center shrink-0">
-                      <PlayCircle className="w-4 h-4" aria-hidden="true" />
-                    </span>
-                    <div className="min-w-0">
-                      <h2 className="text-[13px] font-bold text-[#1B1712] font-['Fraunces']">
-                        Sample Job Walkthrough
-                      </h2>
-                      <p className="text-[11px] text-[#5B5346] mt-1 leading-snug">
-                        Run one simulated breakdown end to end to check your alerts before a real dispatch arrives.
-                      </p>
-                    </div>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="primary"
-                    size="md"
-                    onClick={() => setShowWalkthroughModal(true)}
-                    className="w-full mt-3 text-xs font-bold px-5 py-2.5 !bg-[#0F766E] hover:!bg-[#0D645D] text-white rounded-[10px] shadow-xs"
-                  >
-                    Start Walkthrough
-                  </Button>
-                </>
-              ) : (
-                <div className="flex items-start gap-3">
-                  <CheckCircle2 className="w-4 h-4 text-[#0F766E] shrink-0 mt-0.5" />
-                  <div className="min-w-0">
-                    <h2 className="text-[13px] font-bold text-[#1B1712] font-['Fraunces']">
-                      Sample Job Walkthrough
-                    </h2>
-                    <p className="text-[11px] text-[#5B5346] mt-1 leading-snug">
-                      Completed — you are ready for live dispatches.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => setShowWalkthroughModal(true)}
-                      className="text-[11px] font-bold text-[#0F766E] underline underline-offset-2 hover:text-[#0D645D] mt-1.5"
-                    >
-                      Replay simulation
-                    </button>
-                  </div>
-                </div>
-              )}
-            </section>
-          )}
-
           {/* Where to go next */}
           <section className="bento-card p-5 flex flex-col gap-2.5">
             {onNavigate ? (
@@ -550,77 +419,9 @@ export const VerificationStatus: React.FC<{
                 <ArrowRight className="w-3.5 h-3.5 ml-auto shrink-0 text-[#9A917F]" />
               </Link>
             )}
-
-            {/* A demo control, labelled as one rather than styled like a
-                production action. */}
-            <button
-              type="button"
-              onClick={handleSimulateStatus}
-              className="inline-flex items-center gap-2 text-[11px] font-semibold text-[#5B5346] hover:text-[#1B1712] py-2 px-3 rounded-[10px] border border-dashed border-[#E7E0D2] hover:border-[#9A917F] bg-white transition-all"
-            >
-              <RefreshCw className="w-3.5 h-3.5 text-[#0F766E] shrink-0" />
-              <span className="truncate text-left">
-                Demo Simulation:{' '}
-                {!tier1Done
-                  ? 'Approve Tier 1'
-                  : !isFullyApproved
-                    ? 'Approve all capabilities'
-                    : 'Flag Vehicle RC'}
-              </span>
-            </button>
           </section>
         </aside>
       </div>
-
-      {/* Interactive Walkthrough Modal */}
-      {showWalkthroughModal && (
-        <div className="fixed inset-0 z-50 bg-[#1B1712]/50 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
-          <div className="bg-[#FBF8F1] rounded-[20px] max-w-sm w-full p-6 shadow-xl border border-[#E7E0D2]">
-            <div className="w-12 h-12 rounded-full bg-[#0F766E]/10 text-[#0F766E] flex items-center justify-center mb-4 mx-auto">
-              <Truck className="w-6 h-6" />
-            </div>
-
-            <h3 className="text-lg font-bold text-center text-[#1B1712] mb-1 font-['Fraunces']">
-              Sample Breakdown Dispatch
-            </h3>
-            <p className="text-xs text-center text-[#5B5346] mb-4">Indiranagar 100ft Rd · 2.4 km away</p>
-
-            <div className="bg-white rounded-[12px] p-3.5 mb-4 space-y-2 text-xs text-[#5B5346] border border-[#E7E0D2]">
-              <div className="flex justify-between">
-                <span>Vehicle:</span>
-                <span className="font-semibold text-[#1B1712]">Hyundai i20 (KA-01)</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Service Requested:</span>
-                <span className="font-semibold text-[#1B1712]">Flat-Tyre Support</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Payout:</span>
-                <span className="font-bold text-[#0F766E] font-mono">₹350</span>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Button
-                type="button"
-                variant="primary"
-                className="w-full text-xs font-bold !bg-[#0F766E] hover:!bg-[#0D645D] text-white rounded-[10px]"
-                onClick={handleCompleteWalkthrough}
-              >
-                Accept &amp; Complete Simulation
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                className="w-full text-xs text-[#5B5346] hover:text-[#1B1712]"
-                onClick={() => setShowWalkthroughModal(false)}
-              >
-                Close
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 

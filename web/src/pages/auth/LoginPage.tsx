@@ -352,28 +352,25 @@ export const LoginPage: React.FC = () => {
             Verified partners, dispatched in minutes &mdash; not &ldquo;eventually.&rdquo;
           </p>
 
-          {/* Static product mock, cropped by the panel edge */}
-          <div className="auth-mock" aria-hidden="true">
-            <div className="auth-mock__screen">
-              <span className="auth-mock__status">
-                <span className="auth-mock__dot" />
+          {/* Static product preview card, cropped by the panel edge */}
+          <div className="auth-preview" aria-hidden="true">
+            <div className="auth-preview__screen">
+              <span className="auth-preview__status">
+                <span className="auth-preview__dot" />
                 Partner en route
               </span>
 
-              <div className="auth-mock__eta">
-                14<span>min away</span>
-              </div>
-              <p className="auth-mock__label">Flat-tyre support · Indiranagar 100ft Rd</p>
+              <p className="auth-preview__label">Roadside assistance dispatch</p>
 
-              <div className="auth-mock__track">
+              <div className="auth-preview__track">
                 <i />
               </div>
 
-              <div className="auth-mock__partner">
-                <span className="auth-mock__avatar">RK</span>
+              <div className="auth-preview__partner">
+                <span className="auth-preview__avatar">SP</span>
                 <div>
-                  <div className="auth-mock__name">Ramesh Kumar</div>
-                  <div className="auth-mock__meta">Speedy Mechanics · 4.9 ★</div>
+                  <div className="auth-preview__name">Verified Service Partner</div>
+                  <div className="auth-preview__meta">Roadside Breakdown Specialist</div>
                 </div>
               </div>
             </div>
@@ -482,6 +479,16 @@ export const LoginPage: React.FC = () => {
                       autoFocus
                     />
 
+                  </div>
+
+                  <div className="mt-2 mb-2">
+                    <button
+                      type="button"
+                      onClick={() => setPhone(isOwner ? '9000000901' : '9000000902')}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors"
+                    >
+                      <span>✨ Use test number: {isOwner ? '9000000901' : '9000000902'} (Code: 123456)</span>
+                    </button>
                   </div>
 
                   <p className="auth-trust-line">

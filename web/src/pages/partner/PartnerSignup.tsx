@@ -31,7 +31,7 @@ import { StepIndicator } from './components/StepIndicator';
 import { OtpInput } from './components/OtpInput';
 import { FileUploadCard } from './components/FileUploadCard';
 import { Button } from '../../components/ui/Button';
-import { apiClient } from '../../services/api';
+import { partnerService } from '../../services/partner.service';
 import { setAuthToken } from '../../services/authToken';
 import { identityService } from '../../services/identity.service';
 import {
@@ -40,7 +40,6 @@ import {
   toE164,
   verifyPhoneOtp,
 } from '../../services/supabase';
-import { IS_PARTNER_API_MOCK } from '../../services/partner.service';
 import './partner.css';
 
 const IndiaFlag: React.FC = () => (
@@ -314,7 +313,7 @@ export const PartnerSignup: React.FC = () => {
       hasTow && hasMech ? 'both' : (category || 'mechanical');
 
     const newProfile: PartnerProfile = {
-      id: `ptr_${Date.now()}`,
+      id: '',
       phone: `+91 ${phone}`,
       name: `Partner (+91 ${phone.slice(-4)})`,
       category: resolvedCategory,
@@ -346,58 +345,34 @@ export const PartnerSignup: React.FC = () => {
       sampleJobCompleted: false,
     };
 
-    if (!IS_PARTNER_API_MOCK) {
-      try {
-        const payload = {
-          name: newProfile.name,
-          phone: `+91${phone.replace(/\D/g, '')}`,
-          primary_category_code: resolvedCategory === 'both' ? 'towing' : resolvedCategory,
-        };
-        const regRes = await apiClient<{ id: string }>('/partners', {
-          method: 'POST',
-          body: JSON.stringify(payload),
-        });
-        const partnerId = regRes?.data?.id;
-        if (!partnerId) {
-          throw new Error('Registration did not return a partner id.');
-        }
-        newProfile.id = partnerId;
-
-        // The step this wizard used to skip. POST /partners creates an *inert*
-        // profile — unverified, off-shift, and bound to no account — and
-        // link-auth is what binds it to the Supabase account that just passed
-        // OTP. Without it the mechanic holds a valid token that resolves to
-        // nothing, so every partner route answers 403 IDENTITY_NOT_LINKED and
-        // the console they were just sent to is empty forever.
-        //
-        // Deliberately not caught separately: a partner whose profile exists but
-        // is unlinked is worse off than one who sees this screen fail, because
-        // the first state looks like success and takes a human to repair.
-        await apiClient(`/partners/${partnerId}/link-auth`, { method: 'POST' });
-
-        if (activeServices.length > 0) {
-          // Service coverage is the one call allowed to fail quietly: the profile
-          // exists and is linked, so the mechanic can sign in and fix coverage
-          // from the console. Losing it does not strand them.
-          await apiClient(`/partners/${partnerId}/services`, {
-            method: 'POST',
-            body: JSON.stringify({
-              service_codes: activeServices.map((s) => s.code),
-            }),
-          }).catch(() => {});
-        }
-      } catch (err) {
-        // Previously a console.warn, after which the wizard saved a local profile
-        // and showed the success screen — so a failed registration was
-        // indistinguishable from a successful one until the mechanic's first
-        // offer never arrived.
-        setSubmitError(
-          err instanceof Error
-            ? `Could not complete registration: ${err.message}`
-            : 'Could not complete registration. Check your connection and try again.'
-        );
-        return;
+    try {
+      const payload = {
+        name: newProfile.name,
+        phone: `+91${phone.replace(/\D/g, '')}`,
+        primary_category_code: resolvedCategory === 'both' ? 'towing' : resolvedCategory,
+      };
+      const regData = await partnerService.registerPartner(payload);
+      const partnerId = regData?.id;
+      if (!partnerId) {
+        throw new Error('Registration did not return a partner id.');
       }
+      newProfile.id = partnerId;
+
+      await partnerService.linkAuth(partnerId);
+
+      if (activeServices.length > 0) {
+        await partnerService.updateServices(
+          partnerId,
+          activeServices.map((s) => s.code)
+        ).catch(() => {});
+      }
+    } catch (err) {
+      setSubmitError(
+        err instanceof Error
+          ? `Could not complete registration: ${err.message}`
+          : 'Could not complete registration. Check your connection and try again.'
+      );
+      return;
     }
 
     saveStoredPartnerProfile(newProfile);

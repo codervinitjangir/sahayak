@@ -178,6 +178,7 @@ export type PartnerStackParamList = {
   IncomingOffer: { jobId: string; assignmentId?: string; offerData?: any };
   ActiveJob: { jobId: string };
   PartnerJobDone: { jobId: string };
+  Profile?: undefined;
 };
 
 export type RootTabParamList = {

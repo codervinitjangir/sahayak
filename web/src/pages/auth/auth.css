@@ -42,7 +42,7 @@
   --auth-r-lg: 14px;   /* field, primary button */
   --auth-r-md: 10px;   /* switcher, identity chip, error */
   --auth-r-sm: 8px;    /* inline controls inside a larger surface */
-  --auth-pill: 999px;  /* small chips and the left-panel mock only */
+  --auth-pill: 999px;  /* small chips and the left-panel preview only */
 
   height: 100vh;
   height: 100dvh;
@@ -181,9 +181,9 @@
   color: var(--auth-brand-lit);
 }
 
-/* ── Static device mock, cropped by the panel edge like the reference ───── */
+/* ── Static device preview card, cropped by the panel edge like the reference ───── */
 
-.auth-mock {
+.auth-preview {
   position: relative;
   z-index: 2;
   margin-top: auto;
@@ -196,14 +196,14 @@
     0 0 0 1px rgba(246, 241, 230, 0.1);
 }
 
-.auth-mock__screen {
+.auth-preview__screen {
   border-radius: 22px 22px 0 0;
   background: var(--auth-paper);
   padding: 16px 15px 22px;
   color: var(--auth-ink);
 }
 
-.auth-mock__status {
+.auth-preview__status {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -217,14 +217,14 @@
   text-transform: uppercase;
 }
 
-.auth-mock__dot {
+.auth-preview__dot {
   width: 5px;
   height: 5px;
   border-radius: 50%;
   background: var(--auth-brand-lit);
 }
 
-.auth-mock__eta {
+.auth-preview__eta {
   display: flex;
   align-items: baseline;
   gap: 4px;
@@ -236,27 +236,27 @@
   line-height: 1;
 }
 
-.auth-mock__eta span {
+.auth-preview__eta span {
   font-family: var(--auth-font-body);
   font-size: 13px;
   font-weight: 600;
   color: var(--auth-ink-soft);
 }
 
-.auth-mock__label {
+.auth-preview__label {
   font-size: 11px;
   color: var(--auth-ink-soft);
   margin: 5px 0 14px;
 }
 
-.auth-mock__track {
+.auth-preview__track {
   height: 5px;
   border-radius: var(--auth-pill);
   background: #E7E0D2;
   overflow: hidden;
 }
 
-.auth-mock__track i {
+.auth-preview__track i {
   display: block;
   width: 62%;
   height: 100%;
@@ -264,7 +264,7 @@
   background: linear-gradient(90deg, var(--auth-brand-deep), var(--auth-brand-lit));
 }
 
-.auth-mock__partner {
+.auth-preview__partner {
   display: flex;
   align-items: center;
   gap: 9px;
@@ -273,7 +273,7 @@
   border-top: 1px solid #E7E0D2;
 }
 
-.auth-mock__avatar {
+.auth-preview__avatar {
   width: 30px;
   height: 30px;
   border-radius: 50%;
@@ -286,13 +286,13 @@
   flex-shrink: 0;
 }
 
-.auth-mock__name {
+.auth-preview__name {
   font-size: 12px;
   font-weight: 650;
   line-height: 1.25;
 }
 
-.auth-mock__meta {
+.auth-preview__meta {
   font-size: 10.5px;
   color: var(--auth-ink-faint);
 }

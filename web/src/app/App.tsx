@@ -1,8 +1,7 @@
 import { BrowserRouter, Link, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { AuthProvider, useAuth, UserRole } from './AuthProvider';
+import { AuthProvider, useAuth } from './AuthProvider';
 import { AppRoutes } from './routes';
-import { ChevronDown } from 'lucide-react';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -13,8 +12,10 @@ const queryClient = new QueryClient({
   },
 });
 
+import { NotificationsDropdown } from '../components/NotificationsDropdown';
+
 const Navbar: React.FC = () => {
-  const { role, setRole, user } = useAuth();
+  const { user, logout } = useAuth();
 
   // Extract clean display names
   const rawName = user?.name || '';
@@ -26,48 +27,58 @@ const Navbar: React.FC = () => {
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-neutral-200/80">
       <div className="w-full px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between">
-        {/* Leftmost corner: Text-only Sahayak */}
-        <Link
-          to="/"
-          className="font-bold text-lg tracking-tight text-[#181818] hover:opacity-80 transition-opacity"
-        >
-          Sahayak
-        </Link>
+        {/* Left: Brand + Owner navigation links */}
+        <div className="flex items-center gap-6">
+          <Link
+            to="/"
+            className="font-bold text-lg tracking-tight text-[#181818] hover:opacity-80 transition-opacity"
+          >
+            Sahayak
+          </Link>
+          <nav className="hidden sm:flex items-center gap-4 text-xs font-semibold text-slate-600">
+            <Link to="/owner" className="hover:text-slate-900 transition-colors">
+              Overview
+            </Link>
+            <Link to="/owner/request" className="hover:text-slate-900 transition-colors">
+              Request Help
+            </Link>
+          </nav>
+        </div>
 
-        {/* Rightmost corner: Role Switcher + User Profile */}
+        {/* Right: Owner Notifications Feed + User Profile */}
         <div className="flex items-center gap-3 sm:gap-4">
-          {/* Refined Linear/Vercel Pill Role Selector */}
-          <div className="relative flex items-center bg-neutral-50 hover:bg-neutral-100/80 border border-neutral-200/90 rounded-xl px-2.5 py-1 shadow-2xs transition-all">
-            <div className="flex items-center gap-1.5 text-xs">
-              <span className="w-1.5 h-1.5 rounded-full bg-accent" />
-              <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">Role</span>
-              <span className="text-neutral-300">/</span>
-              <select
-                value={role}
-                onChange={(e) => setRole(e.target.value as UserRole)}
-                className="bg-transparent text-xs font-semibold text-[#181818] outline-none cursor-pointer pr-4 appearance-none hover:text-black focus:ring-0"
-                aria-label="Switch User Role"
-              >
-                <option value="owner">Owner (Asha)</option>
-                <option value="partner">Partner (Ramesh)</option>
-                <option value="ops">Admin (Ops)</option>
-              </select>
-            </div>
-            <ChevronDown className="w-3 h-3 text-neutral-400 pointer-events-none absolute right-2" />
-          </div>
+          {/* Owner notifications feed */}
+          <NotificationsDropdown />
 
-          {/* User Profile Pill with Avatar & Clean Typography */}
-          <div className="hidden sm:flex items-center gap-2.5 pl-3 border-l border-neutral-200">
-            <div className="w-7 h-7 rounded-full bg-[#181818] text-white flex items-center justify-center font-bold text-[11px] shadow-2xs">
-              {initial}
-            </div>
-            <div className="text-left text-xs leading-tight">
-              <div className="font-bold text-[#181818] tracking-tight">{mainName}</div>
-              <div className="text-[10px] text-neutral-500 font-mono">
-                {subName ? `${subName} · ` : ''}{user?.phone}
+          {/* User Profile Pill or Sign In Link */}
+          {user ? (
+            <div className="flex items-center gap-2.5 pl-3 border-l border-neutral-200">
+              <div className="w-7 h-7 rounded-full bg-[#181818] text-white flex items-center justify-center font-bold text-[11px] shadow-2xs">
+                {initial}
               </div>
+              <div className="hidden sm:block text-left text-xs leading-tight">
+                <div className="font-bold text-[#181818] tracking-tight">{mainName}</div>
+                <div className="text-[10px] text-neutral-500 font-mono">
+                  {subName ? `${subName} · ` : ''}{user?.phone}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={logout}
+                className="text-[11px] font-semibold text-slate-500 hover:text-slate-800 ml-1 cursor-pointer"
+                title="Sign out"
+              >
+                Sign out
+              </button>
             </div>
-          </div>
+          ) : (
+            <Link
+              to="/login"
+              className="text-xs font-bold text-[#0F766E] hover:text-[#0D645D] px-3 py-1.5 rounded-lg border border-[#0F766E]/30 hover:bg-[#0F766E]/5 transition-all"
+            >
+              Sign In
+            </Link>
+          )}
         </div>
       </div>
     </header>

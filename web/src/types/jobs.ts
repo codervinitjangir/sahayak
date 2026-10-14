@@ -34,7 +34,7 @@ export interface Service {
   name: string;
   requires_vehicle_equipment: boolean;
   category?: ServiceCategory;
-  estimated_price?: number;
+
 }
 
 export interface JobAssignment {
@@ -190,4 +190,22 @@ export interface JobHistoryPage {
   limit: number;
   offset: number;
   has_more: boolean;
+}
+
+export interface JobCancelResponse {
+  id: string;
+  status: JobStatus | string;
+  assignment_status?: string | null;
+  cancelled_at?: string | null;
+  cancellation_reason?: string | null;
+}
+
+export interface JobStatusTransitionResponse {
+  id: string;
+  status: JobStatus | string;
+  assignment_status?: string | null;
+  price_final?: number | string | null;
+  completed_at?: string | null;
+  cancelled_at?: string | null;
+  cancellation_reason?: string | null;
 }

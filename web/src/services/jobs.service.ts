@@ -8,11 +8,14 @@ import {
   JobRatingsResponse,
   ServiceCatalogResponse,
   JobHistoryPage,
+  JobHistoryItem,
+  JobCancelResponse,
+  JobStatusTransitionResponse,
 } from '../types/jobs';
 
 /**
  * Seeded service catalogue matching backend `db/seed.sql` exactly.
- * The backend does not have a dynamic `GET /services` endpoint (FRONTEND-GUIDE §2.3, §5.1, §5.4).
+ * Prices are omitted per Backend Gap #7 & Amendment 1: backend holds no pricing data for services.
  */
 export const SEEDED_SERVICES: Service[] = [
   {
@@ -21,7 +24,6 @@ export const SEEDED_SERVICES: Service[] = [
     code: 'flatbed_towing',
     name: 'Flatbed Towing',
     requires_vehicle_equipment: true,
-    estimated_price: 1500,
   },
   {
     id: 2,
@@ -29,7 +31,6 @@ export const SEEDED_SERVICES: Service[] = [
     code: 'wheel_lift_towing',
     name: 'Wheel-Lift Towing',
     requires_vehicle_equipment: true,
-    estimated_price: 1200,
   },
   {
     id: 3,
@@ -37,7 +38,6 @@ export const SEEDED_SERVICES: Service[] = [
     code: 'battery_jumpstart',
     name: 'Battery Jumpstart',
     requires_vehicle_equipment: false,
-    estimated_price: 450,
   },
   {
     id: 4,
@@ -45,7 +45,6 @@ export const SEEDED_SERVICES: Service[] = [
     code: 'flat_tyre',
     name: 'Flat Tyre Support',
     requires_vehicle_equipment: false,
-    estimated_price: 350,
   },
   {
     id: 5,
@@ -53,7 +52,6 @@ export const SEEDED_SERVICES: Service[] = [
     code: 'minor_repair',
     name: 'On-Site Minor Repair',
     requires_vehicle_equipment: false,
-    estimated_price: 500,
   },
   {
     id: 6,
@@ -61,7 +59,6 @@ export const SEEDED_SERVICES: Service[] = [
     code: 'fuel_delivery',
     name: 'Emergency Fuel Delivery',
     requires_vehicle_equipment: false,
-    estimated_price: 300,
   },
 ];
 
@@ -70,8 +67,6 @@ export const SEEDED_SERVICE_CATEGORIES: ServiceCategory[] = [
   { id: 2, code: 'mechanical', name: 'Mechanical' },
   { id: 3, code: 'fuel', name: 'Fuel' },
 ];
-
-const RECENT_JOBS_STORAGE_KEY = 'sahayak_recent_jobs';
 
 export const jobsService = {
   async createJob(payload: CreateJobPayload, idempotencyKey?: string): Promise<Job> {
@@ -99,30 +94,15 @@ export const jobsService = {
       idempotencyKey: idempotencyKey || createIdempotencyKey(),
     });
 
-    // Store in recent jobs list for OwnerHome display (since backend has no GET /jobs list endpoint)
-    try {
-      const raw = localStorage.getItem(RECENT_JOBS_STORAGE_KEY);
-      const existing: Job[] = raw ? JSON.parse(raw) : [];
-      const updated = [res.data, ...existing.filter((j) => j.id !== res.data.id)].slice(0, 10);
-      localStorage.setItem(RECENT_JOBS_STORAGE_KEY, JSON.stringify(updated));
-    } catch {
-      // ignore storage quota errors
-    }
-
     return res.data;
   },
 
   /**
-   * Note: The backend does not expose a `GET /jobs` list endpoint (FRONTEND-GUIDE §5.1, §5.4).
-   * We read recent jobs submitted on this device to provide continuity without throwing 404s.
+   * The caller's own job history from GET /api/v1/jobs.
    */
-  async listJobs(): Promise<Job[]> {
-    try {
-      const raw = localStorage.getItem(RECENT_JOBS_STORAGE_KEY);
-      return raw ? JSON.parse(raw) : [];
-    } catch {
-      return [];
-    }
+  async listJobs(options?: { limit?: number; offset?: number }): Promise<JobHistoryItem[]> {
+    const page = await this.listMyJobs(options);
+    return page.items;
   },
 
   async getJob(jobId: string): Promise<Job> {
@@ -140,10 +120,16 @@ export const jobsService = {
     return job;
   },
 
-  async cancelJob(jobId: string, reason?: string): Promise<Job> {
-    const res = await apiClient<Job>(`/jobs/${jobId}/cancel`, {
+  /**
+   * Contract fix: POST /jobs/{id}/cancel accepts { cancellation_reason?: string }
+   * and forbids extra fields. Returns JobCancelResponse.
+   */
+  async cancelJob(jobId: string, cancellation_reason?: string): Promise<JobCancelResponse> {
+    const res = await apiClient<JobCancelResponse>(`/jobs/${jobId}/cancel`, {
       method: 'POST',
-      body: JSON.stringify({ reason }),
+      body: JSON.stringify({
+        ...(cancellation_reason ? { cancellation_reason } : {}),
+      }),
     });
     return res.data;
   },
@@ -154,11 +140,20 @@ export const jobsService = {
    *
    * Rejects with a 409 when the job has already moved on — two taps on
    * "Mark en route", or a job cancelled by the owner mid-transition.
+   * Returns JobStatusTransitionResponse per backend schema.
    */
-  async updateJobStatus(jobId: string, status: JobStatus): Promise<Job> {
-    const res = await apiClient<Job>(`/jobs/${jobId}/status`, {
+  async updateJobStatus(
+    jobId: string,
+    status: JobStatus,
+    extra?: { price_final?: number; cancellation_reason?: string }
+  ): Promise<JobStatusTransitionResponse> {
+    const res = await apiClient<JobStatusTransitionResponse>(`/jobs/${jobId}/status`, {
       method: 'POST',
-      body: JSON.stringify({ status }),
+      body: JSON.stringify({
+        status,
+        ...(extra?.price_final !== undefined ? { price_final: extra.price_final } : {}),
+        ...(extra?.cancellation_reason ? { cancellation_reason: extra.cancellation_reason } : {}),
+      }),
     });
     return res.data;
   },
@@ -195,26 +190,23 @@ export const jobsService = {
   },
 
   /**
+   * The raw service catalog response from GET /api/v1/services.
+   */
+  async getServiceCatalog(): Promise<ServiceCatalogResponse> {
+    const res = await apiClient<ServiceCatalogResponse>('/services', { method: 'GET' });
+    return res.data;
+  },
+
+  /**
    * The service catalogue, from the database rather than from this file.
    *
    * `GET /api/v1/services` is unauthenticated, so this works on the landing page
-   * and while sign-in is still resolving. `SEEDED_SERVICES` stays as a *fallback*,
-   * not as the source: this is an emergency app, and a driver on a roadside should
-   * see the service grid even if the catalogue request fails. The two lists match
-   * today (verified against the `services` table — same six codes, same three
-   * categories), so the fallback degrades to the same thing rather than to
-   * something different.
-   *
-   * **Prices come from the local table, because the backend has none.** The
-   * `services` table has no price column and `jobs.price_estimate` is never
-   * written, so `estimated_price` exists nowhere server-side. These numbers are
-   * indicative UI copy; nothing stores them against a job, and a completed job
-   * reports only the `price_final` its partner entered. Tracked in TASKS.md.
+   * and while sign-in is still resolving. `SEEDED_SERVICES` stays as a *fallback*.
+   * Prices are omitted per Backend Gap #7 & Amendment 1.
    */
   async listServices(): Promise<Service[]> {
     try {
       const res = await apiClient<ServiceCatalogResponse>('/services', { method: 'GET' });
-      const priceByCode = new Map(SEEDED_SERVICES.map((s) => [s.code, s.estimated_price]));
       return res.data.items.map((item) => ({
         id: item.id,
         category_id: item.category_id ?? 0,
@@ -225,7 +217,6 @@ export const jobsService = {
           item.category_code && item.category_id
             ? { id: item.category_id, code: item.category_code, name: item.category_name ?? '' }
             : undefined,
-        estimated_price: priceByCode.get(item.code),
       }));
     } catch {
       // Offline, or the backend is down. The grid still renders.

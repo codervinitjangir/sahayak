@@ -5,10 +5,17 @@ export interface User {
   name: string;
   phone: string;
   email?: string;
-  role: UserRole;
+  role?: UserRole;
+  phone_verified?: boolean;
   created_at?: string;
-  token?: string;
-  access_token?: string;
+}
+
+export interface UserRegistrationResponse {
+  id: string;
+  name: string;
+  phone: string;
+  phone_verified: boolean;
+  created_at: string;
 }
 
 export interface CreateUserPayload {
@@ -17,3 +24,4 @@ export interface CreateUserPayload {
   email?: string;
   role?: UserRole;
 }
+

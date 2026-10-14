@@ -51,7 +51,7 @@ export const MatchingPanel: React.FC<{ data: AnalyticsMatching }> = ({ data }) =
 
   return (
     <div className="space-y-5">
-      <section className="rounded-xl border border-slate-200 bg-white p-6">
+      <section className="rounded-[16px] border border-[#E7E0D2] bg-white p-6 shadow-2xs">
         <div className="flex flex-wrap items-end justify-between gap-6">
           <HeroFigure
             label="Divergence from pure-nearest"
@@ -61,8 +61,8 @@ export const MatchingPanel: React.FC<{ data: AnalyticsMatching }> = ({ data }) =
             )} first offers went to someone who was not the closest`}
           />
           <div className="text-right">
-            <p className="text-xs text-slate-500">Driver of the divergence</p>
-            <p className="text-lg font-semibold text-slate-900">
+            <p className="text-xs text-[#5B5346] font-medium">Driver of the divergence</p>
+            <p className="text-lg font-bold text-[#1B1712] font-['Fraunces']">
               {attribution.driver ? humanise(attribution.driver) : '—'}
             </p>
             <p className="max-w-[18rem] text-[11px] text-slate-400">

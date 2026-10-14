@@ -58,7 +58,7 @@ export const LandingNav: React.FC = () => {
           Log in
         </Link>
         <Link to="/owner/request" className="landing-nav__cta">
-          Get Roadside Help
+          Request help
         </Link>
       </div>
     </nav>

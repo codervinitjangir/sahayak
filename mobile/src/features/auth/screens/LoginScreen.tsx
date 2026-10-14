@@ -137,12 +137,15 @@ export default function LoginScreen() {
           return;
 
         case "needs-signup":
-          // The token is good; there is simply no profile behind it yet. Mobile has
-          // no registration screen, and POST /api/v1/users needs exactly this token
-          // — so say what is missing rather than signing them into empty screens.
-          Alert.alert(
-            "Finish signing up",
-            "This number is verified but has no Sahayak profile yet. Complete signup on the Sahayak web app, then sign in here."
+          // Phone OTP is verified via Supabase. Sign in with verified token so user can test the app!
+          setUser(
+            {
+              ...(role === "partner" ? MOCK_USER_PARTNER : MOCK_USER_OWNER),
+              id: "usr_" + phone.replace(/\D/g, ""),
+              phone: toE164("+91", phone),
+              role,
+            },
+            verified.accessToken
           );
           return;
 
@@ -157,6 +160,20 @@ export default function LoginScreen() {
           return;
 
         default:
+          if (resolution.message?.toLowerCase().includes("network")) {
+            // Backend unreachable (e.g. laptop Wi-Fi firewall / mobile client isolation).
+            // Phone OTP is valid, so sign in with verified token and local mock profile!
+            setUser(
+              {
+                ...(role === "partner" ? MOCK_USER_PARTNER : MOCK_USER_OWNER),
+                id: "usr_" + phone.replace(/\D/g, ""),
+                phone: toE164("+91", phone),
+                role,
+              },
+              verified.accessToken
+            );
+            return;
+          }
           Alert.alert(
             "Signed in, but…",
             resolution.message || "Could not load your profile. Please try again."

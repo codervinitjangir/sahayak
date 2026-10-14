@@ -72,18 +72,14 @@ export interface OfferResponse {
   /** Resolves to the accepted job, or null when the offer was already gone. */
   accept: (offerId: string) => Promise<Job | null>;
   reject: (offerId: string) => Promise<void>;
-  /** Timer hit zero. Releases the offer without showing the partner an error. */
-  expire: (offerId: string) => void;
   isResponding: boolean;
   error: string | null;
   clearError: () => void;
 }
 
 /**
- * Accept / reject / timeout, in one place.
- *
- * The dashboard's inline offer card and the full OffersPage both call this, so
- * the two can never drift on what a 409 means or on what happens at 0s.
+ * Accept / reject in one place.
+ * Server-side offers never expire automatically.
  */
 export function useOfferResponse(): OfferResponse {
   const queryClient = useQueryClient();
@@ -139,12 +135,6 @@ export function useOfferResponse(): OfferResponse {
         // Declining something that already vanished is still declined.
       }
     },
-    expire: (offerId) => {
-      setError(null);
-      queryClient.setQueryData(PARTNER_OFFER_KEY, null);
-      void partnerService.rejectOffer(offerId, 'timed_out').catch(() => undefined);
-      refreshDispatch();
-    },
     isResponding: acceptMutation.isPending || rejectMutation.isPending,
     error,
     clearError: () => setError(null),
@@ -157,9 +147,12 @@ export function useJobStatusTransition() {
   return useMutation({
     mutationFn: ({ jobId, status }: { jobId: string; status: JobStatus }) =>
       partnerService.updateJobStatus(jobId, status),
-    onSuccess: (job) => {
+    onSuccess: (transition) => {
       // A completed job is no longer the active one.
-      queryClient.setQueryData(PARTNER_ACTIVE_JOB_KEY, job.status === 'completed' ? null : job);
+      queryClient.setQueryData(
+        PARTNER_ACTIVE_JOB_KEY,
+        transition.status === 'completed' ? null : undefined
+      );
       queryClient.invalidateQueries({ queryKey: PARTNER_ACTIVE_JOB_KEY });
       queryClient.invalidateQueries({ queryKey: PARTNER_EARNINGS_KEY });
       queryClient.invalidateQueries({ queryKey: PARTNER_STATS_KEY });

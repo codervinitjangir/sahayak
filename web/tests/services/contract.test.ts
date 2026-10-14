@@ -166,7 +166,7 @@ describe('Backend Contract Compliance Tests', () => {
       expect(options?.method).toBe('POST');
 
       const body = JSON.parse(options?.body as string);
-      expect(body.reason).toBe('Wait time too long');
+      expect(body.cancellation_reason).toBe('Wait time too long');
     });
   });
 

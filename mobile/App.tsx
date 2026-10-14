@@ -90,14 +90,14 @@ export default function App() {
 
   return (
     <GestureHandlerRootView style={styles.flex}>
-      <SafeAreaProvider>
+      <SafeAreaProvider style={styles.flex}>
         <ErrorBoundary>
           <QueryClientProvider client={queryClient}>
             <StatusBar style="auto" />
             <RootNavigator />
 
             {/* ── SAHAYAK OPENING LAUNCH SEQUENCE (REVEALS FIRST SCREEN AT 1.76s) ── */}
-            {!splashFinished && (
+            {Platform.OS !== "web" && !splashFinished && (
               <AppLaunchSequence
                 isReady={fontsLoaded || !!fontError}
                 onAnimationComplete={() => setSplashFinished(true)}

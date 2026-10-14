@@ -12,6 +12,45 @@
   --color-warning: #B45309;
   --color-surface: #FFFFFF;
   --color-canvas: #F8FAFC;
+
+  /* Warm Paper Stationery design system tokens */
+  --paper: #F6F1E6;
+  --paper-card: #FBF8F1;
+  --ink: #1B1712;
+  --ink-soft: #5B5346;
+  --ink-muted: #9A917F;
+  --line: #E4DBC8;
+  --line-subtle: #E7E0D2;
+
+  /* Pastel gradient tokens */
+  --blue: #AFCBEA;
+  --blue-deep: #28486B;
+  --blue-grad: linear-gradient(135deg, #96C9ED 0%, #82BCE6 100%);
+  --blue-heading: #061D32;
+
+  --sage: #C7DAB9;
+  --sage-deep: #33502A;
+  --sage-grad: linear-gradient(135deg, #8FD4A0 0%, #7EBE8F 100%);
+  --sage-heading: #092413;
+
+  --butter: #F3D98B;
+  --butter-deep: #6B4F0E;
+  --butter-grad: linear-gradient(135deg, #F5D77B 0%, #ECC95C 100%);
+  --butter-heading: #2B1D02;
+
+  --coral: #F0BBA9;
+  --coral-deep: #7A3421;
+  --coral-grad: linear-gradient(135deg, #F8A585 0%, #EE916E 100%);
+  --coral-heading: #2E0F07;
+
+  --mint-cta: #9BD8A9;
+
+  --font-display: 'Fraunces', Georgia, serif;
+  --font-body: 'Inter', system-ui, -apple-system, sans-serif;
+
+  --shadow-warm: 0 18px 40px -12px rgba(27, 23, 18, 0.16);
+  --shadow-warm-sm: 0 8px 20px -6px rgba(27, 23, 18, 0.12);
+  --shadow-float: 0 12px 24px 2px rgba(0, 0, 0, 0.05);
 }
 
 body {

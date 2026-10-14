@@ -10,8 +10,10 @@ import type {
   IncomingOffer,
 } from "../types";
 
+import { API_BASE_URL } from "../constants";
+
 // ─── Axios instance ────────────────────────────────────────────────────────────
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:8000";
+const API_BASE = API_BASE_URL;
 
 export const apiClient = axios.create({
   baseURL: API_BASE,

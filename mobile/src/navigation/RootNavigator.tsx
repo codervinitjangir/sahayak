@@ -73,56 +73,14 @@ function OwnerNavigator() {
   );
 }
 
-// ─── Partner Tab Navigator ────────────────────────────────────────────────────
-function PartnerTabs() {
-  return (
-    <Tab.Navigator
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: Colors.primary,
-        tabBarInactiveTintColor: Colors.textMuted,
-        tabBarStyle: {
-          backgroundColor: Colors.surfaceWhite,
-          borderTopColor: Colors.border,
-          paddingBottom: Platform.OS === "ios" ? 24 : 8,
-          paddingTop: 8,
-          height: Platform.OS === "ios" ? 80 : 60,
-        },
-        tabBarLabelStyle: {
-          fontSize: 11,
-          fontFamily: Typography.fontFamily.medium,
-        },
-      }}
-    >
-      <Tab.Screen
-        name="PartnerHome"
-        component={PartnerHomeScreen}
-        options={{
-          tabBarLabel: "Dashboard",
-          tabBarIcon: ({ color, size, focused }: any) => (
-            <Ionicons name={focused ? "grid" : "grid-outline"} size={size} color={color} />
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="Profile"
-        component={ProfileScreen}
-        options={{
-          tabBarLabel: "Profile",
-          tabBarIcon: ({ color, size, focused }: any) => (
-            <Ionicons name={focused ? "person" : "person-outline"} size={size} color={color} />
-          ),
-        }}
-      />
-    </Tab.Navigator>
-  );
-}
-
-// ─── Partner Stack ────────────────────────────────────────────────────────────
+// ─── Partner Stack Navigator ──────────────────────────────────────────────────
 function PartnerNavigator() {
   return (
-    <PartnerStack.Navigator screenOptions={{ headerShown: false }}>
-      <PartnerStack.Screen name="PartnerHome" component={PartnerTabs} />
+    <PartnerStack.Navigator
+      screenOptions={{ headerShown: false }}
+      initialRouteName="PartnerHome"
+    >
+      <PartnerStack.Screen name="PartnerHome" component={PartnerHomeScreen} />
       <PartnerStack.Screen
         name="IncomingOffer"
         component={IncomingOfferScreen}
@@ -138,6 +96,7 @@ function PartnerNavigator() {
         component={PartnerJobDoneScreen}
         options={{ animation: "fade", gestureEnabled: false }}
       />
+      <PartnerStack.Screen name="Profile" component={ProfileScreen} />
     </PartnerStack.Navigator>
   );
 }

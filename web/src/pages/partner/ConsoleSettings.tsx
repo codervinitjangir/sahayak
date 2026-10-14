@@ -9,7 +9,6 @@ import {
   MapPin,
   MessageSquare,
   Phone,
-  Plus,
   RotateCcw,
   Ruler,
   Settings,
@@ -18,7 +17,7 @@ import {
   Volume2,
 } from 'lucide-react';
 
-import { resetPartnerStore, usePartnerProfile } from '../../features/partners/partnerStore';
+import { usePartnerProfile } from '../../features/partners/partnerStore';
 import { PartnerTopBar } from './components/PartnerTopBar';
 import {
   resetConsoleSettings,
@@ -28,7 +27,6 @@ import {
   type ConsoleSettings,
   type DistanceUnit,
 } from '../../features/partners/consoleSettings';
-import { IS_PARTNER_API_MOCK, partnerService } from '../../services/partner.service';
 import type { ConsoleView } from './PartnerDashboard';
 import './partner.css';
 
@@ -183,17 +181,6 @@ export const ConsoleSettingsView: React.FC<{
     setNotice('Console settings restored to defaults.');
   };
 
-  const handleResetDemoData = () => {
-    resetPartnerStore();
-    setNotice('Demo partner data reset — profile, verification and duty state are back to seed values.');
-  };
-
-  const handleSimulate = () => {
-    void partnerService.simulateIncomingOffer().then(() => {
-      setNotice('A dispatch offer was queued. Open Dispatches to respond to it.');
-    });
-  };
-
   const body = (
     <div className="w-full flex flex-col gap-5">
       {/* Header — same shape as the other three views so the canvas does not
@@ -342,7 +329,7 @@ export const ConsoleSettingsView: React.FC<{
           </section>
         </div>
 
-        {/* Column 3 — Account + demo tools */}
+        {/* Column 3 — Account + dispatch connection */}
         <div className="lg:col-span-3 w-full flex flex-col gap-4">
           <section aria-label="Account" className="bento-card p-5">
             <CardHeading title="Account" caption="Registered with Sahayak dispatch" />
@@ -353,39 +340,18 @@ export const ConsoleSettingsView: React.FC<{
             </div>
           </section>
 
-          <section aria-label="Demo and developer tools" className="bento-card p-5">
-            <CardHeading title="Demo Tools" caption="Only visible while the console runs on mock data" />
+          <section aria-label="Dispatch connection" className="bento-card p-5">
+            <CardHeading title="Dispatch Connection" caption="Real-time connectivity to Sahayak dispatch network" />
             <div className="mt-2">
               <FactRow
                 Icon={Database}
                 label="Dispatch API"
-                value={IS_PARTNER_API_MOCK ? 'Mock (local)' : 'Live backend'}
+                value="Live backend"
               />
             </div>
-            {IS_PARTNER_API_MOCK ? (
-              <div className="flex flex-col gap-2 mt-3">
-                <button
-                  type="button"
-                  onClick={handleSimulate}
-                  className="w-full px-3.5 py-2.5 rounded-[10px] bg-[#0F766E] hover:bg-[#0C5F58] text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Simulate incoming dispatch</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={handleResetDemoData}
-                  className="w-full px-3.5 py-2.5 rounded-[10px] bg-white hover:bg-[#FBF8F1] border border-[#E7E0D2] text-[#1B1712] text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
-                >
-                  <RotateCcw className="w-3.5 h-3.5 text-[#5B5346]" />
-                  <span>Reset demo data</span>
-                </button>
-              </div>
-            ) : (
-              <p className="text-[11px] text-[#5B5346] mt-3">
-                This console is pointed at the live dispatch backend, so the demo controls are unavailable.
-              </p>
-            )}
+            <p className="text-[11px] text-[#5B5346] mt-3">
+              This console communicates directly with the live dispatch backend. Offers and dispatches are synced automatically.
+            </p>
           </section>
         </div>
       </div>

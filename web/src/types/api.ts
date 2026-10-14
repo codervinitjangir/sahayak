@@ -5,6 +5,7 @@ export interface ApiMeta {
 export interface ApiResponse<T> {
   data: T;
   meta?: ApiMeta;
+  status?: number;
 }
 
 export interface ApiErrorDetail {

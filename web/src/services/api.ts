@@ -1,7 +1,12 @@
 import { ApiResponse, ApiErrorResponse } from '../types/api';
 import { clearAuthToken, getAuthToken } from './authToken';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1';
+export function getApiBaseUrl(): string {
+  if (typeof process !== 'undefined' && process.env?.VITE_API_BASE_URL) {
+    return process.env.VITE_API_BASE_URL;
+  }
+  return (import.meta.env && import.meta.env.VITE_API_BASE_URL) || '/api/v1';
+}
 
 /**
  * Dispatched on the window when the API rejects our credentials, so session state
@@ -73,7 +78,8 @@ export async function apiClient<T>(endpoint: string, options: RequestOptions = {
     requestHeaders['Idempotency-Key'] = idempotencyKey;
   }
 
-  const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`;
+  const baseUrl = getApiBaseUrl();
+  const url = endpoint.startsWith('http') ? endpoint : `${baseUrl}${endpoint}`;
 
   const response = await fetch(url, {
     ...rest,
@@ -110,5 +116,7 @@ export async function apiClient<T>(endpoint: string, options: RequestOptions = {
     throw new ApiError(response.status, errorDetail, errorPayload?.request_id);
   }
 
-  return json as ApiResponse<T>;
+  const result = (json || {}) as ApiResponse<T>;
+  result.status = response.status;
+  return result;
 }

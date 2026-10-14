@@ -22,11 +22,11 @@ export const AppRoutes: React.FC = () => {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/signup" element={<Navigate to="/owner/signup" replace />} />
       <Route path="/owner/signup" element={<OwnerSignup />} />
+      <Route path="/owner/request" element={<RequestHelpPage />} />
 
       {/* Owner Role Routes */}
       <Route element={<RequireRole allowedRoles={['owner', 'ops', 'super_admin']} />}>
         <Route path="/owner" element={<OwnerHome />} />
-        <Route path="/owner/request" element={<RequestHelpPage />} />
         <Route path="/owner/jobs/:jobId" element={<JobTrackingPage />} />
       </Route>
 

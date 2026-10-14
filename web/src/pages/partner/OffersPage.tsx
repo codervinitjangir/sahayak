@@ -3,7 +3,6 @@ import { Link, useNavigate } from 'react-router-dom';
 import { AlertTriangle, ArrowLeft, Car, MapPin, Wrench } from 'lucide-react';
 import { Card, CardHeader } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
-import { OfferTimer } from '../../components/OfferTimer';
 import { usePartnerAvailability } from '../../features/partners/usePartnerAvailability';
 import { useActiveJob, useOfferResponse, usePendingOffer } from '../../features/partners/useOffers';
 import './partner.css';
@@ -16,10 +15,7 @@ function formatDistance(metres: number): string {
 
 /**
  * The full-page view of the offer the dashboard shows inline.
- *
- * Accept / reject / timeout all come from useOfferResponse — the same hook the
- * dashboard card uses — so the two surfaces cannot disagree about what a 409
- * means or about what happens when the clock runs out.
+ * Accept / reject come from useOfferResponse. Offers do not expire server-side.
  */
 export const OffersPage: React.FC = () => {
   const navigate = useNavigate();
@@ -31,7 +27,7 @@ export const OffersPage: React.FC = () => {
   const offerQuery = usePendingOffer(isAvailable && !activeJobQuery.isLoading && !activeJob);
   const offer = offerQuery.data ?? null;
 
-  const { accept, reject, expire, isResponding, error } = useOfferResponse();
+  const { accept, reject, isResponding, error } = useOfferResponse();
 
   const handleAccept = async () => {
     if (!offer) return;
@@ -83,7 +79,10 @@ export const OffersPage: React.FC = () => {
             <Card aria-label="Offer details" className="border-brand-700">
               <CardHeader eyebrow="Offer" title={offer.serviceName} />
 
-              <OfferTimer offeredAt={offer.offeredAt} onExpire={() => expire(offer.id)} className="mt-3" />
+              <div className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-teal-50 border border-teal-200 text-teal-800 text-xs font-semibold">
+                <span className="w-2 h-2 rounded-full bg-teal-500 animate-pulse" />
+                <span>Dispatch offer active · Awaiting your response</span>
+              </div>
 
               <dl className="mt-4 space-y-3">
                 <div className="flex items-start gap-3">

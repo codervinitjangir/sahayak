@@ -28,6 +28,7 @@ import {
 } from '../../types/partner';
 import { Button } from '../../components/ui/Button';
 import { usePartnerAvailability } from '../../features/partners/usePartnerAvailability';
+import { partnerService } from '../../services/partner.service';
 import { PartnerTopBar } from './components/PartnerTopBar';
 import './partner.css';
 
@@ -80,7 +81,9 @@ export const Preferences: React.FC<{ embedded?: boolean }> = ({ embedded = false
   });
 
   const [isSaved, setIsSaved] = useState<boolean>(false);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // Tier 1 Identity Gating
   const tier1Complete = isTier1Complete(profile);
@@ -94,7 +97,7 @@ export const Preferences: React.FC<{ embedded?: boolean }> = ({ embedded = false
   };
 
   // Save changes
-  const handleSavePreferences = () => {
+  const handleSavePreferences = async () => {
     const availableServices = servicesForCategory(category).filter((s) => s.code !== 'fuel_delivery');
     const activeServices = availableServices.filter((s) => selectedServiceIds.includes(s.id));
 
@@ -125,7 +128,7 @@ export const Preferences: React.FC<{ embedded?: boolean }> = ({ embedded = false
       isTowing && cleanReg
         ? [
             {
-              id: profile.vehicles[0]?.id || `veh_${Date.now()}`,
+              id: profile.vehicles[0]?.id || `v_${Date.now()}`,
               type: equipment.type,
               registrationNumber: cleanReg,
             },
@@ -159,8 +162,30 @@ export const Preferences: React.FC<{ embedded?: boolean }> = ({ embedded = false
       verificationItems: updatedVerificationItems,
     };
 
+    setIsSaving(true);
+    setSaveError(null);
+
+    // Sync service codes with live backend if partner profile has an ID
+    if (profile.id) {
+      try {
+        await partnerService.updateServices(
+          profile.id,
+          activeServices.map((s) => s.code)
+        );
+      } catch (err) {
+        setSaveError(
+          err instanceof Error
+            ? `Failed to sync services with dispatch: ${err.message}`
+            : 'Failed to sync services with dispatch. Please check connection and try again.'
+        );
+        setIsSaving(false);
+        return;
+      }
+    }
+
     setProfile(nextProfile);
     saveStoredPartnerProfile(nextProfile);
+    setIsSaving(false);
     setIsSaved(true);
     setSaveSuccessMsg('Preferences saved and capabilities submitted for verification!');
     setTimeout(() => {
@@ -430,12 +455,12 @@ export const Preferences: React.FC<{ embedded?: boolean }> = ({ embedded = false
                                 {service.name}
                               </span>
                               <span className="text-[10px] text-[#5B5346]">
-                                {service.categoryCode === 'towing' ? 'Heavy Recovery SLA: 15–20m' : 'On-Site Fix SLA: 10–15m'}
+                                {service.categoryCode === 'towing' ? 'Vehicle Recovery' : 'On-Site Assistance'}
                               </span>
                             </div>
                           </div>
-                          <span className="text-[10px] font-bold text-[#5B5346] bg-white border border-[#E7E0D2] px-2 py-0.5 rounded">
-                            {service.categoryCode === 'towing' ? '₹1,500+' : '₹450+'}
+                          <span className="text-[10px] font-medium text-[#5B5346] bg-white border border-[#E7E0D2] px-2 py-0.5 rounded">
+                            Standard
                           </span>
                         </div>
                       );
@@ -624,6 +649,12 @@ export const Preferences: React.FC<{ embedded?: boolean }> = ({ embedded = false
                   </div>
                 </div>
 
+                {saveError && (
+                  <div className="w-full text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-[8px] p-2.5 mt-3">
+                    {saveError}
+                  </div>
+                )}
+
                 <div className="flex items-center justify-between pt-3 border-t border-[#E7E0D2]">
                   <Button
                     type="button"
@@ -640,11 +671,12 @@ export const Preferences: React.FC<{ embedded?: boolean }> = ({ embedded = false
                     type="button"
                     variant="primary"
                     size="sm"
-                    className="flex items-center gap-1.5 text-xs font-semibold px-4 py-2 !bg-[#0F766E] hover:!bg-[#0D645D] text-white border-0 rounded-[10px] shadow-sm"
+                    disabled={isSaving}
+                    className="flex items-center gap-1.5 text-xs font-semibold px-4 py-2 !bg-[#0F766E] hover:!bg-[#0D645D] text-white border-0 rounded-[10px] shadow-sm disabled:opacity-50"
                     onClick={handleSavePreferences}
                   >
                     <Check className="w-3.5 h-3.5" />
-                    <span>Save & Update Preferences</span>
+                    <span>{isSaving ? 'Saving...' : 'Save & Update Preferences'}</span>
                     <ArrowRight className="w-3.5 h-3.5 ml-0.5" />
                   </Button>
                 </div>

@@ -230,7 +230,7 @@ describe('Partner Flow', () => {
   });
 
   describe('VerificationStatus', () => {
-    it('renders Two-Tier grouping (Tier 1 Identity & Tier 2 Capabilities) and sample job walkthrough', () => {
+    it('renders Two-Tier grouping (Tier 1 Identity & Tier 2 Capabilities)', () => {
       saveStoredPartnerProfile(DEFAULT_PARTNER_PROFILE);
 
       renderInConsole(<VerificationStatus />);
@@ -239,17 +239,28 @@ describe('Partner Flow', () => {
       expect(screen.getByText('Identity Verification')).toBeInTheDocument();
       expect(screen.getByText('Services & Equipment')).toBeInTheDocument();
       expect(screen.getByText('Aadhaar Card')).toBeInTheDocument();
-      expect(screen.getByText('Sample Job Walkthrough')).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /Start Walkthrough/i })).toBeInTheDocument();
     });
 
-    it('displays status change toast notification on status update simulation', async () => {
-      saveStoredPartnerProfile(DEFAULT_PARTNER_PROFILE);
+    it('displays status change toast notification on document re-upload', async () => {
+      const profileWithRequirementsDue: PartnerProfile = {
+        ...DEFAULT_PARTNER_PROFILE,
+        verificationItems: [
+          {
+            id: 'doc_aadhaar',
+            label: 'Aadhaar Card',
+            type: 'document',
+            tier: 'tier_1_identity',
+            status: 'requirements_due',
+            requirementsDueReason: 'Document blurred',
+          },
+        ],
+      };
+      saveStoredPartnerProfile(profileWithRequirementsDue);
 
       renderInConsole(<VerificationStatus />);
 
-      const demoBtn = screen.getByRole('button', { name: /Demo Simulation/i });
-      fireEvent.click(demoBtn);
+      const reuploadBtn = screen.getByRole('button', { name: /Re-upload Aadhaar Card/i });
+      fireEvent.click(reuploadBtn);
 
       // Toast should appear with status update notification
       expect(screen.getByRole('complementary', { name: /Status notification/i })).toBeInTheDocument();
@@ -417,6 +428,12 @@ describe('Partner Flow', () => {
       saveStoredPartnerProfile(DEFAULT_PARTNER_PROFILE);
       const queryClient = new QueryClient({
         defaultOptions: { queries: { retry: false } },
+      });
+      queryClient.setQueryData(['partner', 'earnings', 'week'], {
+        window: 'week',
+        jobsCompleted: 12,
+        amountEarned: 55000,
+        previousAmountEarned: 47900,
       });
 
       render(

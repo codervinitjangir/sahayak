@@ -83,7 +83,7 @@ export function getPartnerStoreState(): PartnerStoreState {
 
 /**
  * Adopt a profile written by something that still calls saveStoredPartnerProfile
- * directly — the Preferences service toggles, or a test seeding fixtures.
+ * directly — the Preferences service toggles, or a test seeding initial state.
  *
  * Deliberately does NOT raise verification events: a wholesale profile
  * replacement is not a status *change*, and treating it as one would fire

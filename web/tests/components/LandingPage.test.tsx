@@ -4,7 +4,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { LandingPage } from '../../src/pages/landing/LandingPage';
 
 describe('LandingPage Component', () => {
-  it('renders all 8 sections with Pairly aesthetic and Sahayak content', () => {
+  it('renders landing sections with Pairly aesthetic and honest Sahayak content', () => {
     render(
       <BrowserRouter>
         <LandingPage />
@@ -22,7 +22,8 @@ describe('LandingPage Component', () => {
     // 2. Hero Section
     expect(screen.getByText(/Vehicle breakdown\?/i)).toBeInTheDocument();
     expect(screen.getByText(/We come to you/i)).toBeInTheDocument();
-    expect(screen.getAllByText(/Book Roadside Help/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('Request help').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('Become a partner').length).toBeGreaterThanOrEqual(1);
 
     // 3. 5-Capability Sparkle Strip
     expect(screen.getByText(/What we offer/i)).toBeInTheDocument();
@@ -39,6 +40,7 @@ describe('LandingPage Component', () => {
     expect(screen.getByText('Share your location & issue')).toBeInTheDocument();
     expect(screen.getByText('Nearest partner dispatched')).toBeInTheDocument();
     expect(screen.getByText('Track, get fixed, pay')).toBeInTheDocument();
+    expect(screen.getAllByText(/Final price is confirmed when the job is completed/i).length).toBeGreaterThanOrEqual(1);
 
     // 5. Four Alternating Pastel Bento Blocks
     expect(screen.getByText('ON-DEMAND DISPATCH')).toBeInTheDocument();
@@ -46,34 +48,19 @@ describe('LandingPage Component', () => {
     expect(screen.getByText('PARTNER WITH US')).toBeInTheDocument();
     expect(screen.getByText('SAFETY & TRUST')).toBeInTheDocument();
 
-    // 5b. Customer Reviews Carousel
-    expect(screen.getByText(/Loved By/i)).toBeInTheDocument();
-    expect(screen.getByText(/The People/i)).toBeInTheDocument();
-    expect(screen.getByText(/We Serve/i)).toBeInTheDocument();
-    expect(screen.getByText(/4.7 from 5,925/i)).toBeInTheDocument();
-    expect(screen.getByText('Thanae')).toBeInTheDocument();
-    expect(screen.getByText('Manjeri Dharmarajan')).toBeInTheDocument();
-    expect(screen.getByText('Jatinder Singh')).toBeInTheDocument();
+    // 6. Honest How Pricing Works Note (No fake tiers, no fake numbers)
+    expect(screen.getByText(/How pricing works/i)).toBeInTheDocument();
+    expect(screen.getByText('Pay Per Service Only')).toBeInTheDocument();
+    expect(screen.getByText('On-Site Inspection')).toBeInTheDocument();
+    expect(screen.getByText('Settlement Notice')).toBeInTheDocument();
+    expect(screen.queryByText(/₹499/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Enterprise/i)).not.toBeInTheDocument();
 
-    // 6. Tiered Pricing Section
-    expect(screen.getByText(/Simple plans\. Transparent rates\./i)).toBeInTheDocument();
-    expect(screen.getByText('Monthly')).toBeInTheDocument();
-    expect(screen.getByText('Pay Per Use')).toBeInTheDocument();
-    expect(screen.getByText('Family')).toBeInTheDocument();
-    expect(screen.getByText('Fleet')).toBeInTheDocument();
-    expect(screen.getByText('Enterprise')).toBeInTheDocument();
-    expect(screen.getByText('No card required.')).toBeInTheDocument();
-    expect(screen.getByText('Everything in Pay Per Use, plus:')).toBeInTheDocument();
-    expect(screen.getByText('Everything in Family, plus:')).toBeInTheDocument();
-    expect(screen.getByText('Everything in Fleet, plus:')).toBeInTheDocument();
-    expect(screen.getByText(/Save up to ₹4,800\/yr/i)).toBeInTheDocument();
-
-    // 7. Mint Wave Final CTA
-    expect(screen.getByText(/Download the app now!/i)).toBeInTheDocument();
-    expect(screen.getByText(/Experience seamless online ordering only on the Zomato app/i)).toBeInTheDocument();
-    expect(screen.getByText(/Google Play/i)).toBeInTheDocument();
-    expect(screen.getByText(/App Store/i)).toBeInTheDocument();
-    expect(screen.getByText(/Scan the QR code to download the app/i)).toBeInTheDocument();
+    // 7. Final CTA (No Zomato, no fake app store download dialogs)
+    expect(screen.getByText(/Breakdown on the road\?/i)).toBeInTheDocument();
+    expect(screen.getByText(/We're ready to dispatch/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Zomato/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Google Play/i)).not.toBeInTheDocument();
 
     // 8. Editorial Footer
     expect(screen.getByText(/Keeping Bengaluru moving safely/i)).toBeInTheDocument();

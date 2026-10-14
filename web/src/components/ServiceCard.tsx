@@ -25,6 +25,8 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({
 }) => {
   const getIcon = (code: string) => {
     switch (code) {
+      case 'flatbed_towing':
+      case 'wheel_lift_towing':
       case 'flatbed_tow':
       case 'wheel_lift_tow':
       case 'towing':
@@ -84,11 +86,6 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({
           >
             {isSelected && <span className="w-2 h-2 rounded-full bg-white" />}
           </span>
-          {service.estimated_price && (
-            <span className="text-sm font-semibold text-slate-900 mt-2">
-              ₹{service.estimated_price}
-            </span>
-          )}
         </div>
       </div>
 

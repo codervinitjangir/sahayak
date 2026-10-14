@@ -28,6 +28,12 @@ export type BottomTab = "home" | "services" | "activity" | "account";
 interface BlinkitBottomNavBarProps {
   activeTab: BottomTab;
   onTabPress: (tab: BottomTab) => void;
+  labels?: {
+    home?: string;
+    services?: string;
+    activity?: string;
+    account?: string;
+  };
 }
 
 // ─── DYNAMIC ICONS (YELLOW & BLACK) ──────────────────────────────────────────
@@ -172,6 +178,7 @@ function TabItem({ tabKey, label, isActive, onPress, renderIcon }: TabItemProps)
 export default function BlinkitBottomNavBar({
   activeTab,
   onTabPress,
+  labels,
 }: BlinkitBottomNavBarProps) {
   const insets = useSafeAreaInsets();
   const bottomInset = insets.bottom > 0 ? insets.bottom : Platform.OS === "android" ? 10 : 16;
@@ -183,22 +190,22 @@ export default function BlinkitBottomNavBar({
   }[] = [
     {
       key: "home",
-      label: "Home",
+      label: labels?.home ?? "Home",
       renderIcon: (active) => <HomeIcon active={active} />,
     },
     {
       key: "services",
-      label: "Categories",
+      label: labels?.services ?? "Categories",
       renderIcon: (active) => <ServicesIcon active={active} />,
     },
     {
       key: "activity",
-      label: "Orders",
+      label: labels?.activity ?? "Orders",
       renderIcon: (active) => <RescuesIcon active={active} />,
     },
     {
       key: "account",
-      label: "Account",
+      label: labels?.account ?? "Account",
       renderIcon: (active) => <AccountIcon active={active} />,
     },
   ];

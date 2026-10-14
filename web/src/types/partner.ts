@@ -1,30 +1,32 @@
 /* ── Partner-side domain types ─────────────────────────────────────────────── */
 
-export type PartnerCategory = 'towing' | 'mechanical' | 'both' | 'fuel_delivery';
+export type PartnerCategory = 'towing' | 'mechanical' | 'both' | 'fuel' | 'fuel_delivery';
 
 /** Mirrors the 6 seeded rows in the services table. */
 export interface PartnerService {
   id: number;
   code: string;
   name: string;
-  categoryCode: 'towing' | 'mechanical' | 'fuel_delivery';
+  categoryCode: 'towing' | 'mechanical' | 'fuel';
+  requires_vehicle_equipment?: boolean;
 }
 
 /** The real service catalog — exactly matches the backend seed data. */
 export const SERVICE_CATALOG: PartnerService[] = [
-  { id: 1, code: 'flat_tyre',         name: 'Flat-Tyre Support',     categoryCode: 'mechanical' },
-  { id: 2, code: 'battery_jumpstart', name: 'Battery Jumpstart',     categoryCode: 'mechanical' },
-  { id: 3, code: 'minor_repair',      name: 'On-Site Minor Repair',  categoryCode: 'mechanical' },
-  { id: 4, code: 'flatbed_tow',       name: 'Flatbed Towing',        categoryCode: 'towing' },
-  { id: 5, code: 'wheel_lift_tow',    name: 'Wheel-Lift Towing',     categoryCode: 'towing' },
-  { id: 6, code: 'fuel_delivery',     name: 'Emergency Fuel (5L)',   categoryCode: 'fuel_delivery' },
+  { id: 1, code: 'flatbed_towing',    name: 'Flatbed Towing',          categoryCode: 'towing',     requires_vehicle_equipment: true },
+  { id: 2, code: 'wheel_lift_towing', name: 'Wheel-Lift Towing',       categoryCode: 'towing',     requires_vehicle_equipment: true },
+  { id: 3, code: 'battery_jumpstart', name: 'Battery Jumpstart',       categoryCode: 'mechanical', requires_vehicle_equipment: false },
+  { id: 4, code: 'flat_tyre',         name: 'Flat-Tyre Support',       categoryCode: 'mechanical', requires_vehicle_equipment: false },
+  { id: 5, code: 'minor_repair',      name: 'On-Site Minor Repair',    categoryCode: 'mechanical', requires_vehicle_equipment: false },
+  { id: 6, code: 'fuel_delivery',     name: 'Emergency Fuel Delivery', categoryCode: 'fuel',       requires_vehicle_equipment: false },
 ];
 
 export function servicesForCategory(cat: PartnerCategory): PartnerService[] {
   if (cat === 'both') {
     return SERVICE_CATALOG.filter((s) => s.categoryCode === 'towing' || s.categoryCode === 'mechanical');
   }
-  return SERVICE_CATALOG.filter((s) => s.categoryCode === cat);
+  const targetCategory = cat === 'fuel_delivery' ? 'fuel' : cat;
+  return SERVICE_CATALOG.filter((s) => s.categoryCode === targetCategory);
 }
 
 /* ── Category metadata ──────────────────────────────────────────────────── */
@@ -176,19 +178,19 @@ export interface PartnerOperationalDetails {
 }
 
 export const DEFAULT_OPERATIONAL_DETAILS: PartnerOperationalDetails = {
-  operatingZone: 'Indiranagar & East Bengaluru',
+  operatingZone: 'East Bengaluru',
   availabilityMode: '24_7',
-  teamSize: 2,
+  teamSize: 1,
 
   towTruckType: 'flatbed_truck',
-  towRegistrationNumber: 'KA-01-MJ-8899',
-  towCapacity: 'Up to 3.5 Tonnes (Cars & SUVs)',
-  winchEquipped: true,
-  towCoverageRadiusKm: 25,
+  towRegistrationNumber: '',
+  towCapacity: 'Up to 3.5 Tonnes',
+  winchEquipped: false,
+  towCoverageRadiusKm: 20,
 
   mechanicUnitType: 'mobile_van',
-  workshopName: 'Speedy Mechanics',
-  workshopAddress: '12th Main Road, Indiranagar, Bengaluru',
+  workshopName: '',
+  workshopAddress: '',
   toolsEquipped: [],
 };
 
@@ -208,9 +210,9 @@ export interface PartnerProfile {
 const STORAGE_KEY = 'sahayak_partner_profile';
 
 export const DEFAULT_PARTNER_PROFILE: PartnerProfile = {
-  id: 'ptr_ramesh_01',
-  name: 'Ramesh Kumar (Speedy Mechanics)',
-  phone: '+91 98111 22334',
+  id: '',
+  name: '',
+  phone: '',
   category: 'mechanical',
   isAvailable: true,
   services: [
@@ -356,7 +358,7 @@ export function derivePartnerCapability(profile: PartnerProfile): PartnerCapabil
   if (hasTow && hasMechanical) return 'both';
   if (hasTow) return 'tow_operator';
   if (hasMechanical) return 'mechanic';
-  if (verified.some((svc) => svc.categoryCode === 'fuel_delivery')) return 'fuel_delivery';
+  if (verified.some((svc) => svc.categoryCode === 'fuel' || (svc.categoryCode as string) === 'fuel_delivery')) return 'fuel_delivery';
   return 'none';
 }
 

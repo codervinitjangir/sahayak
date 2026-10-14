@@ -6,7 +6,6 @@ import {
   getSupabase,
   signOut as supabaseSignOut,
 } from '../services/supabase';
-import { IS_DEMO_MODE } from './config';
 
 export type UserRole = 'owner' | 'partner' | 'ops' | 'super_admin';
 
@@ -34,41 +33,6 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const ROLE_STORAGE_KEY = 'sahayak_role';
 
-/**
- * Seeded identities for the navbar role switcher. These exist purely so the three
- * role views can be demoed without a backend, and are gated behind IS_DEMO_MODE so
- * they cannot reach a production build. Real sign-in is not implemented yet.
- */
-const DEMO_IDENTITIES: Record<UserRole, UserProfile> = {
-  owner: {
-    id: 'usr_owner_01',
-    name: 'Asha Sharma',
-    phone: '+91 98765 43210',
-    email: 'asha@example.com',
-    role: 'owner',
-  },
-  partner: {
-    id: 'ptr_ramesh_01',
-    name: 'Ramesh Kumar (Speedy Mechanics)',
-    phone: '+91 98111 22334',
-    role: 'partner',
-  },
-  ops: {
-    id: 'adm_ops_01',
-    name: 'Sahayak Ops Console',
-    phone: '+91 98000 11223',
-    email: 'ops@sahayak.in',
-    role: 'ops',
-  },
-  super_admin: {
-    id: 'adm_ops_01',
-    name: 'Sahayak Ops Console',
-    phone: '+91 98000 11223',
-    email: 'ops@sahayak.in',
-    role: 'super_admin',
-  },
-};
-
 function readStoredRole(): UserRole {
   try {
     return (localStorage.getItem(ROLE_STORAGE_KEY) as UserRole) || 'owner';
@@ -78,23 +42,15 @@ function readStoredRole(): UserRole {
 }
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Default to 'owner' for demo & development convenience
   const [role, setRoleState] = useState<UserRole>(readStoredRole);
 
-  // Only ever a token a real sign-in produced. Previously this defaulted to a
-  // hardcoded fake JWT that was persisted and then sent as a real bearer header.
   const [token, setToken] = useState<string | null>(() => getAuthToken());
 
-  // The Supabase session is read asynchronously, so on first paint we do not yet
-  // know whether there is one. Route guards need to tell "signed out" apart from
-  // "not checked yet" — without this they redirect to /login on every reload.
   const [isRestoringSession, setIsRestoringSession] = useState<boolean>(
     () => IS_SUPABASE_CONFIGURED
   );
 
-  const [user, setUser] = useState<UserProfile | null>(() =>
-    IS_DEMO_MODE ? DEMO_IDENTITIES[readStoredRole()] : null
-  );
+  const [user, setUser] = useState<UserProfile | null>(null);
 
   const setRole = (newRole: UserRole) => {
     setRoleState(newRole);
@@ -102,9 +58,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.setItem(ROLE_STORAGE_KEY, newRole);
     } catch {
       // Storage unavailable — role simply will not persist across reloads.
-    }
-    if (IS_DEMO_MODE) {
-      setUser(DEMO_IDENTITIES[newRole]);
     }
   };
 

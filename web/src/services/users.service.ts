@@ -1,5 +1,5 @@
 import { apiClient } from './api';
-import { User, CreateUserPayload } from '../types/users';
+import { UserRegistrationResponse, CreateUserPayload } from '../types/users';
 
 export const usersService = {
   /**
@@ -17,12 +17,14 @@ export const usersService = {
    * phone claim rather than this field — so a number that differs from the one
    * that passed OTP lands unverified.
    */
-  async createUser(payload: CreateUserPayload): Promise<User> {
-    const res = await apiClient<User>('/users', {
+  async createUser(payload: CreateUserPayload): Promise<UserRegistrationResponse> {
+    const res = await apiClient<UserRegistrationResponse>('/users', {
       method: 'POST',
       body: JSON.stringify({
         role: 'owner',
-        ...payload,
+        name: payload.name,
+        phone: payload.phone,
+        ...(payload.email ? { email: payload.email } : {}),
       }),
     });
 

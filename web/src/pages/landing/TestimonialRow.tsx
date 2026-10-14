@@ -6,7 +6,7 @@ const STEPS = [
   {
     num: '01',
     title: 'Share your location & issue',
-    desc: 'Puncture, dead battery, need towing, or out of fuel — just pick your issue and drop a pin. Takes 30 seconds.',
+    desc: 'Puncture, dead battery, need towing, or out of fuel — pick your vehicle issue and pinpoint your coordinates.',
     icon: MapPin,
     color: '#0F766E',
     colorLight: 'rgba(15, 118, 110, 0.1)',
@@ -15,15 +15,14 @@ const STEPS = [
          keyboard users aren't dropped into four no-op stops. */
       <div className="hiw-visual__choices" aria-hidden="true">
         {[
-          { emoji: '🔧', label: 'Puncture Repair', time: '~15 min' },
-          { emoji: '🔋', label: 'Battery Jumpstart', time: '~10 min' },
-          { emoji: '🚛', label: 'Towing / Flatbed', time: '~25 min' },
-          { emoji: '⛽', label: 'Fuel Delivery', time: '~20 min' },
+          { emoji: '🔧', label: 'Puncture Repair' },
+          { emoji: '🔋', label: 'Battery Jumpstart' },
+          { emoji: '🚛', label: 'Towing / Flatbed' },
+          { emoji: '⛽', label: 'Fuel Delivery' },
         ].map((s) => (
           <div key={s.label} className="hiw-choice">
             <span className="hiw-choice__emoji">{s.emoji}</span>
             <span className="hiw-choice__label">{s.label}</span>
-            <span className="hiw-choice__time">{s.time}</span>
           </div>
         ))}
       </div>
@@ -32,30 +31,30 @@ const STEPS = [
   {
     num: '02',
     title: 'Nearest partner dispatched',
-    desc: 'We auto-match you with the closest certified partner who can fix your issue. You get their name, rating, and live ETA.',
+    desc: 'We match you with the closest verified partner equipped for your breakdown. Track live status as they head to your location.',
     icon: Search,
     color: '#B45309',
     colorLight: 'rgba(180, 83, 9, 0.1)',
     visual: (
       <div className="hiw-visual__match">
         <div className="hiw-match-card">
-          <div className="hiw-match-card__avatar">RM</div>
+          <div className="hiw-match-card__avatar">SP</div>
           <div className="hiw-match-card__info">
-            <div className="hiw-match-card__name">Rajesh M.</div>
-            <div className="hiw-match-card__role">Puncture & Tyre Specialist</div>
+            <div className="hiw-match-card__name">Verified Service Partner</div>
+            <div className="hiw-match-card__role">Roadside Breakdown Specialist</div>
             <div className="hiw-match-card__stats">
-              <span className="hiw-match-card__rating">★ 4.9</span>
-              <span className="hiw-match-card__jobs">240+ jobs done</span>
+              <span className="hiw-match-card__rating">KYC Verified</span>
+              <span className="hiw-match-card__jobs">Active on network</span>
             </div>
           </div>
         </div>
         <div className="hiw-match-meta">
           <div className="hiw-match-meta__item hiw-match-meta__item--green">
             <span className="hiw-match-meta__dot" />
-            1.2 km away · Arriving in 6 min
+            En route to breakdown coordinates
           </div>
           <div className="hiw-match-meta__item hiw-match-meta__item--amber">
-            Puncture repair: ₹199 (fixed rate)
+            Final price is confirmed when the job is completed.
           </div>
         </div>
       </div>
@@ -64,7 +63,7 @@ const STEPS = [
   {
     num: '03',
     title: 'Track, get fixed, pay',
-    desc: 'Watch your mechanic arrive on a live map. They fix the issue at your doorstep. Pay the pre-agreed amount — no surprises.',
+    desc: 'Follow your technician on the live tracking map. They resolve your issue on-site. Final price is confirmed when the job is completed.',
     icon: CreditCard,
     color: '#15803D',
     colorLight: 'rgba(21, 128, 61, 0.1)',
@@ -73,22 +72,18 @@ const STEPS = [
         <div className="hiw-track-step hiw-track-step--done">
           <div className="hiw-track-step__indicator" />
           <span>Partner dispatched</span>
-          <span className="hiw-track-step__time">12:04 PM</span>
         </div>
         <div className="hiw-track-step hiw-track-step--done">
           <div className="hiw-track-step__indicator" />
           <span>En route to your location</span>
-          <span className="hiw-track-step__time">12:05 PM</span>
         </div>
         <div className="hiw-track-step hiw-track-step--active">
           <div className="hiw-track-step__indicator" />
-          <span>Arrived — repair in progress</span>
-          <span className="hiw-track-step__time">12:11 PM</span>
+          <span>Arrived — service in progress</span>
         </div>
         <div className="hiw-track-step">
           <div className="hiw-track-step__indicator" />
-          <span>Fixed & paid ₹199</span>
-          <span className="hiw-track-step__time">—</span>
+          <span>Service completed</span>
         </div>
       </div>
     ),

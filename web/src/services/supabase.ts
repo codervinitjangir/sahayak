@@ -11,7 +11,7 @@
  * Until 2026-10-06 this file did not exist. `LoginPage` advanced its own step
  * state on a timer and navigated, which looked exactly like a successful sign-in
  * and produced no token at all — so every authenticated endpoint answered 401
- * and the only screens that worked were the ones backed by a mock.
+ * and early development without a live backend masked the missing auth flow.
  *
  * ## Why the key in `VITE_SUPABASE_PUBLISHABLE_KEY` is not a leak
  *

@@ -1,4 +1,5 @@
 import { Platform, NativeModules } from "react-native";
+import Constants from "expo-constants";
 
 // The /api/v1 prefix is part of the contract — every endpoint the service
 // modules call ("/jobs", "/jobs/:id") is relative to it. Without it every
@@ -11,20 +12,31 @@ function getDevApiUrl(): string {
     return process.env.EXPO_PUBLIC_API_URL;
   }
 
-  // When testing on a physical device over Expo Go / Wi-Fi, 10.0.2.2 or localhost
-  // will fail. Extract the developer's machine IP from Metro's bundle URL.
+  // When testing on a physical device over Expo Go / Wi-Fi, hostUri contains
+  // the developer's laptop IP (e.g. 192.168.1.62:8081).
+  const hostUri =
+    Constants.expoConfig?.hostUri ||
+    (Constants as any).manifest2?.extra?.expoGo?.debuggerHost ||
+    (Constants as any).manifest?.debuggerHost;
+  if (hostUri) {
+    const host = hostUri.split(":")[0];
+    if (host && host !== "localhost" && host !== "127.0.0.1") {
+      return `http://${host}:8010/api/v1`;
+    }
+  }
+
   const scriptURL: string | undefined = NativeModules?.SourceCode?.scriptURL;
   if (scriptURL) {
     const match = scriptURL.match(/^https?:\/\/([^:/]+)/);
     const host = match?.[1];
     if (host && host !== "localhost" && host !== "127.0.0.1") {
-      return `http://${host}:8000/api/v1`;
+      return `http://${host}:8010/api/v1`;
     }
   }
 
   return Platform.OS === "android"
-    ? "http://10.0.2.2:8000/api/v1"
-    : "http://localhost:8000/api/v1";
+    ? "http://10.0.2.2:8010/api/v1"
+    : "http://localhost:8010/api/v1";
 }
 
 export const API_BASE_URL = __DEV__

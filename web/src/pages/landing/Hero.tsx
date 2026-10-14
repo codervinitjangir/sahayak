@@ -28,9 +28,29 @@ export const Hero: React.FC = () => {
           transparent pricing, no hidden charges.
         </p>
 
-        <Link to="/owner/request" className="hero__cta">
-          Book Roadside Help
-        </Link>
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '12px', marginTop: '16px' }}>
+          <Link to="/owner/request" className="hero__cta">
+            Request help
+          </Link>
+          <Link
+            to="/partner/signup"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '12px 24px',
+              borderRadius: '9999px',
+              fontWeight: 600,
+              fontSize: '14px',
+              border: '1.5px solid #1B1712',
+              color: '#1B1712',
+              textDecoration: 'none',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            Become a partner
+          </Link>
+        </div>
       </div>
     </section>
   );

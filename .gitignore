@@ -37,10 +37,12 @@ out/
 .DS_Store
 Thumbs.db
 
-# Logs
+# Logs & Temp
 *.log
 logs/
 *.pid
+*.tmp
+*context*.txt
 
 # Test artifacts
 .pytest_cache/

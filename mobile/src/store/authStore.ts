@@ -6,7 +6,7 @@ import {
   getSupabase,
   signOut as supabaseSignOut,
 } from "../services/supabase";
-import { identityService, type BackendRole } from "../services/identity";
+import type { BackendRole } from "../services/identity";
 import { MOCK_USER_OWNER, MOCK_USER_PARTNER } from "../services/api";
 import type { User, UserRole } from "../types";
 
@@ -96,6 +96,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         if (restored) {
           get().setToken(restored);
           try {
+            const { identityService } = await import("../services/identity");
             const resolution = await identityService.resolve();
             if (resolution.kind === "registered" && !cancelled) {
               const role = appRoleFor(resolution.identity.role);
