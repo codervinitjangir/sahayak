@@ -184,3 +184,28 @@ async def get_partner_stats(
         "lifetime_jobs": lifetime_jobs,
     }
 
+
+async def list_partners(
+    db: AsyncSession, status: Optional[str] = None
+) -> Sequence[Partner]:
+    """List partners, optionally filtered by verification_status, newest first."""
+    stmt = select(Partner)
+    if status:
+        stmt = stmt.where(Partner.verification_status == status)
+    stmt = stmt.order_by(Partner.created_at.desc())
+    result = await db.execute(stmt)
+    return result.scalars().all()
+
+
+async def update_partner_verification(
+    db: AsyncSession, partner_id: uuid.UUID, verification_status: str
+) -> Optional[Partner]:
+    """Update a partner's verification status."""
+    partner = await get_partner_by_id(db, partner_id)
+    if not partner:
+        return None
+    partner.verification_status = verification_status
+    await db.flush()
+    return partner
+
+

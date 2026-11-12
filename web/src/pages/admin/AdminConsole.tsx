@@ -9,6 +9,7 @@ import {
   LifeBuoy,
   LogOut,
   RefreshCw,
+  ShieldCheck,
   Wrench,
   Zap,
 } from 'lucide-react';
@@ -25,14 +26,16 @@ import {
 import { OverviewPanel } from './OverviewPanel';
 import { DispatchPanel } from './DispatchPanel';
 import { MatchingPanel } from './MatchingPanel';
+import { PartnersPanel } from './PartnersPanel';
 import '../partner/partner.css';
 
-type TabId = 'overview' | 'dispatch' | 'matching';
+type TabId = 'overview' | 'dispatch' | 'matching' | 'partners';
 
 const TABS: { id: TabId; label: string; blurb: string; Icon: React.ElementType }[] = [
   { id: 'overview', label: 'Overview', blurb: 'Jobs, completion and partner supply', Icon: BarChart3 },
   { id: 'dispatch', label: 'Dispatch', blurb: 'Offers, acceptance and latency', Icon: Zap },
   { id: 'matching', label: 'Matching', blurb: 'Weighted engine vs pure-nearest', Icon: Compass },
+  { id: 'partners', label: 'Partners', blurb: 'Mechanic verification & KYC approval', Icon: ShieldCheck },
 ];
 
 /**
@@ -245,7 +248,9 @@ export const AdminConsole: React.FC = () => {
         </div>
 
         {/* Panel Rendering */}
-        {query.isError ? (
+        {active === 'partners' ? (
+          <PartnersPanel />
+        ) : query.isError ? (
           <AnalyticsError error={query.error} />
         ) : query.data ? (
           <div className={query.isFetching ? 'opacity-60 transition-opacity' : 'transition-opacity'}>

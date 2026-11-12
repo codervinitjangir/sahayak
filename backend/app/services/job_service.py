@@ -9,6 +9,7 @@ the read model. Every database call goes through app/repositories/job_repository
 import logging
 import time
 import uuid
+from decimal import Decimal
 from typing import Optional
 
 from geoalchemy2 import WKTElement
@@ -42,6 +43,16 @@ from app.utils.errors import (
     NotFoundError,
 )
 from app.utils.logging import log_event
+
+# Baseline estimated pricing per standard service category
+SERVICE_BASE_PRICES: dict[str, Decimal] = {
+    "flatbed_towing": Decimal("1499.00"),
+    "wheel_lift_towing": Decimal("1199.00"),
+    "battery_jumpstart": Decimal("499.00"),
+    "flat_tyre": Decimal("399.00"),
+    "minor_repair": Decimal("599.00"),
+    "fuel_delivery": Decimal("449.00"),
+}
 
 # The status every job starts in; dispatch moves it on from here.
 INITIAL_JOB_STATUS = "requested"
@@ -197,6 +208,7 @@ async def create_job(
         raise BadRequestError(ErrorCode.INVALID_SERVICE_CODE, "Invalid service_code")
 
     pickup_location = _build_pickup_point(payload.pickup_lat, payload.pickup_lng)
+    estimated_price = SERVICE_BASE_PRICES.get(payload.service_code, Decimal("499.00"))
 
     try:
         job = await job_repository.create_job_row(
@@ -209,6 +221,7 @@ async def create_job(
             pickup_location=pickup_location,
             pickup_address_text=payload.pickup_address_text,
             issue_description=payload.issue_description,
+            price_estimate=estimated_price,
         )
         await job_repository.create_status_history_row(
             db,

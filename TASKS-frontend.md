@@ -8,6 +8,25 @@
 
 ## Done
 
+### [x] Admin Console Partners Panel & Verification UI — 2026-10-21
+
+Shipped the fourth operations tab: `/admin/partners` in `AdminConsole.tsx` backed by `PartnersPanel.tsx`.
+- Connects directly to real `GET /api/v1/admin/partners` and `PATCH /api/v1/admin/partners/{id}/verify`.
+- Filters by verification status: All, Pending, Verified, Rejected with live status counts.
+- Search by partner name, phone, or workshop.
+- Displays workshop name, experience years, and registered service capabilities tags.
+- Direct Approve, Reject, and Reset action buttons with real-time optimistic state updates.
+- Fully aligned with the Partner Console warm paper palette (`#F6F1E6`, `#FBF8F1`, `#0F766E`).
+- Re-exported route fixture `backend-routes.json` with 33 live routes; all 115 tests in `web` passing.
+
+### [x] Mobile Real Backend Integration & Rule A Enforcement — 2026-10-21
+
+- Complete elimination of mock fixtures across `mobile/src/`.
+- Created typed API clients for `vehiclesApi` (`GET /vehicles`, `POST /vehicles`), `servicesApi` (`GET /services`), `partnerApi` (`GET /partners/me/stats`, `GET /partners/me/jobs/active`, `POST /partners/{id}/availability`, `POST /partners/{id}/location`), and `jobsApi.listMyJobs`.
+- Replaced vector map with `StreetVectorCanvas.tsx`.
+- Created automated enforcement script `mobile/scripts/verify-no-demo-data.mjs`.
+- Zero violations on `npm run check:rule-a`. 100% clean typecheck (`tsc --noEmit`). 15/15 tests passing.
+
 ### [x] Admin console — 2026-10-09
 
 Three read-only panels over the analytics endpoints that shipped on 2026-10-03 and that nothing

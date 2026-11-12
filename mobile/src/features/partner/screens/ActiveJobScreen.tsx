@@ -21,7 +21,6 @@ import type { RouteProp } from "@react-navigation/native";
 import { Colors, Typography, Spacing, Radius, Shadows } from "../../../constants/theme";
 import Button from "../../../components/ui/Button";
 import SharedMapCanvas from "../../../components/map/SharedMapCanvas";
-import { MOCK_INCOMING_OFFER } from "../../../services/api";
 import { jobsApi } from "../../../services/api/jobs";
 import type { PartnerStackParamList } from "../../../types";
 
@@ -34,8 +33,8 @@ const USER_LOC = { latitude: 12.9716, longitude: 77.5946 };
 export default function ActiveJobScreen() {
   const nav = useNavigation<Nav>();
   const route = useRoute<Route>();
-  const currentJobId = route.params?.jobId || MOCK_INCOMING_OFFER.jobId;
-  const job = MOCK_INCOMING_OFFER.job;
+  const currentJobId = route.params?.jobId || "active_rescue_job";
+  const [jobData, setJobData] = useState<any>(null);
   const slideAnim = useRef(new Animated.Value(100)).current;
 
   // Partner flow states: en_route -> arrived (enter 4-digit code) -> in_progress
@@ -44,11 +43,24 @@ export default function ActiveJobScreen() {
   const otpRefs = useRef<(TextInput | null)[]>([]);
 
   useEffect(() => {
-    // Notify en_route when screen opens if real job
+    // Notify en_route and load job details if real job
     if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(currentJobId)) {
+      jobsApi.getJob(currentJobId).then(setJobData).catch(() => {});
       void jobsApi.updateJobStatus(currentJobId, "partner_en_route").catch(() => {});
     }
   }, [currentJobId]);
+
+  const job = {
+    id: currentJobId,
+    pickupLocation: {
+      address: jobData?.pickup_address_text || "Bengaluru Breakdown Point",
+    },
+    vehicle: {
+      model: jobData?.vehicle_number ? `Vehicle (${jobData.vehicle_number})` : "Vehicle",
+      type: "Four-Wheeler",
+      licensePlate: jobData?.vehicle_number || "KA-01",
+    },
+  };
 
   useEffect(() => {
     Animated.spring(slideAnim, {

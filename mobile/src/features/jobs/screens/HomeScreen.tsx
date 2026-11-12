@@ -10,7 +10,7 @@
 //    - "Everything in minutes" Asymmetric Hero Feature Card (Flatbed Towing + Battery Jump)
 //    - Grouped Recent & Favorite Breakdown Locations Card with ❤️ Heart Favorites
 //    - Clean, modern spacing with subtle 1px border elevation
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -35,16 +35,11 @@ import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
 import { Colors, Typography, Radius, Shadows, Spacing } from "../../../constants/theme";
-import {
-  MOCK_VEHICLES,
-  MOCK_USER_OWNER,
-  MOCK_USER_PARTNER,
-  MOCK_JOBS,
-} from "../../../services/api";
 import Button from "../../../components/ui/Button";
 import { useAuthStore } from "../../../store/authStore";
 import { useJobStore } from "../../../store/jobStore";
 import type { OwnerStackParamList, ServiceType, Vehicle } from "../../../types";
+import { vehiclesApi } from "../../../services/api/vehicles";
 
 import ServicesView from "../../services/screens/ServicesView";
 import ActivityView from "../../activity/screens/ActivityView";
@@ -159,14 +154,41 @@ const RECENT_PLACES: RecentPlace[] = [
   },
 ];
 
+const DEFAULT_VEHICLE: Vehicle = {
+  id: "veh_primary",
+  make: "Personal",
+  model: "Vehicle",
+  year: 2023,
+  licensePlate: "KA-01-MJ-5021",
+  type: "four-wheeler",
+};
+
 export default function HomeScreen() {
   const nav = useNavigation<NativeStackNavigationProp<OwnerStackParamList>>();
-  const { user, setDemoUser, logout } = useAuthStore();
+  const { user, logout } = useAuthStore();
   const { setDraftPickupLocation, setDraftService } = useJobStore();
 
   const [activeTab, setActiveTab] = useState<BottomTab>("home");
-  const [selectedVehicle, setSelectedVehicle] = useState<Vehicle>(MOCK_VEHICLES[0]);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([DEFAULT_VEHICLE]);
+  const [selectedVehicle, setSelectedVehicle] = useState<Vehicle>(DEFAULT_VEHICLE);
   const [recentPlaces, setRecentPlaces] = useState<RecentPlace[]>(RECENT_PLACES);
+
+  useEffect(() => {
+    vehiclesApi.listVehicles().then((serverVehicles) => {
+      if (serverVehicles && serverVehicles.length > 0) {
+        const mapped: Vehicle[] = serverVehicles.map((v) => ({
+          id: v.id,
+          make: v.make,
+          model: v.model,
+          year: v.year,
+          licensePlate: v.vehicle_number,
+          type: (v.vehicle_type === "two_wheeler" ? "two-wheeler" : "four-wheeler") as "two-wheeler" | "four-wheeler",
+        }));
+        setVehicles(mapped);
+        setSelectedVehicle(mapped[0]);
+      }
+    }).catch(() => {});
+  }, []);
 
   // Modals
   const [showVehicleModal, setShowVehicleModal] = useState(false);
@@ -762,11 +784,13 @@ export default function HomeScreen() {
 
             <View style={styles.profileUserCard}>
               <View style={styles.profileAvatarLarge}>
-                <Text style={styles.profileInitials}>AS</Text>
+                <Text style={styles.profileInitials}>
+                  {user?.name ? user.name.slice(0, 2).toUpperCase() : "SO"}
+                </Text>
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.profileName}>{MOCK_USER_OWNER.name}</Text>
-                <Text style={styles.profilePhone}>{MOCK_USER_OWNER.phone}</Text>
+                <Text style={styles.profileName}>{user?.name ?? "Vehicle Owner"}</Text>
+                <Text style={styles.profilePhone}>{user?.phone ?? "+91 98765 43210"}</Text>
                 <View style={styles.verifiedTag}>
                   <Ionicons name="checkmark-circle" size={12} color={Colors.brand700} />
                   <Text style={styles.verifiedTagText}>Sahayak Verified Owner</Text>
@@ -775,7 +799,7 @@ export default function HomeScreen() {
             </View>
 
             <Text style={styles.modalSectionTitle}>Registered Vehicles</Text>
-            {MOCK_VEHICLES.map((v) => {
+            {vehicles.map((v) => {
               const isSelected = v.id === selectedVehicle.id;
               return (
                 <TouchableOpacity
@@ -804,24 +828,6 @@ export default function HomeScreen() {
                 </TouchableOpacity>
               );
             })}
-
-            {/* Developer Mode Switch */}
-            <Text style={styles.modalSectionTitle}>Developer Quick-Switch</Text>
-            <TouchableOpacity
-              style={styles.switchRoleCard}
-              onPress={() => {
-                setShowProfileModal(false);
-                // A role switch for demoing the partner screens, not a sign-in:
-                // setDemoUser carries no token, because the request interceptor
-                // sends whatever is in `token` and "mock_jwt_partner" would go out
-                // as a real bearer against a backend that verifies them.
-                setDemoUser(MOCK_USER_PARTNER);
-              }}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="swap-horizontal" size={18} color={Colors.brand700} />
-              <Text style={styles.switchRoleText}>Switch to Partner Mode (Test Offers)</Text>
-            </TouchableOpacity>
 
             {/* Logout */}
             <TouchableOpacity
@@ -944,7 +950,7 @@ export default function HomeScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.vehicleModalCard}>
             <Text style={styles.modalSectionTitle}>Select Breakdown Vehicle</Text>
-            {MOCK_VEHICLES.map((v) => {
+            {vehicles.map((v) => {
               const isSelected = v.id === selectedVehicle.id;
               return (
                 <TouchableOpacity

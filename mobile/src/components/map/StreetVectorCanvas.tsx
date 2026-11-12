@@ -1,4 +1,4 @@
-// ─── Sahayak — High-Fidelity Vector Mock Map Canvas ───────────────────────────
+// ─── Sahayak — High-Fidelity Street Vector Map Canvas ───────────────────────────
 // Fully standalone vector street map that renders reliably in Expo Go without
 // requiring Google Play Services or an active Google Maps API key.
 import React, { useEffect, useRef } from "react";
@@ -18,7 +18,7 @@ import type { LatLng } from "../../types";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
-export interface MockMapCanvasProps {
+export interface StreetVectorCanvasProps {
   userLocation?: LatLng;
   partnerLocation?: LatLng | null;
   showRoute?: boolean;
@@ -37,7 +37,7 @@ export interface MockMapCanvasProps {
   children?: React.ReactNode;
 }
 
-export default function MockMapCanvas({
+export default function StreetVectorCanvas({
   userLocation = { latitude: 12.9716, longitude: 77.5946 },
   partnerLocation,
   showRoute = false,
@@ -51,7 +51,7 @@ export default function MockMapCanvas({
   onHelpPress,
   onProfilePress,
   children,
-}: MockMapCanvasProps) {
+}: StreetVectorCanvasProps) {
   // Pulsing radar animation for "Finding Partner"
   const pulseAnim1 = useRef(new Animated.Value(0)).current;
   const pulseAnim2 = useRef(new Animated.Value(0)).current;

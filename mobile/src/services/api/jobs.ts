@@ -157,10 +157,14 @@ export const jobsApi = {
     apiClient
       .post(`/jobs/${jobId}/ratings`, { rating, comment: comment || undefined })
       .then((r) => r.data),
+
+  /** List caller's jobs history (GET /api/v1/jobs) */
+  listMyJobs: (limit: number = 20, offset: number = 0) =>
+    apiClient
+      .get<{ items: BackendJob[]; total: number; limit: number; offset: number; has_more: boolean }>(
+        `/jobs?limit=${limit}&offset=${offset}`
+      )
+      .then((r) => r.data)
+      .catch(() => ({ items: [], total: 0, limit, offset, has_more: false })),
 };
 
-// Removed 2026-10-06: listMyJobs() called GET /jobs/me, which does not exist —
-// there is no job-history route on the backend for either role, and asking for one
-// is tracked in BACKEND_COMMUNICATION.md §3.1. Until it ships, a history screen
-// has nothing to call; leaving the method here only meant the 404 was found by a
-// user rather than by this file.

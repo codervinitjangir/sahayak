@@ -41,9 +41,9 @@ import Card from "../../../components/ui/Card";
 import { StatusBadge } from "../../../components/ui/Badge";
 import { useAuthStore } from "../../../store/authStore";
 import { useJobStore } from "../../../store/jobStore";
-import { MOCK_PARTNER, MOCK_JOBS } from "../../../services/api";
 import { jobsApi, BackendPartnerOfferItem } from "../../../services/api/jobs";
-import type { PartnerStackParamList, ServiceType } from "../../../types";
+import { partnerApi, MobilePartnerTrustStats } from "../../../services/api/partner";
+import type { PartnerStackParamList, ServiceType, Job } from "../../../types";
 
 import BlinkitTopHeader from "../../../components/ui/BlinkitTopHeader";
 import BlinkitBottomNavBar, { BottomTab } from "../../../components/ui/BlinkitBottomNavBar";
@@ -136,8 +136,44 @@ export default function PartnerHomeScreen() {
   );
   const [isLocating, setIsLocating] = useState(false);
 
-  const partner = MOCK_PARTNER;
-  const recentJobs = MOCK_JOBS;
+  const [partnerStats, setPartnerStats] = useState<MobilePartnerTrustStats | null>(null);
+  const [recentJobs, setRecentJobs] = useState<Job[]>([]);
+
+  useEffect(() => {
+    partnerApi.getStats().then(setPartnerStats).catch(() => {});
+    jobsApi.listMyJobs().then((res) => {
+      const mapped: Job[] = (res.items || []).map((bj) => {
+        let st: ServiceType = "mechanic";
+        if (bj.service_code.includes("towing")) st = "towing";
+        else if (bj.service_code.includes("tyre")) st = "tyre";
+        else if (bj.service_code.includes("battery")) st = "battery";
+        else if (bj.service_code.includes("fuel")) st = "fuel";
+        else if (bj.service_code.includes("lockout")) st = "lockout";
+        return {
+          id: bj.id,
+          ownerId: bj.user_id,
+          vehicleId: bj.vehicle_id,
+          serviceType: st,
+          status: bj.status === "completed" ? "complete" : (bj.status as any),
+          pickupLocation: {
+            latitude: bj.pickup_lat,
+            longitude: bj.pickup_lng,
+            address: bj.pickup_address_text || "Bengaluru",
+          },
+          estimatedPrice: Number(bj.price_estimate || 499),
+          finalPrice: Number(bj.price_final || bj.price_estimate || 499),
+          createdAt: bj.created_at,
+        };
+      });
+      setRecentJobs(mapped);
+    }).catch(() => {});
+  }, []);
+
+  const partner = {
+    rating: partnerStats?.rating_avg ? Number(partnerStats.rating_avg) : 5.0,
+    earningsToday: 0,
+    totalJobs: partnerStats?.lifetime_jobs || 0,
+  };
 
   const insets = useSafeAreaInsets();
   const topInset =

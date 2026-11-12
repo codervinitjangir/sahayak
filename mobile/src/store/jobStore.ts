@@ -1,7 +1,6 @@
 // ─── Sahayak — Job Store (Zustand) ───────────────────────────────────────────
 import { create } from "zustand";
 import type { Job, JobStatus, ServiceType, Location } from "../types";
-import { MOCK_JOBS } from "../services/api";
 
 interface JobState {
   // Current active job
@@ -37,7 +36,7 @@ interface JobState {
 export const useJobStore = create<JobState>((set) => ({
   activeJob: null,
   startCode: "4821",
-  recentJobs: MOCK_JOBS,
+  recentJobs: [],
   draftServiceType: null,
   draftVehicleId: null,
   draftSubServiceId: null,

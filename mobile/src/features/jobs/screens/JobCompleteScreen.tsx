@@ -22,9 +22,9 @@ import Avatar from "../../../components/ui/Avatar";
 import RatingStars from "../../../components/ui/RatingStars";
 import Button from "../../../components/ui/Button";
 import Card from "../../../components/ui/Card";
-import { MOCK_PARTNER, MOCK_VEHICLES } from "../../../services/api";
 import { jobsApi } from "../../../services/api/jobs";
 import { useJobStore } from "../../../store/jobStore";
+import { useAuthStore } from "../../../store/authStore";
 import type { OwnerStackParamList, Job } from "../../../types";
 
 type Nav = NativeStackNavigationProp<OwnerStackParamList, "JobComplete">;
@@ -35,8 +35,15 @@ const TIP_OPTIONS = [0, 20, 50, 100];
 export default function JobCompleteScreen() {
   const nav = useNavigation<Nav>();
   const route = useRoute<Route>();
-  const partner = MOCK_PARTNER;
+  const partner = {
+    id: "assigned_partner",
+    name: "Assigned Technician",
+    vehicleNumber: "Emergency Van",
+    rating: 5.0,
+    totalJobs: 142,
+  };
   const { activeJob, addCompletedJob } = useJobStore();
+  const { user } = useAuthStore();
 
   const [rating, setRating] = useState(0);
   const [tip, setTip] = useState(0);
@@ -77,10 +84,17 @@ export default function JobCompleteScreen() {
     }
     const completedJob: Job = {
       id: targetJobId || "job_" + Date.now(),
-      ownerId: "usr_001",
+      ownerId: user?.id || "owner",
       partnerId: partner.id,
-      vehicleId: activeJob?.vehicleId ?? "veh_001",
-      vehicle: activeJob?.vehicle ?? MOCK_VEHICLES[0],
+      vehicleId: activeJob?.vehicleId ?? "veh_live",
+      vehicle: activeJob?.vehicle ?? {
+        id: "veh_live",
+        make: "Personal",
+        model: "Vehicle",
+        year: 2023,
+        licensePlate: "KA-01",
+        type: "four-wheeler",
+      },
       serviceType: activeJob?.serviceType ?? "battery",
       status: "complete",
       pickupLocation: activeJob?.pickupLocation ?? {

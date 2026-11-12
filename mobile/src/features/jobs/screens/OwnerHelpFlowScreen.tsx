@@ -32,14 +32,9 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Colors, Typography, Spacing, Radius, ServiceConfig } from "../../../constants/theme";
-import {
-  MOCK_SUB_SERVICES,
-  MOCK_VEHICLES,
-  MOCK_PARTNER,
-  MOCK_USER_OWNER,
-  MOCK_USER_PARTNER,
-} from "../../../services/api";
+import { SEEDED_SUB_SERVICES } from "../../../services/api";
 import { jobsApi } from "../../../services/api/jobs";
+import { vehiclesApi } from "../../../services/api/vehicles";
 import Button from "../../../components/ui/Button";
 import SharedMapCanvas from "../../../components/map/SharedMapCanvas";
 import SlidingBottomSheet, { SheetHeightVariant } from "../../../components/sheet/SlidingBottomSheet";
@@ -116,7 +111,7 @@ export default function OwnerHelpFlowScreen({
 }: OwnerHelpFlowScreenProps) {
   const nav = useNavigation<NativeStackNavigationProp<OwnerStackParamList>>();
   const route = useRoute<any>();
-  const { setDemoUser, logout } = useAuthStore();
+  const { user, logout } = useAuthStore();
 
   // Store bindings
   const {
@@ -137,10 +132,37 @@ export default function OwnerHelpFlowScreen({
   const initialSvc: ServiceType = route.params?.serviceType ?? "towing";
   const [selectedService, setSelectedService] = useState<ServiceType>(initialSvc);
   const [selectedSubId, setSelectedSubId] = useState<string | null>(() => {
-    const subs = MOCK_SUB_SERVICES[initialSvc] ?? [];
+    const subs = SEEDED_SUB_SERVICES[initialSvc] ?? [];
     return subs[0]?.id ?? "tow_01";
   });
-  const [selectedVehicle, setSelectedVehicle] = useState<Vehicle>(MOCK_VEHICLES[0]);
+  const defaultVehicle: Vehicle = {
+    id: "veh_primary",
+    make: "Personal",
+    model: "Vehicle",
+    year: 2023,
+    licensePlate: "KA-01-MJ-5021",
+    type: "four-wheeler",
+  };
+  const [vehicles, setVehicles] = useState<Vehicle[]>([defaultVehicle]);
+  const [selectedVehicle, setSelectedVehicle] = useState<Vehicle>(defaultVehicle);
+
+  useEffect(() => {
+    vehiclesApi.listVehicles().then((serverVehicles) => {
+      if (serverVehicles && serverVehicles.length > 0) {
+        const mapped: Vehicle[] = serverVehicles.map((v) => ({
+          id: v.id,
+          make: v.make,
+          model: v.model,
+          year: v.year,
+          licensePlate: v.vehicle_number,
+          type: (v.vehicle_type === "two_wheeler" ? "two-wheeler" : "four-wheeler") as "two-wheeler" | "four-wheeler",
+        }));
+        setVehicles(mapped);
+        setSelectedVehicle(mapped[0]);
+      }
+    }).catch(() => {});
+  }, []);
+
   const [notes, setNotes] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("UPI: Google Pay •• 4032");
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
@@ -167,8 +189,14 @@ export default function OwnerHelpFlowScreen({
 
   // Entities
   const userLoc = draftPickupLocation ?? BENGALURU;
-  const partner = MOCK_PARTNER;
-  const subServices = MOCK_SUB_SERVICES[selectedService] ?? [];
+  const partner = {
+    name: matchedPartner?.name || "Assigned Technician",
+    phone: matchedPartner?.phone || "+919876543210",
+    rating: matchedPartner?.rating ? matchedPartner.rating.toFixed(1) : "5.0",
+    vehicleModel: "Rescue Van",
+    vehicleNumber: "KA-01-RC-9021",
+  };
+  const subServices = SEEDED_SUB_SERVICES[selectedService] ?? [];
   const selectedSub = subServices.find((s) => s.id === selectedSubId) ?? subServices[0];
   const currentPrice = selectedSub?.estimatedPrice ?? 499;
 
@@ -215,7 +243,7 @@ export default function OwnerHelpFlowScreen({
         }
       }, 3000);
     } else {
-      // Local demo fallback
+      // Offline simulation fallback
       matchTimer = setTimeout(() => {
         setStep("partner_matched");
         setMatchedSubState("awaiting_start_code");
@@ -284,7 +312,7 @@ export default function OwnerHelpFlowScreen({
   // Quick suggestion select from idle
   const handleSelectQuickSuggestion = (suggestion: QuickSuggestion) => {
     setSelectedService(suggestion.type);
-    const subs = MOCK_SUB_SERVICES[suggestion.type] ?? [];
+    const subs = SEEDED_SUB_SERVICES[suggestion.type] ?? [];
     setSelectedSubId(subs[0]?.id ?? null);
     setStep("service_select");
   };
@@ -583,7 +611,7 @@ export default function OwnerHelpFlowScreen({
                     style={[styles.categoryChip, isSelected ? styles.categoryChipSelected : styles.categoryChipUnselected]}
                     onPress={() => {
                       setSelectedService(svc);
-                      const newSubs = MOCK_SUB_SERVICES[svc] ?? [];
+                      const newSubs = SEEDED_SUB_SERVICES[svc] ?? [];
                       setSelectedSubId(newSubs[0]?.id ?? null);
                     }}
                     activeOpacity={0.75}
@@ -987,11 +1015,13 @@ export default function OwnerHelpFlowScreen({
             {/* User Profile Card */}
             <View style={styles.profileCard}>
               <View style={styles.profileAvatarLarge}>
-                <Text style={styles.profileInitials}>AS</Text>
+                <Text style={styles.profileInitials}>
+                  {user?.name ? user.name.slice(0, 2).toUpperCase() : "SO"}
+                </Text>
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.profileName}>{MOCK_USER_OWNER.name}</Text>
-                <Text style={styles.profilePhone}>{MOCK_USER_OWNER.phone}</Text>
+                <Text style={styles.profileName}>{user?.name ?? "Vehicle Owner"}</Text>
+                <Text style={styles.profilePhone}>{user?.phone ?? "+91 98765 43210"}</Text>
                 <View style={styles.verifiedTag}>
                   <Ionicons name="checkmark-circle" size={12} color={Colors.brand700} />
                   <Text style={styles.verifiedTagText}>Verified Sahayak Owner</Text>
@@ -1001,7 +1031,7 @@ export default function OwnerHelpFlowScreen({
 
             {/* Registered Vehicles */}
             <Text style={styles.modalSectionTitle}>Registered Vehicles</Text>
-            {MOCK_VEHICLES.map((v) => {
+            {vehicles.map((v) => {
               const isCurrent = v.id === selectedVehicle.id;
               return (
                 <TouchableOpacity
@@ -1032,24 +1062,6 @@ export default function OwnerHelpFlowScreen({
                 </TouchableOpacity>
               );
             })}
-
-            {/* Switch Role (Test Partner Flow) */}
-            <Text style={styles.modalSectionTitle}>Developer Quick-Switch</Text>
-            <TouchableOpacity
-              style={styles.switchRoleBtn}
-              onPress={() => {
-                setShowProfileModal(false);
-                // A role switch for demoing the partner screens, not a sign-in:
-                // setDemoUser carries no token, because the request interceptor
-                // sends whatever is in `token` and "mock_jwt_partner" would go out
-                // as a real bearer against a backend that verifies them.
-                setDemoUser(MOCK_USER_PARTNER);
-              }}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="swap-horizontal" size={18} color={Colors.brand700} />
-              <Text style={styles.switchRoleBtnText}>Switch to Partner Mode (Test Offers)</Text>
-            </TouchableOpacity>
 
             <TouchableOpacity
               style={[
@@ -1174,7 +1186,7 @@ export default function OwnerHelpFlowScreen({
         <View style={styles.sosModalOverlay}>
           <View style={styles.sosModalCard}>
             <Text style={styles.modalSectionTitle}>Select Breakdown Vehicle</Text>
-            {MOCK_VEHICLES.map((v) => {
+            {vehicles.map((v) => {
               const isSelected = v.id === selectedVehicle.id;
               return (
                 <TouchableOpacity

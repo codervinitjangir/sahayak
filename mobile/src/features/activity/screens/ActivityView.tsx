@@ -102,98 +102,29 @@ const NEGATIVE_FEEDBACK_TAGS = [
   "📞 Did not pick up calls",
 ];
 
-const INITIAL_ACTIVITIES: ActivityItem[] = [
-  {
-    id: "act_01",
-    serviceType: "battery",
-    serviceTitle: "Battery Jumpstart Booster",
-    vehicle: "Maruti Suzuki Swift",
-    plate: "KA 05 MN 1234",
-    date: "Today, 2:15 PM",
-    location: "Indiranagar 100 Feet Rd, near 12th Main",
-    price: 249,
-    paymentMethod: "Google Pay UPI",
-    partnerName: "Ramesh Kumar",
-    partnerVehicle: "Tata 407 Rapid Fleet",
-    rating: 5.0,
-    feedbackTags: ["⚡ Arrived fast", "🔧 Fixed issue perfectly"],
-    otp: "4821",
-    status: "completed",
-    invoiceId: "SHK-2026-98421",
-    basePrice: 220,
-    tax: 29,
-    iconName: "flash",
-    iconBg: "#FEF6D8",
-    iconColor: "#C2850C",
-  },
-  {
-    id: "act_02",
-    serviceType: "tyre",
-    serviceTitle: "Tubeless Puncture & Wheel Swap",
-    vehicle: "Royal Enfield Classic 350",
-    plate: "KA 01 AB 5678",
-    date: "26 Sep 2026, 6:40 PM",
-    location: "Hebbal Flyover Junction, Expressway Lane",
-    price: 199,
-    paymentMethod: "Sahayak Cash",
-    partnerName: "Suresh Manjunath",
-    partnerVehicle: "Mobile Tyre Van #04",
-    otp: "7103",
-    status: "completed",
-    invoiceId: "SHK-2026-87112",
-    basePrice: 175,
-    tax: 24,
-    iconName: "disc",
-    iconBg: "#E6F4EA",
-    iconColor: "#0C831F",
-  },
-  {
-    id: "act_03",
-    serviceType: "towing",
-    serviceTitle: "Flatbed Tow Truck",
-    vehicle: "Maruti Suzuki Swift",
-    plate: "KA 05 MN 1234",
-    date: "12 Sep 2026, 11:15 AM",
-    location: "Outer Ring Road, Bellandur Junction",
-    destination: "Maruti Authorized Service Center, Domlur (14 km)",
-    price: 549,
-    paymentMethod: "HDFC Debit Card (RSA Discount)",
-    partnerName: "CityWide Rescue Towing",
-    partnerVehicle: "Ashok Leyland Tilt-Deck #12",
-    rating: 4.8,
-    feedbackTags: ["🛡️ Safe vehicle handling"],
-    otp: "9354",
-    status: "completed",
-    invoiceId: "SHK-2026-72409",
-    basePrice: 480,
-    tax: 69,
-    iconName: "car-sport",
-    iconBg: "#F0F2F5",
-    iconColor: "#1C1C1C",
-  },
-  {
-    id: "act_04",
-    serviceType: "fuel",
-    serviceTitle: "Emergency 5L Petrol Delivery",
-    vehicle: "Maruti Suzuki Swift",
-    plate: "KA 05 MN 1234",
-    date: "04 Sep 2026, 9:20 PM",
-    location: "Koramangala 80 Feet Road, 4th Block",
-    price: 149,
-    paymentMethod: "Paytm UPI",
-    partnerName: "Amit Verma",
-    partnerVehicle: "Hero Splendor #09",
-    otp: "3312",
-    status: "cancelled",
-    cancelReason: "Found fuel station 200m ahead",
-    invoiceId: "SHK-2026-61092",
-    basePrice: 149,
-    tax: 0,
-    iconName: "water",
-    iconBg: "#F0F2F5",
-    iconColor: "#1C1C1C",
-  },
-];
+function getServiceTitle(type: ServiceType): string {
+  switch (type) {
+    case "battery": return "Battery Jumpstart & Health Check";
+    case "tyre": return "Tyre Puncture & Replacement";
+    case "towing": return "Flatbed / Wheel-Lift Towing";
+    case "fuel": return "Emergency Fuel Delivery";
+    case "lockout": return "Vehicle Key Lockout Assist";
+    case "mechanic": return "On-Site Mechanical Repair";
+    default: return "Roadside Assistance";
+  }
+}
+
+function getServiceIcon(type: ServiceType): keyof typeof Ionicons.glyphMap {
+  switch (type) {
+    case "battery": return "flash";
+    case "tyre": return "disc";
+    case "towing": return "car-sport";
+    case "fuel": return "water";
+    case "lockout": return "key";
+    case "mechanic": return "construct";
+    default: return "help-buoy";
+  }
+}
 
 // ─── STATUS LABEL MAPPING ─────────────────────────────────────────────────────
 function getJobStatusLabel(status: Job["status"]): { text: string; color: string; bg: string } {
@@ -214,10 +145,65 @@ export default function ActivityView({
   onGoToServices,
   searchQuery = "",
 }: ActivityViewProps) {
-  const [activities, setActivities] = useState<ActivityItem[]>(INITIAL_ACTIVITIES);
+  const [activities, setActivities] = useState<ActivityItem[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
   const [statusFilter, setStatusFilter] = useState<"all" | "completed" | "cancelled">("all");
   const [receiptItem, setReceiptItem] = useState<ActivityItem | null>(null);
   const [showCancelModal, setShowCancelModal] = useState(false);
+
+  useEffect(() => {
+    setIsLoading(true);
+    jobsApi
+      .listMyJobs(30, 0)
+      .then((res: any) => {
+        const items: any[] = Array.isArray(res) ? res : res?.items ?? [];
+        if (items.length > 0) {
+          const mapped: ActivityItem[] = items.map((j: any) => {
+            const st = (j.service_type || "mechanic") as ServiceType;
+            const price = j.price_estimate || 499;
+            const dateStr = j.created_at
+              ? new Date(j.created_at).toLocaleDateString("en-IN", {
+                  day: "numeric",
+                  month: "short",
+                  year: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })
+              : "Recent";
+            return {
+              id: j.id,
+              serviceType: st,
+              serviceTitle: getServiceTitle(st),
+              vehicle: "Registered Vehicle",
+              plate: "KA-01",
+              date: dateStr,
+              location: j.pickup_address || "Bengaluru",
+              price,
+              paymentMethod: "UPI / Card",
+              partnerName: j.partner_id ? "Assigned Specialist" : "Sahayak Partner",
+              partnerVehicle: "Service Unit",
+              otp: j.otp || "••••",
+              status:
+                j.status === "completed"
+                  ? "completed"
+                  : j.status === "cancelled"
+                  ? "cancelled"
+                  : "upcoming",
+              cancelReason: j.cancellation_reason || undefined,
+              invoiceId: `SHK-${j.id.slice(0, 8).toUpperCase()}`,
+              basePrice: Math.round(price * 0.82),
+              tax: Math.round(price * 0.18),
+              iconName: getServiceIcon(st),
+              iconBg: "#F0F2F5",
+              iconColor: "#1C1C1C",
+            };
+          });
+          setActivities(mapped);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setIsLoading(false));
+  }, []);
   const [selectedCancelReason, setSelectedCancelReason] = useState<string | null>(null);
 
   // Rating Modal state
@@ -301,7 +287,7 @@ export default function ActivityView({
 
   const handleShareLocation = () => {
     const address = activeJob?.pickupLocation?.address || "my current breakdown location";
-    const message = `🚨 I'm stranded at ${address}. My Sahayak technician is arriving soon. Track me live: https://sahayak.app/track/${activeJob?.id || "demo"}`;
+    const message = `🚨 I'm stranded at ${address}. My Sahayak technician is arriving soon. Track me live: https://sahayak.app/track/${activeJob?.id || "live"}`;
     Share.share({ message }).catch(() => {});
   };
 

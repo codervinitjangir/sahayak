@@ -7,7 +7,6 @@ import {
   signOut as supabaseSignOut,
 } from "../services/supabase";
 import type { BackendRole } from "../services/identity";
-import { MOCK_USER_OWNER, MOCK_USER_PARTNER } from "../services/api";
 import type { User, UserRole } from "../types";
 
 interface AuthState {
@@ -20,16 +19,8 @@ interface AuthState {
 
   // Actions
   setUser: (user: User, token: string) => void;
-  /**
-   * Show a placeholder profile with **no token**, for browsing the mocked screens.
-   *
-   * Separate from setUser because the difference is security, not convenience: the
-   * request interceptor sends whatever is in `token`, so a demo path that passed a
-   * string like "mock_jwt_token" would put a forged bearer on every request the
-   * moment any screen talked to the real backend. This keeps "looking at the UI"
-   * and "signed in" from sharing a code path.
-   */
-  setDemoUser: (user: User) => void;
+  /** Set an unauthenticated guest user with no token */
+  setGuestUser: (user: User) => void;
   /** Store a token on its own — the session is the source of truth, not the profile. */
   setToken: (token: string | null) => void;
   logout: () => void;
@@ -55,7 +46,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   setUser: (user, token) =>
     set({ user, token, isAuthenticated: true, isLoading: false }),
 
-  setDemoUser: (user) =>
+  setGuestUser: (user) =>
     set({ user, token: null, isAuthenticated: false, isLoading: false }),
 
   setToken: (token) => set({ token, isAuthenticated: Boolean(token) }),
@@ -100,13 +91,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             const resolution = await identityService.resolve();
             if (resolution.kind === "registered" && !cancelled) {
               const role = appRoleFor(resolution.identity.role);
-              const mock = role === "partner" ? MOCK_USER_PARTNER : MOCK_USER_OWNER;
               set({
                 user: {
-                  ...mock,
                   id: resolution.identity.id,
-                  phone: data.session?.user?.phone || mock.phone,
+                  phone: data.session?.user?.phone || "",
                   role,
+                  name: role === "partner" ? "Partner Driver" : "Vehicle Owner",
+                  rating: 5.0,
+                  totalJobs: 0,
+                  isVerified: true,
                 },
                 isAuthenticated: true,
               });

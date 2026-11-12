@@ -27,6 +27,22 @@ function windowQuery(params: AnalyticsWindowParams): string {
   return query ? `?${query}` : '';
 }
 
+export interface AdminPartnerSummary {
+  id: string;
+  name: string;
+  phone: string;
+  workshop_name: string | null;
+  experience_years: number;
+  verification_status: 'pending' | 'verified' | 'rejected';
+  services: string[];
+  created_at: string | null;
+}
+
+export interface AdminPartnerListResponse {
+  partners: AdminPartnerSummary[];
+  total: number;
+}
+
 export const adminService = {
   /** Funnel, conversion, partner supply, time-to-work-started. */
   async getOverview(params: AnalyticsWindowParams = {}): Promise<AnalyticsOverview> {
@@ -51,6 +67,24 @@ export const adminService = {
     const query = windowQuery(params);
     const res = await apiClient<AnalyticsMatching>(`/admin/analytics/matching${query}`, {
       method: 'GET',
+    });
+    return res.data;
+  },
+
+  /** List partners with optional verification status filter */
+  async listPartners(status?: string): Promise<AdminPartnerListResponse> {
+    const q = status ? `?status=${status}` : '';
+    const res = await apiClient<AdminPartnerListResponse>(`/admin/partners${q}`, {
+      method: 'GET',
+    });
+    return res.data;
+  },
+
+  /** Update verification status of a partner */
+  async verifyPartner(partnerId: string, verificationStatus: 'verified' | 'rejected' | 'pending'): Promise<AdminPartnerSummary> {
+    const res = await apiClient<AdminPartnerSummary>(`/admin/partners/${partnerId}/verify`, {
+      method: 'PATCH',
+      body: JSON.stringify({ verification_status: verificationStatus }),
     });
     return res.data;
   },

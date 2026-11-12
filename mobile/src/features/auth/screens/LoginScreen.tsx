@@ -3,8 +3,7 @@
 // 1. "Enter your mobile number" with +91 country selector
 // 2. Full-width high-contrast black CTA button ("Continue →")
 // 3. Social login options (Google & Apple)
-// 4. Quick 1-tap demo logins for instant testing (Owner & Partner)
-// 5. 6-digit OTP verification with auto-focus inputs & pre-fill option
+// 4. 6-digit OTP verification with auto-focus inputs & pre-fill option
 import React, { useState, useRef } from "react";
 import {
   View,
@@ -24,7 +23,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors, Typography, Radius, Spacing } from "../../../constants/theme";
 import Button from "../../../components/ui/Button";
-import { MOCK_USER_OWNER, MOCK_USER_PARTNER } from "../../../services/api";
 import { identityService } from "../../../services/identity";
 import {
   IS_SUPABASE_CONFIGURED,
@@ -49,7 +47,7 @@ export default function LoginScreen() {
 
   const otpRefs = useRef<(TextInput | null)[]>([]);
   const slideAnim = useRef(new Animated.Value(0)).current;
-  const { setUser, setToken, setDemoUser } = useAuthStore();
+  const { setUser, setToken } = useAuthStore();
 
   const isOwner = role === "owner";
 
@@ -76,10 +74,7 @@ export default function LoginScreen() {
     }
     setLoading(true);
     try {
-      // A real code to a real number. This used to call a mock that returned
-      // `{success: true}` without a network request, then pre-fill the boxes with
-      // 123456 — so the screen reached "verified" whether or not anything had been
-      // sent, and produced no token either way.
+      // Send a verification SMS code to the specified phone number.
       const outcome = await sendPhoneOtp(toE164("+91", phone));
       if (!outcome.ok) {
         Alert.alert("Could not send code", outcome.message ?? "Please try again.");
@@ -107,9 +102,6 @@ export default function LoginScreen() {
     try {
       const verified = await verifyPhoneOtp(toE164("+91", phone), code);
       if (!verified.ok || !verified.accessToken) {
-        // Previously this branch called handleQuickDemo(role), so a wrong code —
-        // or a Supabase outage — signed the user in as a hardcoded mock profile.
-        // A failed sign-in has to look like a failed sign-in.
         Alert.alert("Verification failed", verified.message ?? "That code did not work.");
         return;
       }
@@ -127,23 +119,28 @@ export default function LoginScreen() {
         case "registered":
           setUser(
             {
-              ...(resolution.identity.role === "partner" ? MOCK_USER_PARTNER : MOCK_USER_OWNER),
               id: resolution.identity.id,
               phone: toE164("+91", phone),
               role: appRoleFor(resolution.identity.role),
+              name: resolution.identity.role === "partner" ? "Partner Driver" : "Vehicle Owner",
+              rating: 5.0,
+              totalJobs: 0,
+              isVerified: true,
             },
             verified.accessToken
           );
           return;
 
         case "needs-signup":
-          // Phone OTP is verified via Supabase. Sign in with verified token so user can test the app!
           setUser(
             {
-              ...(role === "partner" ? MOCK_USER_PARTNER : MOCK_USER_OWNER),
               id: "usr_" + phone.replace(/\D/g, ""),
               phone: toE164("+91", phone),
               role,
+              name: role === "partner" ? "Partner Driver" : "Vehicle Owner",
+              rating: 5.0,
+              totalJobs: 0,
+              isVerified: true,
             },
             verified.accessToken
           );
@@ -162,13 +159,15 @@ export default function LoginScreen() {
         default:
           if (resolution.message?.toLowerCase().includes("network")) {
             // Backend unreachable (e.g. laptop Wi-Fi firewall / mobile client isolation).
-            // Phone OTP is valid, so sign in with verified token and local mock profile!
             setUser(
               {
-                ...(role === "partner" ? MOCK_USER_PARTNER : MOCK_USER_OWNER),
                 id: "usr_" + phone.replace(/\D/g, ""),
                 phone: toE164("+91", phone),
                 role,
+                name: role === "partner" ? "Partner Driver" : "Vehicle Owner",
+                rating: 5.0,
+                totalJobs: 0,
+                isVerified: true,
               },
               verified.accessToken
             );
@@ -204,12 +203,11 @@ export default function LoginScreen() {
     }
   };
 
-  const handleQuickDemo = (demoRole: UserRole) => {
-    // Browses the mocked screens; does **not** sign anyone in. It used to pass
-    // "mock_jwt_token" as a bearer, which the request interceptor would now put on
-    // every call to a backend that verifies tokens against the project's JWKS.
-    const mockUser = demoRole === "owner" ? MOCK_USER_OWNER : MOCK_USER_PARTNER;
-    setDemoUser(mockUser);
+  const handleSocialAuth = (provider: string) => {
+    Alert.alert(
+      `${provider} Sign-In`,
+      "Please enter your registered mobile number above to sign in via SMS OTP verification."
+    );
   };
 
   return (
@@ -326,7 +324,7 @@ export default function LoginScreen() {
               {/* Social Login Buttons */}
               <TouchableOpacity
                 style={styles.socialBtn}
-                onPress={() => handleQuickDemo("owner")}
+                onPress={() => handleSocialAuth("Google")}
                 activeOpacity={0.8}
               >
                 <Ionicons name="logo-google" size={18} color="#EA4335" />
@@ -335,38 +333,12 @@ export default function LoginScreen() {
 
               <TouchableOpacity
                 style={styles.socialBtn}
-                onPress={() => handleQuickDemo("owner")}
+                onPress={() => handleSocialAuth("Apple")}
                 activeOpacity={0.8}
               >
                 <Ionicons name="logo-apple" size={20} color="#000000" />
                 <Text style={styles.socialBtnText}>Continue with Apple</Text>
               </TouchableOpacity>
-
-              {/* Quick 1-Tap Demo Testing Card */}
-              <View style={styles.demoTestingCard}>
-                <Text style={styles.demoCardTitle}>DEVELOPER QUICK LOGIN</Text>
-                <View style={styles.demoButtonsRow}>
-                  <TouchableOpacity
-                    style={styles.demoPillBtn}
-                    onPress={() => handleQuickDemo("owner")}
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons name="car" size={14} color={Colors.brand700} />
-                    <Text style={styles.demoPillText}>Login as Owner (Arjun)</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[styles.demoPillBtn, { borderColor: Colors.secondary }]}
-                    onPress={() => handleQuickDemo("partner")}
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons name="construct" size={14} color={Colors.secondary} />
-                    <Text style={[styles.demoPillText, { color: Colors.secondary }]}>
-                      Login as Partner (Ravi)
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
 
               <Text style={styles.disclaimerText}>
                 By continuing, you agree to receive SMS notifications. Message and data rates may apply.
@@ -616,40 +588,6 @@ const styles = StyleSheet.create({
     fontSize: Typography.fontSize.sm,
     fontFamily: Typography.fontFamily.semiBold,
     color: Colors.textPrimary,
-  },
-  demoTestingCard: {
-    backgroundColor: "#F8FAFC",
-    borderRadius: Radius.xl,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    padding: 14,
-    gap: 10,
-    marginTop: 8,
-  },
-  demoCardTitle: {
-    fontSize: 10,
-    fontFamily: Typography.fontFamily.bold,
-    color: Colors.textSecondary,
-    letterSpacing: 1,
-  },
-  demoButtonsRow: {
-    gap: 8,
-  },
-  demoPillBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: Colors.brand700,
-    paddingVertical: 10,
-    borderRadius: Radius.md,
-    gap: 8,
-  },
-  demoPillText: {
-    fontSize: Typography.fontSize.xs,
-    fontFamily: Typography.fontFamily.bold,
-    color: Colors.brand700,
   },
   disclaimerText: {
     fontSize: 11,

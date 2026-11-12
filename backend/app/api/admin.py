@@ -38,12 +38,19 @@ does not need it.
 """
 from datetime import datetime
 from typing import Optional
+import uuid
 
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api import API_V1_PREFIX
 from app.config.database import get_db
+from app.repositories import partner_repository
+from app.schemas.admin import (
+    AdminPartnerListResponse,
+    AdminPartnerSummary,
+    AdminPartnerVerificationRequest,
+)
 from app.schemas.analytics import (
     AnalyticsDispatch,
     AnalyticsMatching,
@@ -53,6 +60,7 @@ from app.schemas.common import ApiResponse, ErrorResponse, envelope
 from app.services import admin_analytics_service
 from app.services.auth_service import Identity
 from app.utils.auth import require_admin
+from app.utils.errors import NotFoundError
 
 _ERROR_RESPONSES = {
     400: {"model": ErrorResponse, "description": "`from` is later than `to`"},
@@ -217,3 +225,78 @@ async def get_matching(
         db, identity, from_ts=from_ts, to_ts=to_ts
     )
     return envelope(result)
+
+
+admin_partners_router = APIRouter(
+    prefix=f"{API_V1_PREFIX}/admin/partners",
+    tags=["admin partners"],
+    responses=_ERROR_RESPONSES,
+)
+
+
+@admin_partners_router.get(
+    "",
+    response_model=ApiResponse[AdminPartnerListResponse],
+    status_code=status.HTTP_200_OK,
+    summary="List all partners with optional verification status filter",
+)
+async def list_partners(
+    status_filter: Optional[str] = Query(None, alias="status", description="Filter by verification_status (pending, verified, rejected, suspended)"),
+    identity: Identity = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[AdminPartnerListResponse]:
+    """Admin roster view of partners with live verification and availability status."""
+    partners = await partner_repository.list_partners(db, status=status_filter)
+    items = [
+        AdminPartnerSummary(
+            id=p.id,
+            phone=p.phone,
+            name=p.name,
+            business_name=p.business_name,
+            verification_status=p.verification_status,
+            is_available=bool(p.is_available),
+            rating_avg=p.rating_avg,
+            rating_count=p.rating_count,
+            created_at=p.created_at,
+        )
+        for p in partners
+    ]
+    return envelope(AdminPartnerListResponse(items=items, total=len(items)))
+
+
+@admin_partners_router.patch(
+    "/{partner_id}/verify",
+    response_model=ApiResponse[AdminPartnerSummary],
+    status_code=status.HTTP_200_OK,
+    summary="Update a partner's verification status",
+)
+async def verify_partner(
+    partner_id: uuid.UUID,
+    payload: AdminPartnerVerificationRequest,
+    identity: Identity = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[AdminPartnerSummary]:
+    """Promote or reject a partner's verification status for dispatch eligibility."""
+    partner = await partner_repository.update_partner_verification(
+        db, partner_id, payload.verification_status
+    )
+    if not partner:
+        raise NotFoundError("PARTNER_NOT_FOUND", "Partner not found")
+
+    await db.commit()
+    await db.refresh(partner)
+
+    return envelope(
+        AdminPartnerSummary(
+            id=partner.id,
+            phone=partner.phone,
+            name=partner.name,
+            business_name=partner.business_name,
+            verification_status=partner.verification_status,
+            is_available=bool(partner.is_available),
+            rating_avg=partner.rating_avg,
+            rating_count=partner.rating_count,
+            created_at=partner.created_at,
+        )
+    )
+

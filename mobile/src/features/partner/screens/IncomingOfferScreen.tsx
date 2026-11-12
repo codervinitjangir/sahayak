@@ -21,9 +21,8 @@ import type { RouteProp } from "@react-navigation/native";
 import { Colors, Typography, Spacing, Radius, Shadows, ServiceConfig } from "../../../constants/theme";
 import Button from "../../../components/ui/Button";
 import Card from "../../../components/ui/Card";
-import { MOCK_INCOMING_OFFER } from "../../../services/api";
 import { jobsApi } from "../../../services/api/jobs";
-import type { PartnerStackParamList } from "../../../types";
+import type { PartnerStackParamList, ServiceType } from "../../../types";
 import type { ViewStyle } from "react-native";
 
 type Nav = NativeStackNavigationProp<PartnerStackParamList, "IncomingOffer">;
@@ -32,11 +31,45 @@ type Route = RouteProp<PartnerStackParamList, "IncomingOffer">;
 export default function IncomingOfferScreen() {
   const nav = useNavigation<Nav>();
   const route = useRoute<Route>();
-  const offer = MOCK_INCOMING_OFFER;
-  const job = offer.job;
-  const svc = ServiceConfig[job.serviceType];
-
   const offerData = route.params?.offerData;
+  const serviceType: ServiceType =
+    (offerData?.service_code
+      ?.replace("flatbed_", "")
+      ?.replace("wheel_lift_", "")
+      ?.replace("battery_jumpstart", "battery")
+      ?.replace("flat_tyre", "tyre")
+      ?.replace("minor_repair", "mechanic")
+      ?.replace("fuel_delivery", "fuel") as ServiceType) || "battery";
+  const svc = ServiceConfig[serviceType] || ServiceConfig.battery;
+
+  const job = {
+    id: offerData?.job_id || route.params?.jobId || "job_live",
+    serviceType,
+    pickupLocation: {
+      latitude: offerData?.pickup_lat || 12.9716,
+      longitude: offerData?.pickup_lng || 77.5946,
+      address: offerData?.pickup_address_text || "Bengaluru Breakdown Point",
+    },
+    estimatedPrice: Number(offerData?.price_estimate || 499),
+    notes: "Roadside breakdown assist requested",
+    vehicle: {
+      make: "Customer",
+      model: "Vehicle",
+      year: 2023,
+      licensePlate: "KA-01",
+      type: "four-wheeler" as "two-wheeler" | "four-wheeler",
+      color: "White",
+      fuelType: "Petrol",
+    },
+  };
+
+  const offer = {
+    jobId: job.id,
+    job,
+    estimatedEarning: Number(offerData?.price_estimate || 499),
+    distanceKm: offerData?.distance_km || 2.5,
+    etaMinutes: Math.round((offerData?.distance_km || 2.5) * 3),
+  };
   const offeredAt = offerData?.offered_at;
   const [relativeAge, setRelativeAge] = useState<string>("Just now");
   const [accepting, setAccepting] = useState(false);

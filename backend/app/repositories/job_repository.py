@@ -7,6 +7,7 @@ does not commit — deciding what a missing row *means*, and where the
 transaction boundary sits, belongs to app/services/job_service.py.
 """
 import uuid
+from decimal import Decimal
 from typing import Optional, Sequence
 
 from sqlalchemy import func, select
@@ -48,6 +49,7 @@ async def create_job_row(
     pickup_location: object,
     pickup_address_text: Optional[str] = None,
     issue_description: Optional[str] = None,
+    price_estimate: Optional[Decimal] = None,
 ) -> Job:
     """Stage a new jobs row and flush it so its generated id is available.
 
@@ -63,6 +65,7 @@ async def create_job_row(
         pickup_location=pickup_location,
         pickup_address_text=pickup_address_text,
         issue_description=issue_description,
+        price_estimate=price_estimate,
     )
     db.add(job)
     await db.flush()

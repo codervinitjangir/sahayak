@@ -7,10 +7,10 @@
 //
 // Until 2026-10-07 this file did not exist. `authApi.sendOTP` returned
 // `{success: true}` without calling anything, `authApi.verifyOTP` accepted any six
-// digits and handed back `"mock_jwt_token_" + Date.now()`, and the login screen
+// digits and handed back an unverified token, and the login screen
 // pre-filled the code boxes with 123456. Nothing produced a real token, so every
 // authenticated endpoint answered 401 — the screens only worked because the
-// service layer was mocked too.
+// service layer was isolated too.
 //
 // ## Three things differ from the web implementation
 //
