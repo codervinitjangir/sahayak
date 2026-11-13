@@ -19,7 +19,10 @@ const when = (iso?: string | null) =>
 
 const age = (iso: string) => {
   const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
-  return mins < 60 ? `${mins} min` : `${Math.floor(mins / 60)} h ${mins % 60} min`;
+  if (mins < 60) return `${mins} min`;
+  if (mins < 24 * 60) return `${Math.floor(mins / 60)} h ${mins % 60} min`;
+  const days = Math.floor(mins / (24 * 60));
+  return `${days} day${days === 1 ? '' : 's'}`;
 };
 
 const errText = (e: unknown) => (e instanceof ApiError ? e.message : 'Something went wrong. Try again.');
