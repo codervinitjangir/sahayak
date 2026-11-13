@@ -12,6 +12,7 @@ from app.schemas.payment import (
     PaymentCreate,
     PaymentResponse,
 )
+from app.schemas.dispute import ReceiptResponse
 from app.services.auth_service import Identity
 from app.utils.errors import (
     ConflictError,
@@ -243,7 +244,7 @@ async def confirm_payment(
 
 async def get_receipt(
     db: AsyncSession, payment_id: uuid.UUID, identity: Identity
-) -> "ReceiptResponse":
+) -> ReceiptResponse:
     """Receipt for a settled payment (Phase 3 step D).
 
     Same access rule as reading the payment: owner, the responsible partner,
@@ -251,7 +252,6 @@ async def get_receipt(
     receipt, since a pending order is a bill, not proof of payment. This is not
     a GST tax invoice: there is no GSTIN on record, so no tax line is invented.
     """
-    from app.schemas.dispute import ReceiptResponse
 
     payment = await payment_repository.get_payment_by_id(db, payment_id)
     if payment is None:
