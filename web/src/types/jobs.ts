@@ -249,3 +249,14 @@ export interface JobStatusTransitionResponse {
   cancelled_at?: string | null;
   cancellation_reason?: string | null;
 }
+
+/** POST /jobs/{id}/retry-search response (ADR-023). */
+export interface SearchStatus {
+  status: JobStatus;
+  radius_m: number;
+  elapsed_s: number;
+  window_s: number;
+  window_open: boolean;
+  searched: boolean;
+  assignment_id?: string | null;
+}

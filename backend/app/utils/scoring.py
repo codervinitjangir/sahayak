@@ -35,6 +35,37 @@ from typing import Optional
 # component. dispatch_service imports this rather than declaring its own.
 MAX_RADIUS_M: float = 10_000.0
 
+# Radius escalation (ADR-023). A request that finds nobody nearby is not given
+# up on at once: for SEARCH_WINDOW_S after it was raised, each re-search widens
+# the circle by the job's age. (seconds since requested, radius in metres) —
+# the first tier is MAX_RADIUS_M, so an initial dispatch is unchanged.
+SEARCH_TIERS: tuple[tuple[int, float], ...] = (
+    (0, MAX_RADIUS_M),       # 0–2 min: the normal 10 km
+    (120, 20_000.0),         # 2–5 min: mechanics a little further out
+    (300, 35_000.0),         # 5–10 min: mobile vans and flatbeds on the highway
+)
+SEARCH_WINDOW_S: int = 600
+MAX_SEARCH_RADIUS_M: float = SEARCH_TIERS[-1][1]
+
+
+def search_radius_m(elapsed_s: float) -> float:
+    """The radius a search should use for a job this old.
+
+    Never shrinks and never exceeds the widest tier, so a rejection late in the
+    window re-offers within the same circle the owner was already told about.
+    Whether a search may run at all is search_window_open's question.
+    """
+    radius = SEARCH_TIERS[0][1]
+    for starts_at, tier_radius in SEARCH_TIERS:
+        if elapsed_s >= starts_at:
+            radius = tier_radius
+    return radius
+
+
+def search_window_open(elapsed_s: float) -> bool:
+    """Whether an owner-triggered re-search may still run for a job this old."""
+    return elapsed_s < SEARCH_WINDOW_S
+
 # Weights.
 #
 # CHOSEN, NOT TUNED. There is no production data yet, so these encode a stated

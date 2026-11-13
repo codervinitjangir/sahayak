@@ -54,7 +54,7 @@ change recorded.
 | 8 | Vehicle edit/delete & active job guard | [x] Done (2026-11-13) | [backend] | `PATCH/DELETE /api/v1/vehicles/{id}`, refuses deletion with 409 `VEHICLE_HAS_ACTIVE_JOB` |
 | 9 | Partner rates the owner (Two-Way Ratings) | [x] Done (2026-11-13) | [backend] | Interactive 1–5 star rating submitted by partner on completion via `PartnerJobDoneScreen.tsx` |
 | 10 | Public Trip Live Sharing (`/track/:jobId?t=`) | [x] Done, hardened 2026-11-14 | [backend] | `GET /api/v1/jobs/{id}/public-tracking?t=<share_token>`; token is owner-only (ADR-017 amendment) |
-| 11 | Extended Searching & Auto-Retry with Radius Escalation | [ ] Ready to Implement | [backend] | 10 km &rarr; 20 km &rarr; 35 km expansion; 10-minute active search window with live timer & instant cancel |
+| 11 | Extended Searching & Auto-Retry with Radius Escalation | [x] Done (2026-11-14, ADR-023) | [backend] | 10 km &rarr; 20 km &rarr; 35 km expansion; 10-minute active search window with live timer & instant cancel |
 | 12 | Push notifications (FCM & APNs) | [ ] Next Up | [backend] | Events: new offer, assigned, on the way, started, completed, cancelled. Respect ADR-017 |
 | 13 | Hindi and Kannada localization | [ ] Planned | no | Move strings into translation files; native-speaker review |
 
@@ -136,7 +136,7 @@ When an emergency happens (e.g. at 11:30 PM on an outer ring road or highway), a
 4. [x] Item 9: Two-way ratings (Completed).
 5. [x] Item 10: Public trip live sharing (Completed).
 6. [x] Payments Step A & B: Upfront estimates and in-app UPI QR / Cash settlements (Completed).
-7. [ ] Item 11: Extended Searching & Radius Escalation (10 km &rarr; 20 km &rarr; 35 km) (Ready to Implement).
+7. [x] Item 11: Extended Searching & Radius Escalation (10 km &rarr; 20 km &rarr; 35 km) (Done 2026-11-14, ADR-023).
 8. [ ] Item 12: Push notifications via FCM & APNs (Next Up).
 9. [ ] Payments Step C & D: Partner payouts & tax invoices.
 
@@ -181,7 +181,7 @@ regression bar in `CLAUDE.md` applies before anyone calls it done.
 
 | # | Item | Notes |
 |---|---|---|
-| G1 | Extended search with radius escalation (item 11) | Specified above, not built. Until then a request ends as `no_match_found` quickly |
+| G1 | [x] Extended search with radius escalation (item 11) | Done 2026-11-14: `POST /jobs/{id}/retry-search`, owner app polls every 15 s for 10 min (ADR-023) |
 | G2 | Push notifications (item 12) | Partners miss offers when the app is closed; owners miss "partner on the way" |
 | G3 | Partner payouts, tax invoices, refunds and disputes (payments C–E) | Needs the money-holding decision and CA sign-off first |
 | G4 | Partner documents and equipment upload + staff review | Towing partners cannot be enabled except by direct database edit today |
@@ -189,7 +189,7 @@ regression bar in `CLAUDE.md` applies before anyone calls it done.
 | G6 | Hindi and Kannada | English only |
 | G7 | Masked calling or in-app chat | Numbers are shown after assignment |
 | G8 | Profile edit (owner name/email, partner name) | Vehicle edit exists; profile does not |
-| G9 | Partner notifications screen on mobile | Owner has the bell; the partner shell has none |
+| G9 | [x] Partner notifications screen on mobile | Done 2026-11-14: bell + shared NotificationsModal on PartnerHomeScreen |
 | G10 | Account deletion and data export | Likely required by privacy law; not present |
 | G11 | Offline-tolerant request queue | Poor signal on highways |
 
@@ -253,10 +253,10 @@ defects, fixed in `fix/payments-sharing-review`. Still unverified on a physical 
 
 Code work, in order:
 1. [x] R7 remainder: public link stops after the job ends, plus a rate limit.
-2. G1 radius escalation.
+2. [x] G1 radius escalation.
 3. Admin items 1–3: live jobs board with staff cancel, owner/partner management, audit log.
 4. G8 profile edit and G10 account deletion / data export.
-5. G9 partner notifications screen on mobile.
+5. [x] G9 partner notifications screen on mobile.
 6. G2 push notifications (device token registry + sender; needs FCM/APNs credentials to go live).
 7. E1 CI.
 

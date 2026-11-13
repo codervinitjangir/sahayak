@@ -34,7 +34,7 @@ import Button from "../../../components/ui/Button";
 import RealMap from "../../../components/map/RealMap";
 import SafetyActions from "../../../components/ui/SafetyActions";
 import { Chip, EmptyState, ErrorState, Skeleton, StatusChip, TERMINAL_STATUSES, type BackendJobStatus } from "../../../components/ui/kit";
-import { jobsApi, type BackendJob } from "../../../services/api/jobs";
+import { jobsApi, type BackendJob, type SearchStatus } from "../../../services/api/jobs";
 import { servicesApi, type MobileCatalogService } from "../../../services/api/services";
 import { vehiclesApi, type MobileVehicle } from "../../../services/api/vehicles";
 import { useJobStore } from "../../../store/jobStore";
@@ -137,6 +137,9 @@ export default function OwnerHelpFlowScreen() {
   const [jobId, setJobId] = useState<string | null>(resumeJobId);
   const [job, setJob] = useState<BackendJob | null>(null);
   const [pollFailed, setPollFailed] = useState(false);
+  // ADR-023: while a no_match_found job is under 10 minutes old the server keeps
+  // widening the search each time we ask; null once the window has closed.
+  const [widening, setWidening] = useState<SearchStatus | null>(null);
   const [cancelling, setCancelling] = useState(false);
 
   // ── Rating ──
@@ -239,12 +242,32 @@ export default function OwnerHelpFlowScreen() {
     if (!jobId) return;
     let stopped = false;
     let id: ReturnType<typeof setInterval> | undefined;
+    let lastRetry = 0;
     const tick = async () => {
       try {
         const j = await jobsApi.getJob(jobId);
         if (stopped) return;
         setPollFailed(false);
         applyJob(j);
+        if (j.status === "no_match_found") {
+          // Re-search at most every 15 s (server allows 12/min per job).
+          if (Date.now() - lastRetry >= 15000) {
+            lastRetry = Date.now();
+            const res = await jobsApi.retrySearch(jobId);
+            if (stopped) return;
+            if (res.window_open) {
+              setWidening(res);
+              setPhase("searching");
+              return; // keep polling: the next getJob shows 'matching' on a hit
+            }
+            setWidening(null);
+          } else {
+            setPhase("searching");
+            return;
+          }
+        } else {
+          setWidening(null);
+        }
         if (TERMINAL_STATUSES.includes(j.status as BackendJobStatus)) {
           stopped = true;
           if (id) clearInterval(id);
@@ -517,7 +540,11 @@ export default function OwnerHelpFlowScreen() {
                 <Pulse />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.h1}>Finding a partner</Text>
-                  <Text style={styles.muted}>We are offering your request to the best-matched verified partners nearby.</Text>
+                  <Text style={styles.muted}>
+                    {widening
+                      ? `No one close by yet. Searching up to ${Math.round(widening.radius_m / 1000)} km · ${Math.floor(widening.elapsed_s / 60)}m ${Math.floor(widening.elapsed_s % 60)}s of up to ${Math.round(widening.window_s / 60)} min.`
+                      : "We are offering your request to the best-matched verified partners nearby."}
+                  </Text>
                 </View>
               </View>
               {job?.service_name ? (

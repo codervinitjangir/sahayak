@@ -804,8 +804,8 @@ async def main() -> None:
         original_find = dispatch_service.find_candidates
         injected = {"fired": False}
 
-        async def cancelling_find(db, job, exclude_partner_ids=None):
-            result = await original_find(db, job, exclude_partner_ids=exclude_partner_ids)
+        async def cancelling_find(db, job, exclude_partner_ids=None, **kwargs):
+            result = await original_find(db, job, exclude_partner_ids=exclude_partner_ids, **kwargs)
             if (str(job.id) == job_id and exclude_partner_ids
                     and not injected["fired"]):
                 injected["fired"] = True

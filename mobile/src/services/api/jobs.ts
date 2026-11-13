@@ -108,6 +108,17 @@ export interface CreateJobPayload {
 
 // ─── Job API calls ────────────────────────────────────────────────────────────
 
+/** POST /jobs/{id}/retry-search response. */
+export interface SearchStatus {
+  status: string;
+  radius_m: number;
+  elapsed_s: number;
+  window_s: number;
+  window_open: boolean;
+  searched: boolean;
+  assignment_id?: string | null;
+}
+
 export const jobsApi = {
   /** Create a new roadside assistance job (POST /api/v1/jobs) */
   createJob: (payload: CreateJobPayload, idempotencyKey?: string) =>
@@ -134,6 +145,15 @@ export const jobsApi = {
       .post<BackendJob>(`/jobs/${jobId}/cancel`, {
         cancellation_reason: cancellationReason,
       })
+      .then((r) => r.data),
+
+  /**
+   * Widen the search for a no_match_found job (POST /api/v1/jobs/{jobId}/retry-search, ADR-023).
+   * 10 km → 20 km after 2 min → 35 km after 5 min; window closes at 10 min. Max 12 calls/min per job.
+   */
+  retrySearch: (jobId: string) =>
+    apiClient
+      .post<SearchStatus>(`/jobs/${jobId}/retry-search`)
       .then((r) => r.data),
 
   /** Partner: respond to assignment offer (POST /api/v1/job-assignments/{assignmentId}/respond) */

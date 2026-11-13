@@ -499,3 +499,19 @@ class PublicJobTrackingResponse(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+
+class JobSearchStatusResponse(BaseModel):
+    """Response for POST /jobs/{job_id}/retry-search (ADR-023).
+
+    The owner's searching screen polls this while the job is 'no_match_found'.
+    It stops when `status` is no longer 'no_match_found' (a partner was found,
+    or the job was cancelled) or when `window_open` is false.
+    """
+
+    status: str
+    radius_m: float = Field(..., description="Radius this search used, in metres.")
+    elapsed_s: float = Field(..., description="Seconds since the job was requested.")
+    window_s: int = Field(..., description="How long re-searching stays open, in seconds.")
+    window_open: bool
+    searched: bool = Field(..., description="False when nothing was searched (not no_match_found, or window closed).")
+    assignment_id: Optional[uuid.UUID] = Field(default=None, description="The new offer, when one was made.")

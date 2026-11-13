@@ -67,7 +67,17 @@ from app.utils.errors import (
     NotFoundError,
 )
 from app.utils.logging import log_event
-from app.utils.scoring import MAX_RADIUS_M, Candidate, baseline_pick, rank
+from datetime import datetime, timezone
+
+from app.utils.scoring import (
+    MAX_RADIUS_M,
+    SEARCH_WINDOW_S,
+    Candidate,
+    baseline_pick,
+    rank,
+    search_radius_m,
+    search_window_open,
+)
 
 # Job statuses this engine moves a job into. Named rather than inline so a
 # typo is an ImportError instead of a row that fails a CHECK constraint at 3am.
@@ -119,7 +129,10 @@ class ScoredCandidate:
 
 
 async def find_candidates(
-    db: AsyncSession, job: Job, exclude_partner_ids: Optional[set] = None
+    db: AsyncSession,
+    job: Job,
+    exclude_partner_ids: Optional[set] = None,
+    radius_m: float = MAX_RADIUS_M,
 ) -> list[Candidate]:
     """Every partner who could legitimately take this job, nearest first.
 
@@ -168,7 +181,7 @@ async def find_candidates(
             PARTNER_LOCATIONS_KEY,
             longitude=longitude,
             latitude=latitude,
-            radius=MAX_RADIUS_M,
+            radius=radius_m,
             unit="m",
             withdist=True,
             sort="ASC",
@@ -239,7 +252,7 @@ async def find_candidates(
         nearby_count=len(distances),
         eligible_count=len(candidates),
         excluded_count=len(excluded),
-        radius_m=MAX_RADIUS_M,
+        radius_m=radius_m,
         outcome="success",
     )
     return candidates
@@ -281,7 +294,9 @@ async def _log_stale_locations(client, partner_ids: Sequence, job_id: uuid.UUID)
             )
 
 
-def score_candidates(candidates: list[Candidate], job: Job) -> list[ScoredCandidate]:
+def score_candidates(
+    candidates: list[Candidate], job: Job, radius_m: float = MAX_RADIUS_M
+) -> list[ScoredCandidate]:
     """Rank candidates best-first and mark which one the naive baseline picked.
 
     The ranking itself lives in app/utils/scoring.py, which is pure arithmetic
@@ -311,7 +326,10 @@ def score_candidates(candidates: list[Candidate], job: Job) -> list[ScoredCandid
         return []
 
     baseline_partner_id = baseline_pick(candidates)
-    ranked = rank(candidates)
+    # The distance component reaches zero at the edge of the circle actually
+    # searched, so a 30 km mechanic found by a 35 km search still scores above
+    # zero on distance instead of every escalated candidate tying at 0.
+    ranked = rank(candidates, radius_m)
     return [
         ScoredCandidate(
             candidate=candidate,
@@ -825,8 +843,13 @@ async def _offer_next(db: AsyncSession, job: Job) -> Optional[JobAssignment]:
     below.
     """
     already_offered = await dispatch_repository.get_offered_partner_ids(db, job.id)
-    candidates = await find_candidates(db, job, exclude_partner_ids=already_offered)
-    scored = score_candidates(candidates, job)
+    # A rejection two minutes in re-offers within the widened circle the owner
+    # is already being told about (ADR-023), not back inside the first 10 km.
+    radius = search_radius_m(job_age_s(job))
+    candidates = await find_candidates(
+        db, job, exclude_partner_ids=already_offered, radius_m=radius
+    )
+    scored = score_candidates(candidates, job, radius)
 
     # Lock here, and not at the top of this function: the candidate search above
     # makes a Redis round trip, and holding a Postgres row lock across a network
@@ -1065,3 +1088,118 @@ async def list_open_offers(
         duration_ms=round((time.perf_counter() - started) * 1000, 2),
     )
     return offers
+
+
+def job_age_s(job: Job, now: Optional[datetime] = None) -> float:
+    """Seconds since the owner raised this job (0 if the timestamp is missing)."""
+    requested_at = getattr(job, "requested_at", None)
+    if requested_at is None:
+        return 0.0
+    now = now or datetime.now(timezone.utc)
+    return max(0.0, (now - requested_at).total_seconds())
+
+
+@dataclass(frozen=True)
+class SearchStatus:
+    """What a re-search found, for the owner's searching screen."""
+
+    status: str
+    radius_m: float
+    elapsed_s: float
+    window_s: int
+    window_open: bool
+    searched: bool
+    assignment: Optional[JobAssignment] = None
+
+
+async def retry_search(db: AsyncSession, job_id: uuid.UUID, owner_id: uuid.UUID) -> SearchStatus:
+    """Widen the search for a job that found nobody, if its window is still open.
+
+    ADR-023. There is no background worker (see the module docstring), so the
+    escalation is driven by the owner's app: while the job sits in
+    'no_match_found' and is under SEARCH_WINDOW_S old, the searching screen
+    calls this every ~15 s. Each call searches at the radius for the job's age,
+    skipping every partner already asked, and on a hit moves the job back to
+    'matching' with a fresh offer, exactly as dispatch_job would.
+
+    Safe to call at any time: a job that is not 'no_match_found' (it was
+    matched, or the owner cancelled) is reported as it stands and nothing is
+    searched, so a late poll from the client is harmless.
+
+    Same locking shape as _offer_next: search first with no lock (Redis is a
+    network call), then lock the job row and re-check it is still
+    'no_match_found' before writing, so a concurrent cancel always wins.
+
+    Raises:
+        NotFoundError (404): no such job, or it is not the caller's.
+        InternalError (500): Redis unreachable (DispatchUnavailableError), or
+            the write failed. The job is left as it was.
+    """
+    job = await job_repository.get_job_by_id(db, job_id)
+    if job is None or job.user_id != owner_id:
+        raise NotFoundError(ErrorCode.JOB_NOT_FOUND, "Job not found")
+
+    elapsed = job_age_s(job)
+    radius = search_radius_m(elapsed)
+    window_open = search_window_open(elapsed)
+
+    def _status(searched: bool, assignment: Optional[JobAssignment] = None, status: Optional[str] = None) -> SearchStatus:
+        return SearchStatus(
+            status=status or job.status,
+            radius_m=radius,
+            elapsed_s=round(elapsed, 1),
+            window_s=SEARCH_WINDOW_S,
+            window_open=window_open,
+            searched=searched,
+            assignment=assignment,
+        )
+
+    if job.status != STATUS_NO_MATCH_FOUND or not window_open:
+        return _status(searched=False)
+
+    already_offered = await dispatch_repository.get_offered_partner_ids(db, job.id)
+    candidates = await find_candidates(
+        db, job, exclude_partner_ids=already_offered, radius_m=radius
+    )
+    scored = score_candidates(candidates, job, radius)
+
+    if not scored:
+        log_event(
+            "search_widened_no_match",
+            job_id=str(job.id),
+            radius_m=radius,
+            elapsed_s=round(elapsed, 1),
+            outcome="success",
+        )
+        return _status(searched=True)
+
+    job = await job_repository.get_job_by_id_for_update(db, job.id)
+    if job is None or job.status != STATUS_NO_MATCH_FOUND:
+        # Cancelled (or matched by a racing poll) while we searched.
+        await db.rollback()
+        current = await job_repository.get_job_by_id(db, job_id)
+        return _status(searched=True, status=current.status if current else "missing")
+
+    best = scored[0]
+    await _transition(
+        db,
+        job,
+        STATUS_MATCHING,
+        note=f"Search widened to {int(radius // 1000)} km",
+        commit=False,
+    )
+    next_rank = await dispatch_repository.get_max_assignment_rank(db, job.id) + 1
+    assignment = await _create_offer(db, job=job, scored=best, assignment_rank=next_rank)
+
+    log_event(
+        "search_widened_matched",
+        job_id=str(job.id),
+        assignment_id=str(assignment.id),
+        partner_id=str(best.candidate.partner_id),
+        radius_m=radius,
+        elapsed_s=round(elapsed, 1),
+        assignment_rank=next_rank,
+        candidate_count=len(scored),
+        outcome="success",
+    )
+    return _status(searched=True, assignment=assignment, status=STATUS_MATCHING)

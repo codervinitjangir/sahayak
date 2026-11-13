@@ -32,6 +32,7 @@
     "POST /api/v1/jobs",
     "POST /api/v1/jobs/{job_id}/cancel",
     "POST /api/v1/jobs/{job_id}/ratings",
+    "POST /api/v1/jobs/{job_id}/retry-search",
     "POST /api/v1/jobs/{job_id}/start",
     "POST /api/v1/jobs/{job_id}/status",
     "POST /api/v1/notifications/read-all",

@@ -39,6 +39,8 @@ import {
 import type { PartnerStackParamList } from "../../../types";
 import { inr, metresToKm } from "../partnerFormat";
 import { WEB_URL } from "../../../constants";
+import NotificationsModal from "../../shared/NotificationsModal";
+import { useUnreadCount } from "../../shared/ownerData";
 
 type Nav = NativeStackNavigationProp<PartnerStackParamList, "PartnerHome">;
 type TabKey = "home" | "earnings" | "account";
@@ -59,6 +61,8 @@ export default function PartnerHomeScreen() {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const { isOnline, setOnline } = useJobStore();
+  const [notifOpen, setNotifOpen] = useState(false);
+  const unread = useUnreadCount().data ?? 0;
 
   const [tab, setTab] = useState<TabKey>("home");
   const [offers, setOffers] = useState<BackendPartnerOfferItem[]>([]);
@@ -210,11 +214,23 @@ export default function PartnerHomeScreen() {
           <LogoMark size={32} />
           <Text style={styles.brandText}>Sahayak Partner</Text>
         </View>
-        <View style={[styles.dutyPill, isOnline ? styles.dutyOn : styles.dutyOff]}>
-          <View style={[styles.dutyDot, { backgroundColor: isOnline ? Colors.success : Colors.offline }]} />
-          <Text style={[styles.dutyText, { color: isOnline ? Colors.success : Colors.textSecondary }]}>{isOnline ? "On duty" : "Off duty"}</Text>
+        <View style={styles.headerRight}>
+          <View style={[styles.dutyPill, isOnline ? styles.dutyOn : styles.dutyOff]}>
+            <View style={[styles.dutyDot, { backgroundColor: isOnline ? Colors.success : Colors.offline }]} />
+            <Text style={[styles.dutyText, { color: isOnline ? Colors.success : Colors.textSecondary }]}>{isOnline ? "On duty" : "Off duty"}</Text>
+          </View>
+          <Pressable
+            onPress={() => setNotifOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel={unread > 0 ? `Notifications, ${unread} unread` : "Notifications"}
+            style={styles.bell}
+          >
+            <Ionicons name="notifications-outline" size={26} color={Colors.textPrimary} />
+            {unread > 0 ? <View style={styles.bellDot} /> : null}
+          </Pressable>
         </View>
       </View>
+      <NotificationsModal visible={notifOpen} onClose={() => setNotifOpen(false)} />
 
       <View style={styles.body}>
         {tab === "home" && (
@@ -609,6 +625,9 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.surfaceWhite },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: Spacing.screenHorizontal, minHeight: 56, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.border },
   brand: { flexDirection: "row", alignItems: "center", gap: 10 },
+  headerRight: { flexDirection: "row", alignItems: "center", gap: 4 },
+  bell: { width: 48, height: 48, alignItems: "center", justifyContent: "center", marginRight: -8 },
+  bellDot: { position: "absolute", top: 10, right: 10, width: 10, height: 10, borderRadius: 5, backgroundColor: Colors.emergency, borderWidth: 2, borderColor: Colors.surfaceWhite },
   brandText: { fontSize: Typography.fontSize.lg, fontFamily: Typography.fontFamily.bold, color: Colors.textPrimary },
   dutyPill: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, minHeight: 36, borderRadius: Radius.full, borderWidth: 1 },
   dutyOn: { backgroundColor: Colors.successLight, borderColor: "#86EFAC" },

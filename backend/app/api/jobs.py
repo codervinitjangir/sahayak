@@ -26,6 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api import API_V1_PREFIX
 from app.config.database import get_db
 from app.schemas.common import ApiResponse, ErrorResponse, envelope
+from app.utils import rate_limit
 from app.utils.rate_limit import limit_public_tracking
 from app.schemas.job import (
     JobCancelRequest,
@@ -36,11 +37,12 @@ from app.schemas.job import (
     JobPartnerLocationResponse,
     PublicJobTrackingResponse,
     JobResponse,
+    JobSearchStatusResponse,
     JobStartRequest,
     JobStatusTransitionRequest,
     JobStatusTransitionResponse,
 )
-from app.services import job_service
+from app.services import dispatch_service, job_service
 from app.services.auth_service import Identity
 from app.utils.auth import get_current_identity, require_partner, require_user
 
@@ -315,6 +317,40 @@ async def start_job(
         db, job_id, payload.start_code, identity.local_id
     )
     return envelope(result)
+
+
+@router.post(
+    "/{job_id}/retry-search",
+    response_model=ApiResponse[JobSearchStatusResponse],
+    status_code=status.HTTP_200_OK,
+    summary="Widen the search for a job that found no partner",
+)
+async def retry_job_search(
+    job_id: uuid.UUID,
+    identity: Identity = Depends(require_user),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[JobSearchStatusResponse]:
+    """Search again, wider, for the owner's 'no_match_found' job (ADR-023).
+
+    Radius by the job's age: 10 km for the first 2 minutes, 20 km to 5, 35 km
+    to 10; after 10 minutes `window_open` is false and nothing is searched.
+    Partners already asked are skipped. On a hit the job is back in 'matching'
+    with a new offer. Owner-only; anyone else gets 404. Safe to poll: a job that
+    has moved on is reported as it stands. Limited to 12 calls a minute per job.
+    """
+    await rate_limit.check("retry-search", str(job_id), 12)
+    result = await dispatch_service.retry_search(db, job_id, identity.local_id)
+    return envelope(
+        JobSearchStatusResponse(
+            status=result.status,
+            radius_m=result.radius_m,
+            elapsed_s=result.elapsed_s,
+            window_s=result.window_s,
+            window_open=result.window_open,
+            searched=result.searched,
+            assignment_id=result.assignment.id if result.assignment else None,
+        )
+    )
 
 
 @router.post(

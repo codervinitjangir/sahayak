@@ -1153,3 +1153,19 @@ The second bug was blunter: `partner_supply` filtered on `p.is_verified`, a bool
 4. Admin is `identity.role == "admin"` (ADR-020); the first cut checked for `ops`/`super_admin`, which no identity ever carries, so admins were locked out.
 
 **Consequences.** Settlement is a partner action on the completed-job screen (web `ActiveJobPage`, mobile `PartnerJobDoneScreen`). A dishonest partner could still mark an unpaid bill paid, but that only harms the partner. When a real gateway arrives, its webhook becomes a third confirmer and this rule stays as it is.
+
+
+# ADR-023: A request that finds nobody keeps searching, wider, for ten minutes — driven by the owner's app, not a worker
+
+**Date:** 2026-11-14 · **Status:** Accepted
+
+**Context.** Dispatch searched a fixed 10 km once. A job with nobody in that circle went to `no_match_found` within a second, which tells a driver stranded at night that help does not exist, when a mechanic 15 km out or one finishing a job two minutes away would have taken it. NEXT-STEPS item 11 specifies 10 → 20 → 35 km over 10 minutes.
+
+**Decision.**
+1. **Tiers by job age**, in `app/utils/scoring.py`: 10 km for the first 2 min, 20 km to 5 min, 35 km to 10 min (`SEARCH_TIERS`, `SEARCH_WINDOW_S`). The first tier is the old `MAX_RADIUS_M`, so an initial dispatch is byte-for-byte what it was.
+2. **No worker.** The module docstring of `dispatch_service` explains why there is no background scheduler, and that still holds. Escalation is `POST /jobs/{id}/retry-search`, which the owner's searching screen calls every 15 s while the job is `no_match_found`. The server, not the client, picks the radius from `requested_at`, so a client cannot ask for a wider circle early or keep searching after the window. If nobody is watching, nobody is searched for, which is correct: the request belongs to a person who may already have called someone else.
+3. **Same locking shape as `_offer_next`:** search with no lock (Redis is a network call), then `get_job_by_id_for_update` and re-check `no_match_found` before writing, so an owner's cancel during the search always wins (ADR-015).
+4. **On a hit**, `no_match_found → matching` with history note `Search widened to N km` and a new offer at the next rank, in one transaction. Partners already asked (any state) are skipped. A rejection inside the window re-offers within the current tier, not back inside 10 km.
+5. **Scoring** normalises distance to the circle actually searched, so a 30 km candidate from a 35 km search does not tie every other escalated candidate at a distance score of 0.
+
+**Consequences.** `no_match_found` is no longer always final within the window; analytics read current status, so a rescued job counts as matched, and its history still shows the miss. The endpoint is limited to 12 calls/min per job. When a worker is eventually added, it calls `retry_search` on a timer and this ADR's rules stay as they are.

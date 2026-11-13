@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -24,7 +24,7 @@ import { StarRating } from '../../components/ui/StarRating';
 import { SafetyStrip } from '../../components/SafetyStrip';
 import { jobsService } from '../../services/jobs.service';
 import { paymentsService } from '../../services/payments.service';
-import { Job, JobStatus, JobTimelineEvent } from '../../types/jobs';
+import { Job, JobStatus, JobTimelineEvent, SearchStatus } from '../../types/jobs';
 
 function extractTimestamps(job: Job): Partial<Record<JobStatus, string | undefined>> {
   const result: Partial<Record<JobStatus, string | undefined>> = {
@@ -54,7 +54,35 @@ function extractTimestamps(job: Job): Partial<Record<JobStatus, string | undefin
 export const JobTrackingPage: React.FC = () => {
   const { jobId } = useParams<{ jobId: string }>();
   const navigate = useNavigate();
-  const { data: job, isLoading, error } = useJob(jobId);
+  const { data: job, isLoading, error, refetch: refetchJob } = useJob(jobId);
+
+  // ADR-023: a no_match_found job keeps being re-searched, wider each time, for
+  // ten minutes after it was raised. null once the window has closed.
+  const [widening, setWidening] = useState<SearchStatus | null>(null);
+  useEffect(() => {
+    if (!jobId || job?.status !== 'no_match_found') {
+      setWidening(null);
+      return;
+    }
+    let stopped = false;
+    const tick = async () => {
+      try {
+        const res = await jobsService.retrySearch(jobId);
+        if (stopped) return;
+        setWidening(res.window_open ? res : null);
+        if (res.status !== 'no_match_found') void refetchJob();
+        if (!res.window_open) clearInterval(id);
+      } catch {
+        // A failed poll is retried on the next tick.
+      }
+    };
+    void tick();
+    const id = setInterval(tick, 15000);
+    return () => {
+      stopped = true;
+      clearInterval(id);
+    };
+  }, [jobId, job?.status, refetchJob]);
   const cancelJobMutation = useCancelJob();
 
   const [rating, setRating] = useState<number>(0);
@@ -307,9 +335,13 @@ export const JobTrackingPage: React.FC = () => {
             <div className="flex items-start gap-2 text-amber-900 text-sm">
               <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
               <div>
-                <span className="font-bold block">No partner available right now</span>
+                <span className="font-bold block">
+                  {widening ? 'No one close by yet — still searching' : 'No partner available right now'}
+                </span>
                 <span className="text-sm text-amber-800">
-                  Every nearby verified partner was offered this job and none could take it. You can try again or cancel this request.
+                  {widening
+                    ? `Searching up to ${Math.round(widening.radius_m / 1000)} km · ${Math.floor(widening.elapsed_s / 60)}m ${Math.floor(widening.elapsed_s % 60)}s of up to ${Math.round(widening.window_s / 60)} min. You can cancel at any time.`
+                    : 'Every nearby verified partner was offered this job and none could take it. You can try again or cancel this request.'}
                 </span>
               </div>
             </div>
@@ -487,9 +519,11 @@ export const JobTrackingPage: React.FC = () => {
             >
               Cancel request
             </Button>
-            <Button variant="primary" onClick={() => navigate('/owner/request')}>
-              Request again
-            </Button>
+            {!widening && (
+              <Button variant="primary" onClick={() => navigate('/owner/request')}>
+                Request again
+              </Button>
+            )}
           </div>
         )}
       </div>

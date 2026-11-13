@@ -2233,3 +2233,11 @@ Callers: job owner, assigned partner, or admin; anyone else gets 404 `JOB_NOT_FO
 - `GET /api/v1/payments/job/{job_id}`: Newest payment for the job. **Read-only**: 404 `PAYMENT_NOT_FOUND` until one is opened with `POST /payments` (it used to create one).
 - `POST /api/v1/payments/{payment_id}/confirm`: Mark the money received (`gateway_ref_id`, `payment_method`); idempotent on an already-paid payment. **Assigned partner or admin only** — the owner is the payer and gets 403 `FORBIDDEN`. The owner UI opens the UPI intent and waits; the partner confirms from the completed-job screen.
 
+### 17.5 Extended search with radius escalation (ADR-023, 2026-11-14)
+- `POST /api/v1/jobs/{job_id}/retry-search` — owner only (others 404). No body.
+  - Response: `{status, radius_m, elapsed_s, window_s, window_open, searched, assignment_id}`.
+  - While the job is `no_match_found` and `window_open` is true, call it every **15 s**. Radius is chosen by the server from the job's age: 10 km (0–2 min), 20 km (2–5), 35 km (5–10). After 10 min `window_open` is false and nothing is searched; show the final "no partner" state.
+  - When `status` comes back `matching`, a new offer was made: resume normal job polling.
+  - Calling it for a job in any other status is harmless (`searched: false`).
+  - 429 `RATE_LIMITED` above 12 calls/min per job.
+  - Web `JobTrackingPage` and mobile `OwnerHelpFlowScreen` already do this.

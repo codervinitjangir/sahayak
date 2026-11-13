@@ -29,6 +29,16 @@ const queryClient = new QueryClient({
   },
 });
 
+// Cached server data belongs to whoever was signed in. Drop all of it when the
+// account changes (logout, or a different number signing in on the same phone),
+// or the next person sees the previous one's vehicles, jobs and notifications
+// for up to staleTime before the refetch replaces them.
+useAuthStore.subscribe((state, prev) => {
+  if (state.user?.id !== prev.user?.id || (prev.isAuthenticated && !state.isAuthenticated)) {
+    queryClient.clear();
+  }
+});
+
 interface ErrorBoundaryState {
   hasError: boolean;
   error: Error | null;

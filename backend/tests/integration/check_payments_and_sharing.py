@@ -503,6 +503,69 @@ async def main() -> None:                          # noqa: C901 - one linear scr
         check("owner now reads it as paid", (data_of(r) or {}).get("status") == "paid",
               f"HTTP {r.status_code} {code_of(r)}")
 
+        section("3b. Radius escalation (ADR-023)")
+        # beta moves 15 km out and is the only one on duty: outside 10 km,
+        # inside the 20 km tier.
+        r = await c.post(f"/api/v1/partners/{partners['beta']['id']}/location",
+                         json=dict(zip(("lat", "lng"), latlng((15.0, 0.0)))), headers=hdr(beta))
+        if r.status_code not in (200, 201):
+            raise SystemExit(f"beta relocation failed: {r.status_code} {r.text[:300]}")
+        only_available("beta")
+        r = await c.post("/api/v1/jobs", json={
+            "vehicle_id": VEHICLE_ID, "service_code": SERVICE_CODE,
+            "pickup_lat": PICKUP_LAT, "pickup_lng": PICKUP_LNG,
+            "pickup_address_text": "Payments QA pickup, Outer Ring Rd",
+            "issue_description": f"{JOB_TAG} widen",
+        }, headers=hdr(owner_token))
+        far_id = (data_of(r) or {}).get("id")
+        check("nobody within 10 km -> no_match_found",
+              one("SELECT status FROM jobs WHERE id=%(i)s", {"i": far_id})["status"] == "no_match_found")
+
+        r = await c.post(f"/api/v1/jobs/{far_id}/retry-search", headers=hdr(owner_token))
+        d = data_of(r) or {}
+        check("retry at once searches 10 km and still finds nobody",
+              r.status_code == 200 and d.get("radius_m") == 10000 and d.get("status") == "no_match_found"
+              and d.get("searched") is True, f"HTTP {r.status_code} {code_of(r)} {d}")
+
+        r = await c.post(f"/api/v1/jobs/{far_id}/retry-search", headers=hdr(beta))
+        check("a partner cannot drive the owner's search",
+              r.status_code in (403, 404), f"HTTP {r.status_code} {code_of(r)}")
+
+        conn.cursor().execute("UPDATE jobs SET requested_at = now() - interval '3 minutes' WHERE id=%(i)s",
+                              {"i": far_id})
+        r = await c.post(f"/api/v1/jobs/{far_id}/retry-search", headers=hdr(owner_token))
+        d = data_of(r) or {}
+        offer = one("SELECT partner_id, status, distance_at_offer_m FROM job_assignments "
+                    "WHERE job_id=%(i)s ORDER BY offered_at DESC LIMIT 1", {"i": far_id})
+        check("three minutes in, the 20 km search offers it to beta",
+              r.status_code == 200 and d.get("radius_m") == 20000 and d.get("status") == "matching"
+              and offer is not None and str(offer["partner_id"]) == partners["beta"]["id"]
+              and offer["status"] == "offered", f"HTTP {r.status_code} {d} offer={offer}")
+        hist = [h["status"] for h in rows(
+            "SELECT status FROM job_status_history WHERE job_id=%(i)s ORDER BY changed_at, id", {"i": far_id})]
+        check("timeline: requested -> no_match_found -> matching",
+              hist[-2:] == ["no_match_found", "matching"], f"{hist}")
+        r = await c.post(f"/api/v1/jobs/{far_id}/cancel", json={}, headers=hdr(owner_token))
+        if r.status_code != 200:
+            raise SystemExit(f"cancel widened job failed: {r.status_code} {r.text[:300]}")
+
+        r = await c.post("/api/v1/jobs", json={
+            "vehicle_id": VEHICLE_ID, "service_code": SERVICE_CODE,
+            "pickup_lat": PICKUP_LAT, "pickup_lng": PICKUP_LNG,
+            "pickup_address_text": "Payments QA pickup, Outer Ring Rd",
+            "issue_description": f"{JOB_TAG} window",
+        }, headers=hdr(owner_token))
+        late_id = (data_of(r) or {}).get("id")
+        conn.cursor().execute("UPDATE jobs SET requested_at = now() - interval '11 minutes' WHERE id=%(i)s",
+                              {"i": late_id})
+        r = await c.post(f"/api/v1/jobs/{late_id}/retry-search", headers=hdr(owner_token))
+        d = data_of(r) or {}
+        check("after 10 minutes the window is closed and nothing is searched",
+              r.status_code == 200 and d.get("window_open") is False and d.get("searched") is False
+              and d.get("status") == "no_match_found", f"HTTP {r.status_code} {d}")
+        await c.post(f"/api/v1/jobs/{late_id}/cancel", json={}, headers=hdr(owner_token))
+        only_available("alpha")
+
         section("4. Deleting a vehicle that has job history")
         r = await c.post("/api/v1/vehicles", json={"vehicle_type": "four_wheeler", "make": "QA",
                                                    "model": "Scratch", "vehicle_number": SCRATCH_PLATE},

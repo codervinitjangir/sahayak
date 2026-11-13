@@ -13,6 +13,7 @@ import {
   JobStatusTransitionResponse,
   PartnerLiveLocation,
   PublicJobTracking,
+  SearchStatus,
 } from '../types/jobs';
 
 /**
@@ -246,6 +247,15 @@ export const jobsService = {
     const res = await apiClient<PartnerLiveLocation>(`/jobs/${jobId}/partner-location`, {
       method: 'GET',
     });
+    return res.data;
+  },
+
+  /**
+   * Widen the search for a no_match_found job (ADR-023): 10 km, then 20 km
+   * after 2 min, 35 km after 5; the window closes at 10 min. Max 12/min per job.
+   */
+  async retrySearch(jobId: string): Promise<SearchStatus> {
+    const res = await apiClient<SearchStatus>(`/jobs/${jobId}/retry-search`, { method: 'POST' });
     return res.data;
   },
 
