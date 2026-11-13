@@ -2,9 +2,10 @@ name: Mobile CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, develop, 'feat/**', 'fix/**']
     paths:
       - 'mobile/**'
+      - '.github/workflows/mobile-ci.yml'
   pull_request:
     branches: [main, develop]
     paths:
@@ -31,14 +32,21 @@ jobs:
         run: npx tsc --noEmit
         working-directory: mobile
 
-  # TODO: Add Expo EAS build check when project is production-ready
-  # build:
-  #   name: EAS Preview Build
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: expo/expo-github-action@v8
-  #       with:
-  #         eas-version: latest
-  #         token: ${{ secrets.EXPO_TOKEN }}
-  #     - run: eas build --platform android --profile preview --non-interactive
-  #       working-directory: mobile
+  test:
+    name: Tests and no-demo-data check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: mobile/package-lock.json
+      - run: npm ci
+      # Includes the route-inventory test, which fails when a client calls a
+      # path the backend does not serve (re-export with backend/tools/export_routes.py).
+      - run: npm test
+      - run: npm run check:rule-a

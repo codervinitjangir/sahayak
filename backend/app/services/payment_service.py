@@ -1,7 +1,6 @@
 import logging
 import uuid
 from decimal import Decimal
-from typing import Optional
 from urllib.parse import quote
 from sqlalchemy.ext.asyncio import AsyncSession
 

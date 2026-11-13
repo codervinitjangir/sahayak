@@ -2,9 +2,10 @@ name: Backend CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, develop, 'feat/**', 'fix/**']
     paths:
       - 'backend/**'
+      - '.github/workflows/backend-ci.yml'
   pull_request:
     branches: [main, develop]
     paths:
@@ -29,34 +30,26 @@ jobs:
         # E = pycodestyle errors, F = pyflakes
         # E501 = line-too-long ignored during scaffold phase
 
-  # TODO: Uncomment when real tests are written
-  # test:
-  #   name: Tests
-  #   runs-on: ubuntu-latest
-  #   services:
-  #     postgres:
-  #       image: postgis/postgis:15-3.4
-  #       env:
-  #         POSTGRES_DB: sahayak_test
-  #         POSTGRES_USER: sahayak
-  #         POSTGRES_PASSWORD: testpass
-  #       ports: ['5432:5432']
-  #       options: >-
-  #         --health-cmd pg_isready
-  #         --health-interval 10s
-  #         --health-timeout 5s
-  #         --health-retries 5
-  #     redis:
-  #       image: redis:7-alpine
-  #       ports: ['6379:6379']
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - uses: actions/setup-python@v5
-  #       with:
-  #         python-version: '3.11'
-  #     - run: pip install -r backend/requirements.txt
-  #     - run: pytest backend/tests/ --cov=backend/app --cov-report=xml
-  #       env:
-  #         DATABASE_URL: postgresql+asyncpg://sahayak:testpass@localhost:5432/sahayak_test
-  #         REDIS_URL: redis://localhost:6379/0
-  #         APP_ENV: test
+  unit:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      # Unit tests mock every repository and use fakeredis; nothing connects.
+      # A syntactically valid URL is still needed to build the (lazy) engine.
+      DATABASE_URL: postgresql+asyncpg://ci:ci@localhost:5432/ci
+      PUSH_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+      - run: pip install -r requirements.txt pytest pytest-asyncio
+      - run: python -m pytest tests/unit -q
+
+      # Live harnesses (tests/integration/check_*.py) need the real Supabase
+      # project and are run by hand; see CLAUDE.md "Testing bar".

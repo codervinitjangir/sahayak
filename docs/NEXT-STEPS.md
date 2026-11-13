@@ -234,7 +234,7 @@ Missing, in suggested order:
 
 | # | Item |
 |---|---|
-| E1 | CI: run web and mobile `tsc`, `vitest`, `check:rule-a`, and the brand-hygiene tests on every push |
+| E1 | [x] CI (2026-11-14): web + mobile `tsc`, `vitest` (incl. brand-hygiene and route-inventory), `check:rule-a`; backend ruff + 513 unit tests; runs on main, develop, feat/**, fix/**. Live harnesses stay manual |
 | E2 | Backend: re-export `backend-routes.json` fixtures for **both** clients after the new routes (per project memory) and keep the route-inventory tests green |
 | E3 | Mobile tests only cover pure logic. Add component tests for the owner flow and partner offer flow (React Native Testing Library) |
 | E4 | End-to-end smoke test against a staging backend (sign in with a test number, request, accept, complete) |
@@ -258,7 +258,7 @@ Code work, in order:
 4. [x] G8 profile edit and G10 account deletion / data export.
 5. [x] G9 partner notifications screen on mobile.
 6. [~] G2 push notifications: server done; app wiring needs an EAS project (see G2 row).
-7. E1 CI.
+7. [x] E1 CI.
 
 Needs a person, not code: R1 (real contact values and UPI ID), R2 (rotate Maps key), R3 (lawyer),
 R5 (device run), G3 (money-holding decision and CA sign-off), G5/G7 (provider contracts).

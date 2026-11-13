@@ -20,7 +20,7 @@ from typing import Optional
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.job import Job, JobAssignment, JobStatusHistory
+from app.models.job import Job, JobStatusHistory
 from app.models.notification import Notification
 from app.models.payment import Payment
 from app.models.rating import Rating
