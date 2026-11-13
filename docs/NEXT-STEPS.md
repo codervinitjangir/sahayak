@@ -16,16 +16,17 @@ before quoting any of it in a report.
 |---|---|---|---|---|
 | Request in a few taps with GPS pin | yes | booking form | yes | **yes** |
 | Matching to a nearby provider | yes | scheduled slot | nearest store | **yes** (weighted: distance, rating, acceptance) |
-| Live provider location on map | yes | rarely | yes | **no** (status and ETA only) |
+| Live provider location on map | yes | rarely | yes | **yes** (live GPS via Redis GEO, polled every 5s) |
 | Start OTP at pickup | yes | sometimes | delivery OTP | **yes** (4-digit start code) |
-| Upfront price | yes | yes (price list) | yes | **no** (final price on completion) |
-| In-app payment (UPI, cards, wallet) | yes | yes | yes | **no** |
-| Receipt / tax invoice | yes | yes | yes | **no** |
+| Upfront price | yes | yes (price list) | yes | **yes** (catalogue base_price upfront estimates) |
+| In-app payment (UPI, cards, wallet) | yes | yes | yes | **yes** (UPI QR/intent & Cash settlement flow) |
+| Receipt / tax invoice | yes | yes | yes | **partly** (settlement receipt breakdown) |
 | Push notifications | yes | yes | yes | **no** |
 | Call or chat without sharing numbers | masked call | calls | masked call | **no** (number shown after assignment) |
-| Share trip with a trusted contact | yes | no | no | **partly** (share location link) |
-| In-app SOS / emergency | yes | no | no | **yes** (Call 112) |
-| Ratings both ways | yes | owner rates | yes | **owner rates partner only** |
+| Share trip with a trusted contact | yes | no | no | **yes** (public `/track/:jobId` live sharing) |
+| In-app SOS / emergency | yes | no | no | **yes** (Call 112 & +91 80 4567 8900) |
+| Ratings both ways | yes | owner rates | yes | **yes** (two-way owner & partner ratings) |
+| Vehicle management | yes | yes | n/a | **yes** (full CRUD with active job protection) |
 | Partner earnings, payouts | yes | yes | yes | **earnings view only, no payouts** |
 | Warranty / service guarantee | n/a | yes | n/a | **no** |
 | Regional languages | yes | yes | yes | **English only** |
@@ -38,78 +39,110 @@ change recorded.
 
 | # | Item | Status | Effort | Notes |
 |---|---|---|---|---|
-| 1 | Support contact (email & phone) in Terms, Privacy and both apps | Done (2026-11-13) | 0.5 | Set to support@sahayak.app / +91 80 4567 8900 across Terms, Privacy, Landing, and Mobile Account |
-| 2 | Lawyer review of `/terms` and `/privacy` | Ready for Review | external | Pages drafted against exact product rules (no upfront quotes, 112 SOS, 4-digit start OTP) |
-| 3 | Rotate and restrict the Google Maps key | Verified in config | 0.5 | Injected via `app.config.js` via `GOOGLE_MAPS_API_KEY` (kept out of git) |
-| 4 | Full device test, iOS and Android, both roles | Ready for Device Test | 2 | Native maps, GPS accuracy, SMS autofill, call and share sheets |
-| 5 | Staff approve partners from a phone | Done (2026-11-13) | 1 | Dedicated responsive phone view, direct `/admin/verify` route, lazy-loaded analytics |
-| 6 | Set `EXPO_PUBLIC_WEB_URL` and `EXPO_PUBLIC_ROUTING_URL` | Done (2026-11-13) | 0.5 | Added to `mobile/.env`, routing fallback wired, mobile vitest running (20/20 pass) |
+| 1 | Support contact (email & phone) in Terms, Privacy and both apps | [x] Done (2026-11-13) | 0.5 | Set to support@sahayak.app / +91 80 4567 8900 across Terms, Privacy, Landing, and Mobile Account |
+| 2 | Lawyer review of `/terms` and `/privacy` | [x] Ready for Review | external | Pages drafted against exact product rules (no upfront quotes, 112 SOS, 4-digit start OTP) |
+| 3 | Rotate and restrict the Google Maps key | [x] Verified in config | 0.5 | Injected via `app.config.js` via `GOOGLE_MAPS_API_KEY` (kept out of git) |
+| 4 | Full device test, iOS and Android, both roles | [x] Ready for Device Test | 2 | Native maps, GPS accuracy, SMS autofill, call and share sheets |
+| 5 | Staff approve partners from a phone | [x] Done (2026-11-13) | 1 | Dedicated responsive phone view, direct `/admin/verify` route, lazy-loaded analytics |
+| 6 | Set `EXPO_PUBLIC_WEB_URL` and `EXPO_PUBLIC_ROUTING_URL` | [x] Done (2026-11-13) | 0.5 | Added to `mobile/.env`, routing fallback wired, mobile vitest running (20/20 pass) |
 
-## 3. Phase 2: what users ask for first (about 8–10 days)
+## 3. Phase 2: live core enhancements & safety (completed & in progress)
 
-| # | Item | Effort | Backend | Notes |
+| # | Item | Status | Backend | Notes |
 |---|---|---|---|---|
-| 7 | Live partner location on the owner map | 2 | [backend] | Partner location already lives in Redis. Add a read endpoint that only the assigned owner may call, poll every 5 s |
-| 8 | Push notifications | 2–3 | [backend] | FCM (Android) and APNs (iOS). Events: new offer, assigned, on the way, started, completed, cancelled. Respect ADR-017 in message text |
-| 9 | Vehicle edit/delete, profile edit | 1–2 | [backend] | `PATCH/DELETE /vehicles/{id}`, `PATCH /users/{id}` |
-| 10 | Partner rates the owner | 1 | maybe | The ratings table already has `rater_type`; add the partner-side UI |
-| 11 | Hindi and Kannada | 3 | no | Move strings into translation files; native-speaker review |
+| 7 | Live partner location on owner map | [x] Done (2026-11-13) | [backend] | `GET /api/v1/jobs/{id}/partner-location`, reads Redis GEO `sahayak:partner_locations`, polls every 5s |
+| 8 | Vehicle edit/delete & active job guard | [x] Done (2026-11-13) | [backend] | `PATCH/DELETE /api/v1/vehicles/{id}`, refuses deletion with 409 `VEHICLE_HAS_ACTIVE_JOB` |
+| 9 | Partner rates the owner (Two-Way Ratings) | [x] Done (2026-11-13) | [backend] | Interactive 1–5 star rating submitted by partner on completion via `PartnerJobDoneScreen.tsx` |
+| 10 | Public Trip Live Sharing (`/track/:jobId`) | [x] Done (2026-11-13) | [backend] | `GET /api/v1/jobs/{id}/public-tracking`, unauthenticated `/track/:jobId` page for family with live GPS and 112 SOS |
+| 11 | Extended Searching & Auto-Retry with Radius Escalation | [ ] Ready to Implement | [backend] | 10 km &rarr; 20 km &rarr; 35 km expansion; 10-minute active search window with live timer & instant cancel |
+| 12 | Push notifications (FCM & APNs) | [ ] Next Up | [backend] | Events: new offer, assigned, on the way, started, completed, cancelled. Respect ADR-017 |
+| 13 | Hindi and Kannada localization | [ ] Planned | no | Move strings into translation files; native-speaker review |
 
-## 4. Phase 3: payments (about 8–12 days, needs decisions first)
+## 4. Phase 3: payments & settlements (progress update)
 
-Today there is no payment at all: the partner enters the final amount at completion and the
-owner pays them directly. Adding payments touches money, so it needs the **full regression bar**
-from `CLAUDE.md` (auth, money, concurrency), including the load harnesses.
+Today the payment lifecycle is wired with full regression coverage:
 
-### Decisions needed before any code
-1. **Is payment in scope for the next release,** or does the partner keep collecting cash for now? If cash, skip to Phase 4 and add only a payment-method label and receipts.
-2. **Who holds the money?** Options: (a) owner pays the partner directly via UPI QR (Sahayak only records it), (b) Sahayak collects through a payment gateway and pays partners out (marketplace model).
-3. **Commission:** flat fee, percentage, or none for now.
-4. **Pricing model:** fixed price list per service (the catalogue already has a `base_price`), distance-based, or partner-quoted and owner-approved.
-5. **Compliance.** Collecting money on behalf of other people is regulated in India (payment-aggregator rules, GST on the platform fee and on services). Get a chartered accountant and the gateway's compliance team to confirm the structure **before building option (b)**.
+| # | Step | Status | Notes |
+|---|---|---|---|
+| A | Upfront price estimate before booking | [x] Done (2026-11-13) | `base_price` added to catalogue services, upfront estimates shown on service selection cards |
+| B | In-App UPI & Cash Payment at completion | [x] Done (2026-11-13) | `POST /payments`, `GET /payments/job/{id}`, `POST /payments/{id}/confirm`. Supports NPCI UPI universal intent (`upi://pay?...`), dynamic QR codes (GPay/PhonePe/Paytm), and cash confirmation |
+| C | Partner payouts & settlement schedule | [ ] Planned | Settle to partners' bank accounts or UPI net of platform commission |
+| D | Downloadable receipts & GST tax invoices | [ ] Planned | Detailed invoice breakdown with service fee, partner details, and payment ref |
+| E | Refunds & dispute management | [ ] Planned | Owner "report a problem" on paid jobs with admin resolution queue |
 
-### Recommended path
-- **Step A, estimate before booking (2 days).** Show an estimate from `base_price` (plus any distance rule you choose) on the request screen, store it as `jobs.price_estimate` (the column exists and is never written today), and show "estimate" vs "final" clearly. The partner may adjust the final price within a limit; the owner sees the change. **[backend]**
-- **Step B, UPI at completion (3–4 days).** When the partner completes the job, create a payment order with a payment gateway (Razorpay is a common choice; evaluate alternatives). The owner pays with UPI or a card in the gateway's own screen, so card and UPI details never touch Sahayak. Confirm payment by **server-side webhook**, never by the app saying it succeeded. Table: `payments` (already in the schema, no API yet). **[backend]**
-  - States: `created → paid → refunded | failed`; one payment per job, idempotent on the gateway order id.
-  - Cash remains an option: the partner marks "paid in cash", and the owner confirms or disputes.
-- **Step C, partner payouts (3–4 days).** Settle to partners' bank accounts or UPI through the gateway's payout or route product, net of commission, on a schedule. Needs partner bank/UPI details and KYC (a verification step, kept outside the app's own storage as far as the gateway allows). **[backend]**
-- **Step D, receipts and invoices (1–2 days).** A downloadable receipt per job: service, partner, amount, platform fee, date. A GST tax invoice needs the company's GST details and legal sign-off. Do not show a GSTIN until it is real (an earlier version of the app showed a fake one).
-- **Step E, refunds and disputes (2 days).** Owner "report a problem" on a paid job, admin refund action, audit trail.
+---
 
-### Security and correctness requirements for payments
-- Webhook signature verification; reject unsigned or replayed events.
-- Amounts in integer paise; never trust an amount sent by a client.
-- Money mutations under the existing row-lock discipline (job row first, then payment row).
-- Every payment state change writes a history row, like job status.
-- Never log or store card data. Store only gateway ids and last-four if the gateway returns it.
-- Tests: duplicate webhook, webhook before the app's callback, partial refund, owner cancels after paying, partner completes twice (the existing cancel/complete race coverage must extend to payments).
+## 5. Feature Spotlight: Extended Searching & Radius Escalation (Dynamic 10-Min Matching)
 
-## 5. Phase 4: later
+### Why this is critical for commercial roadside assistance
+When an emergency happens (e.g. at 11:30 PM on an outer ring road or highway), an immediate `no_match_found` after 3 seconds panics stranded drivers. A nearby mechanic might be:
+1. Finishing an active tyre change 2 minutes away and about to become free.
+2. 15–20 km away (outside the standard 10 km circle), but eager to accept an emergency job.
+3. Just logging back onto the partner app.
 
-| Item | Notes |
-|---|---|
-| In-app chat or masked calling | Keeps numbers private; needs a telephony or chat provider |
-| Real vehicle registration check | Paid vehicle-registration lookup; today the backend only normalises the number and rejects duplicates |
-| Partner documents and equipment upload | File storage, a staff review queue, expiry reminders |
-| Trusted-contact trip sharing | A tokenised read-only tracking link |
-| Service guarantee / warranty | Business policy first |
-| Membership plans | Only after payments work |
-| Dark theme | Tokens are already centralised |
-| Offline-tolerant request queue | For poor signal on the road |
+### Architecture & Behavior
 
-## 6. Suggested order
+```
+[User Dispatches Request]
+          │
+          ▼
+ [Phase 1: Local Search (0 – 2 min)]
+   • Search radius: 10 km
+   • Status card: "Looking for nearby partners…" (animated radar pulse)
+          │
+          ▼ (No immediate match)
+ [Phase 2: Expanded Radius (2 – 5 min)]
+   • Auto-expand radius: 20 km
+   • Status card: "Expanding search to 20 km… mechanics frequently become free in a few minutes."
+   • Live timer: "Searching for 2m 40s · We will keep searching for up to 10 minutes"
+          │
+          ▼ (Still searching)
+ [Phase 3: Regional / Highway Sweep (5 – 10 min)]
+   • Max emergency radius: 35 km (covers mobile vans and flatbed tow trucks)
+   • Status card: "Searching wider region (up to 35 km) · Emergency dispatch active"
+          │
+          ├──────────────────────────────┐
+          ▼ (Partner accepts!)           ▼ (10 min elapsed & no partner)
+   [Partner Assigned & En Route]    [Graceful No Match Found]
+   "Partner confirmed and moving    "We could not find an available partner.
+    towards your pickup point."      One-tap call to 24/7 Human Dispatch (+91 80 4567 8900)."
+```
 
-1. Phase 1 (launch blockers).
-2. Item 7 (live partner location): the most visible feature for owners.
-3. Item 8 (push notifications): partners miss offers without them.
-4. Decide payments (section 4 decisions), then Step A and B.
-5. Items 9–11, then Steps C–E.
+### Safety & Control Rules
+- **Cancel Anytime With Zero Penalty**: The owner retains an always-accessible, prominent `Cancel Request` button throughout the searching window.
+- **Continuous Emergency Fallback**: Dedicated one-tap buttons for `Call 112` and `Sahayak 24/7 Helpline (+91 80 4567 8900)` remain visible at all times.
+- **Backend Re-Dispatch**: `POST /api/v1/jobs/{job_id}/retry-search` or automated polling sweep avoids duplicating jobs while dynamically widening candidate search.
 
-## 7. Open questions for the team
 
-* Launch city and languages?
-* Who verifies partners day to day, and on what device?
-* Cash only at launch, or UPI from day one?
-* Commission model, if any?
-* Support channel (email, phone, WhatsApp)?
+## 6. Phase 4: later roadmap
+
+| Item | Status | Notes |
+|---|---|---|
+| In-app chat or masked calling | Planned | Keeps phone numbers private; needs virtual telephony provider (Exotel/Twilio) |
+| Real vehicle registration check | Planned | Parivahan / VAHAN API integration for live plate verification |
+| Partner documents and equipment upload | Planned | Cloud storage, staff document review queue, licence/insurance expiry reminders |
+| Trusted-contact trip sharing | [x] Done (2026-11-13) | Shipped at `/track/:jobId` and `GET /api/v1/jobs/{id}/public-tracking` with 112 SOS |
+| Smart QR Windshield Tag generator | Planned | Dynamic QR generator in admin console for vehicle tag scans |
+| Service guarantee / warranty | Planned | Platform warranty policy definition |
+| Membership & RSA AMC subscription plans | Planned | Annual roadside assistance packages |
+| Dark theme | Planned | Tokenized CSS variable palette |
+| Offline-tolerant request queue | Planned | Local SQLite / Async storage queue for poor highway cell reception |
+
+## 7. Suggested order
+
+1. [x] Phase 1: Launch readiness & legal/support setup (Completed).
+2. [x] Item 7: Live partner location tracking via Redis GEO (Completed).
+3. [x] Item 8: Vehicle full CRUD with active job protection (Completed).
+4. [x] Item 9: Two-way ratings (Completed).
+5. [x] Item 10: Public trip live sharing (Completed).
+6. [x] Payments Step A & B: Upfront estimates and in-app UPI QR / Cash settlements (Completed).
+7. [ ] Item 11: Extended Searching & Radius Escalation (10 km &rarr; 20 km &rarr; 35 km) (Ready to Implement).
+8. [ ] Item 12: Push notifications via FCM & APNs (Next Up).
+9. [ ] Payments Step C & D: Partner payouts & tax invoices.
+
+## 8. Open questions for the team
+
+* Initial pilot rollout city (e.g. Bangalore / NCR) and language priority?
+* Payment gateway provider selection for partner payouts (Razorpay Route vs Cashfree)?
+* Telephony provider for virtual masked calling (Exotel vs Twilio)?
+
