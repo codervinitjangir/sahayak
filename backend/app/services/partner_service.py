@@ -555,3 +555,16 @@ async def get_partner_earnings(
     return PartnerEarningsResponse(**earnings)
 
 
+async def update_my_name(db: AsyncSession, identity: Identity, name: str) -> Partner:
+    """G8: a partner edits their display name. Owners see it after assignment."""
+    partner = await partner_repository.get_partner_by_id(db, identity.local_id)
+    if partner is None:
+        raise NotFoundError("PARTNER_NOT_FOUND", "Partner not found")
+    try:
+        partner.name = name.strip()
+        await db.commit()
+    except SQLAlchemyError as exc:
+        await db.rollback()
+        raise InternalError("Could not update your profile") from exc
+    log_event("partner_profile_updated", partner_id=str(identity.local_id), outcome="success")
+    return await partner_repository.get_partner_by_id(db, identity.local_id)

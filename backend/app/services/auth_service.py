@@ -630,3 +630,35 @@ async def link_user_auth(
         outcome="success",
     )
     return user
+
+
+async def delete_supabase_user(auth_user_id) -> bool:
+    """Delete a Supabase Auth account with the server's secret key. Best-effort.
+
+    Used by account deletion (ADR-025) after the local row is anonymised.
+    Returns False and logs on any failure (including a missing or revoked key);
+    never raises, because the local erasure has already committed and is what
+    actually cuts the account off.
+    """
+    import httpx
+
+    settings = get_settings()
+    key = settings.SUPABASE_SECRET_KEY or settings.SUPABASE_SERVICE_ROLE_KEY
+    if not key or not settings.SUPABASE_URL or auth_user_id is None:
+        log_event("supabase_user_delete_skipped", level=logging.WARNING,
+                  reason="not_configured", outcome="skipped")
+        return False
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/auth/v1/admin/users/{auth_user_id}"
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.delete(url, headers={"apikey": key, "Authorization": f"Bearer {key}"})
+    except httpx.HTTPError as exc:
+        log_event("supabase_user_delete_failed", level=logging.WARNING,
+                  error_type=type(exc).__name__, outcome="failure")
+        return False
+    if r.status_code not in (200, 204, 404):
+        log_event("supabase_user_delete_failed", level=logging.WARNING,
+                  status_code=r.status_code, outcome="failure")
+        return False
+    log_event("supabase_user_deleted", outcome="success")
+    return True

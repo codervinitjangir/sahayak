@@ -27,20 +27,24 @@ case this path does not cover — a users row that arrived by some other route
 """
 import logging
 import time
+from datetime import datetime, timezone
 from typing import Optional
 
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User
 from app.repositories import auth_repository, user_repository
 from app.schemas.user import UserRegisterRequest
+from app.services import auth_service
 from app.services.auth_service import TokenClaims
 from app.utils.errors import (
     BadRequestError,
     ConflictError,
     ErrorCode,
     InternalError,
+    NotFoundError,
 )
 from app.utils.logging import log_event
 from app.utils.phone import digits_only
@@ -222,3 +226,157 @@ async def register_user(
         duration_ms=_elapsed_ms(),
     )
     return user
+
+
+# ---------------------------------------------------------------------------
+# Self-service profile, export and deletion (G8 / G10, ADR-025)
+# ---------------------------------------------------------------------------
+
+async def _me(db: AsyncSession, user_id) -> User:
+    user = await user_repository.get_user_by_id(db, user_id)
+    if user is None or getattr(user, "deleted_at", None) is not None:
+        raise NotFoundError(ErrorCode.USER_NOT_FOUND, "User not found")
+    return user
+
+
+async def get_me(db: AsyncSession, user_id) -> User:
+    return await _me(db, user_id)
+
+
+async def update_me(db: AsyncSession, user_id, *, name: Optional[str], email: Optional[str], email_set: bool) -> User:
+    """Edit name and email. Phone is the login and is not editable here.
+
+    `email_set` distinguishes "leave email alone" (field absent) from "clear
+    it" (explicit null).
+    """
+    user = await _me(db, user_id)
+    fields: dict = {}
+    if name is not None:
+        fields["name"] = name.strip()
+    if email_set:
+        new_email = email.strip().lower() if email else None
+        if new_email and new_email != (user.email or "").lower():
+            other = await user_repository.get_user_by_email(db, new_email)
+            if other is not None and other.id != user.id:
+                raise BadRequestError(
+                    ErrorCode.USER_ALREADY_EXISTS, "Another account already uses this email address"
+                )
+        fields["email"] = new_email
+    if not fields:
+        return user
+    try:
+        await user_repository.update_user_fields(db, user, **fields)
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        raise BadRequestError(
+            ErrorCode.USER_ALREADY_EXISTS, "Another account already uses this email address"
+        ) from exc
+    except SQLAlchemyError as exc:
+        await db.rollback()
+        raise InternalError("Could not update your profile") from exc
+    log_event("user_profile_updated", user_id=str(user_id), fields=",".join(sorted(fields)), outcome="success")
+    return await _me(db, user_id)
+
+
+def _iso(value):
+    return value.isoformat() if value is not None else None
+
+
+def _num(value):
+    return float(value) if value is not None else None
+
+
+async def export_me(db: AsyncSession, user_id) -> dict:
+    """Everything Sahayak stores about this owner, as plain JSON (G10).
+
+    Partner contact details are not included: a partner's phone is the
+    partner's personal data, not the owner's.
+    """
+    user = await _me(db, user_id)
+    rows = await user_repository.export_rows(db, user.id)
+    history_by_job: dict = {}
+    for h in rows["history"]:
+        history_by_job.setdefault(h.job_id, []).append(
+            {"status": h.status, "at": _iso(h.changed_at), "note": h.note})
+    payments_by_job: dict = {}
+    for pay in rows["payments"]:
+        payments_by_job.setdefault(pay.job_id, []).append({
+            "amount": _num(pay.amount), "status": pay.status,
+            "method": pay.payment_method, "at": _iso(pay.created_at),
+        })
+    ratings_by_job: dict = {}
+    for r in rows["ratings"]:
+        ratings_by_job.setdefault(r.job_id, []).append(
+            {"by": r.rated_by, "rating": r.rating, "comment": r.comment})
+    log_event("user_data_exported", user_id=str(user_id), jobs=len(rows["jobs"]), outcome="success")
+    return {
+        "exported_at": _iso(datetime.now(timezone.utc)),
+        "profile": {
+            "id": str(user.id), "name": user.name, "phone": user.phone, "email": user.email,
+            "created_at": _iso(user.created_at),
+        },
+        "vehicles": [
+            {"id": str(v.id), "type": v.vehicle_type, "make": v.make, "model": v.model,
+             "vehicle_number": v.vehicle_number, "created_at": _iso(v.created_at)}
+            for v in rows["vehicles"]
+        ],
+        "jobs": [
+            {"id": str(j.id), "status": j.status, "service_id": j.service_id,
+             "vehicle_number": j.vehicle_number, "pickup_address_text": j.pickup_address_text,
+             "issue_description": j.issue_description, "price_estimate": _num(j.price_estimate),
+             "price_final": _num(j.price_final), "requested_at": _iso(j.requested_at),
+             "completed_at": _iso(j.completed_at), "cancelled_at": _iso(j.cancelled_at),
+             "cancellation_reason": j.cancellation_reason, "timeline": history_by_job.get(j.id, []),
+             "payments": payments_by_job.get(j.id, []), "ratings": ratings_by_job.get(j.id, [])}
+            for j in rows["jobs"]
+        ],
+        "notifications": [
+            {"event": n.event, "message": n.message, "read": bool(n.is_read), "at": _iso(n.sent_at)}
+            for n in rows["notifications"]
+        ],
+    }
+
+
+async def delete_me(db: AsyncSession, user_id, auth_user_id) -> None:
+    """Delete the owner's account (ADR-025): anonymise, do not remove.
+
+    Refused with 409 ACCOUNT_HAS_ACTIVE_JOB while a request is live: someone
+    may be driving to them. Otherwise, in one transaction: free text on their
+    jobs and their rating comments erased, vehicles and notifications deleted,
+    and the users row rewritten so it identifies nobody and no login resolves
+    to it. Jobs and payments stay, because partners' earnings and the payment
+    record point at them.
+
+    The Supabase login is deleted afterwards, best-effort: if that call fails
+    the token still reaches nothing, because auth_user_id is gone from every
+    table and the phone no longer matches for re-linking.
+    """
+    user = await _me(db, user_id)
+    if await user_repository.count_active_jobs(db, user.id) > 0:
+        raise ConflictError(
+            ErrorCode.ACCOUNT_HAS_ACTIVE_JOB,
+            "Finish or cancel your active request before deleting your account",
+        )
+    user_pk = user.id
+    try:
+        await user_repository.erase_owner_data(db, user_pk)
+        await user_repository.update_user_fields(
+            db, user,
+            name="Deleted user",
+            # 15 chars, unique, never dialable: 'del' + 12 hex of the id.
+            phone="del" + user_pk.hex[:12],
+            email=None,
+            auth_user_id=None,
+            phone_verified=False,
+            deleted_at=func.now(),
+        )
+        await db.commit()
+    except SQLAlchemyError as exc:
+        await db.rollback()
+        log_event("user_account_delete_failed", level=logging.ERROR, user_id=str(user_pk),
+                  error_type=type(exc).__name__, outcome="failure")
+        raise InternalError("Could not delete your account") from exc
+
+    log_event("user_account_deleted", user_id=str(user_pk), outcome="success")
+    await auth_service.delete_supabase_user(auth_user_id)

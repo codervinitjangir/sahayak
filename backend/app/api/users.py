@@ -42,12 +42,16 @@ from app.config.database import get_db
 from app.schemas.common import ApiResponse, ErrorResponse, envelope
 from app.schemas.user import (
     UserAuthLinkResponse,
+    UserDeleteResponse,
+    UserMeResponse,
+    UserMeUpdateRequest,
     UserRegisterRequest,
     UserRegistrationResponse,
 )
 from app.services import auth_service, user_service
 from app.services.auth_service import TokenClaims
-from app.utils.auth import get_token_claims
+from app.services.auth_service import Identity
+from app.utils.auth import get_token_claims, require_user
 
 _ERROR_RESPONSES = {
     400: {"model": ErrorResponse, "description": "Invalid request"},
@@ -125,3 +129,46 @@ async def link_auth(
     """
     user = await auth_service.link_user_auth(db, user_id, claims)
     return envelope(user)
+
+
+# ---------------------------------------------------------------------------
+# Self-service (G8 / G10, ADR-025). Declared after the routes above; none of
+# those has a GET on /{user_id}, so "/me" cannot be shadowed.
+# ---------------------------------------------------------------------------
+
+@router.get("/me", response_model=ApiResponse[UserMeResponse], summary="Your profile")
+async def read_my_profile(
+    identity: Identity = Depends(require_user), db: AsyncSession = Depends(get_db)
+) -> ApiResponse[UserMeResponse]:
+    return envelope(UserMeResponse.model_validate(await user_service.get_me(db, identity.local_id)))
+
+
+@router.patch("/me", response_model=ApiResponse[UserMeResponse], summary="Edit your name or email")
+async def update_my_profile(
+    payload: UserMeUpdateRequest,
+    identity: Identity = Depends(require_user),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[UserMeResponse]:
+    """400 USER_ALREADY_EXISTS if the email belongs to another account."""
+    user = await user_service.update_me(
+        db, identity.local_id, name=payload.name, email=payload.email,
+        email_set="email" in payload.model_fields_set,
+    )
+    return envelope(UserMeResponse.model_validate(user))
+
+
+@router.get("/me/export", summary="Download everything Sahayak stores about you (JSON)")
+async def export_my_data(
+    identity: Identity = Depends(require_user), db: AsyncSession = Depends(get_db)
+) -> ApiResponse[dict]:
+    return envelope(await user_service.export_me(db, identity.local_id))
+
+
+@router.delete("/me", response_model=ApiResponse[UserDeleteResponse], summary="Delete your account")
+async def delete_my_account(
+    identity: Identity = Depends(require_user), db: AsyncSession = Depends(get_db)
+) -> ApiResponse[UserDeleteResponse]:
+    """409 ACCOUNT_HAS_ACTIVE_JOB while a request is live. Irreversible."""
+    await user_service.delete_me(db, identity.local_id, identity.auth_user_id)
+    return envelope(UserDeleteResponse())
+

@@ -40,6 +40,8 @@ from app.schemas.partner import (
     PartnerEarningsResponse,
     PartnerLocationRequest,
     PartnerLocationResponse,
+    PartnerMeResponse,
+    PartnerMeUpdateRequest,
     PartnerOfferItem,
     PartnerResponse,
     PartnerServicesLinkRequest,
@@ -153,6 +155,22 @@ async def get_my_active_job(
     """
     job = await partner_service.get_active_job(db, identity)
     return envelope(job)
+
+
+@router.patch(
+    "/me",
+    response_model=ApiResponse[PartnerMeResponse],
+    status_code=status.HTTP_200_OK,
+    summary="Edit your display name (G8)",
+)
+async def update_my_partner_profile(
+    payload: PartnerMeUpdateRequest,
+    identity: Identity = Depends(require_partner),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[PartnerMeResponse]:
+    """Phone is the login and verification status is staff-owned; neither is editable here."""
+    partner = await partner_service.update_my_name(db, identity, payload.name)
+    return envelope(PartnerMeResponse.model_validate(partner))
 
 
 @router.get(

@@ -193,6 +193,8 @@ class ErrorCode:
 
     # Admin operations (ADR-024)
     ACCOUNT_SUSPENDED = "ACCOUNT_SUSPENDED"
+    # ADR-025: self-service deletion while a request is live.
+    ACCOUNT_HAS_ACTIVE_JOB = "ACCOUNT_HAS_ACTIVE_JOB"
 
     # Payments
     PAYMENT_NOT_FOUND = "PAYMENT_NOT_FOUND"

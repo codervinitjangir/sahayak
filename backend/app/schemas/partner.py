@@ -305,3 +305,20 @@ class PartnerStatsResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+
+class PartnerMeUpdateRequest(BaseModel):
+    """PATCH /partners/me: what a partner may edit about themselves."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(..., min_length=1, max_length=100)
+
+
+class PartnerMeResponse(BaseModel):
+    id: uuid.UUID
+    name: str
+    phone: str
+    verification_status: str
+
+    model_config = ConfigDict(from_attributes=True)
+

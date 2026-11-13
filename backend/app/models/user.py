@@ -32,6 +32,8 @@ class User(Base):
         DateTime(timezone=True), nullable=True
     )
     suspension_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # ADR-025. Set when the owner deleted their account; the row is anonymised.
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Relationships
     vehicles: Mapped[List["Vehicle"]] = relationship(

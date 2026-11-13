@@ -188,9 +188,9 @@ regression bar in `CLAUDE.md` applies before anyone calls it done.
 | G5 | Real vehicle registration check | Today: normalise and de-duplicate only |
 | G6 | Hindi and Kannada | English only |
 | G7 | Masked calling or in-app chat | Numbers are shown after assignment |
-| G8 | Profile edit (owner name/email, partner name) | Vehicle edit exists; profile does not |
+| G8 | [x] Profile edit (owner name/email, partner name) | Done 2026-11-14: `PATCH /users/me`, `PATCH /partners/me`; web + mobile |
 | G9 | [x] Partner notifications screen on mobile | Done 2026-11-14: bell + shared NotificationsModal on PartnerHomeScreen |
-| G10 | Account deletion and data export | Likely required by privacy law; not present |
+| G10 | [x] Account deletion and data export (owners) | Done 2026-11-14 (ADR-025): anonymising delete + JSON export, web + mobile. Partner deletion waits on payouts (G3) |
 | G11 | Offline-tolerant request queue | Poor signal on highways |
 
 ### 9.3 Company side: admin panel
@@ -255,7 +255,7 @@ Code work, in order:
 1. [x] R7 remainder: public link stops after the job ends, plus a rate limit.
 2. [x] G1 radius escalation.
 3. [x] Admin items 1–3: live jobs board with staff cancel, owner/partner management, audit log.
-4. G8 profile edit and G10 account deletion / data export.
+4. [x] G8 profile edit and G10 account deletion / data export.
 5. [x] G9 partner notifications screen on mobile.
 6. G2 push notifications (device token registry + sender; needs FCM/APNs credentials to go live).
 7. E1 CI.

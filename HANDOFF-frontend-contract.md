@@ -2251,3 +2251,12 @@ All `require_admin`; anyone else 403. Every write is audited in the same transac
 - `GET /api/v1/admin/audit-log?target_type=job|user|partner&target_id=&limit&offset` → newest first.
 - `PATCH /admin/partners/{id}/verify` is unchanged in shape and now also writes an audit row.
 - Web: Admin console tabs **Jobs**, **Owners**, **Audit** (`/admin/jobs`, `/admin/owners`, `/admin/audit`).
+
+### 17.7 Profile, data export, account deletion (G8 / G10, ADR-025, 2026-11-14)
+- `GET /api/v1/users/me` → `{id, name, phone, email, created_at}` (owner only).
+- `PATCH /api/v1/users/me` body `{name?, email?}`. Phone is not editable (extra fields → 422). Omit `email` to keep it, send `"email": null` to clear it. 400 `USER_ALREADY_EXISTS` if the email is another account's.
+- `GET /api/v1/users/me/export` → JSON of profile, vehicles, jobs (timeline, payments, ratings), notifications.
+- `DELETE /api/v1/users/me` → `{deleted: true}`. 409 `ACCOUNT_HAS_ACTIVE_JOB` while a job is requested/matching/assigned/en route/in progress. Sign the user out on success.
+- `PATCH /api/v1/partners/me` body `{name}` (partner only) → `{id, name, phone, verification_status}`.
+- New 403 code anywhere: `ACCOUNT_SUSPENDED` (ADR-024).
+- Web: owner home has a "Your account" section. Mobile: owner Account tab "Your account" card; partner taps their name to edit it.

@@ -40,6 +40,7 @@ import type { PartnerStackParamList } from "../../../types";
 import { inr, metresToKm } from "../partnerFormat";
 import { WEB_URL } from "../../../constants";
 import NotificationsModal from "../../shared/NotificationsModal";
+import EditProfileModal from "../../account/EditProfileModal";
 import { useUnreadCount } from "../../shared/ownerData";
 
 type Nav = NativeStackNavigationProp<PartnerStackParamList, "PartnerHome">;
@@ -62,6 +63,9 @@ export default function PartnerHomeScreen() {
   const logout = useAuthStore((s) => s.logout);
   const { isOnline, setOnline } = useJobStore();
   const [notifOpen, setNotifOpen] = useState(false);
+  const [editNameOpen, setEditNameOpen] = useState(false);
+  const setUser = useAuthStore((s) => s.setUser);
+  const token = useAuthStore((s) => s.token);
   const unread = useUnreadCount().data ?? 0;
 
   const [tab, setTab] = useState<TabKey>("home");
@@ -231,6 +235,13 @@ export default function PartnerHomeScreen() {
         </View>
       </View>
       <NotificationsModal visible={notifOpen} onClose={() => setNotifOpen(false)} />
+      <EditProfileModal
+        visible={editNameOpen}
+        mode="partner"
+        profile={user ? { name: user.name } : null}
+        onClose={() => setEditNameOpen(false)}
+        onSaved={(p) => { if (user && token) setUser({ ...user, name: p.name }, token); }}
+      />
 
       <View style={styles.body}>
         {tab === "home" && (
@@ -408,7 +419,11 @@ export default function PartnerHomeScreen() {
               <View style={styles.profile}>
                 <View style={styles.avatar}><Text style={styles.avatarText}>{(user?.name ?? "P").trim().charAt(0).toUpperCase()}</Text></View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.name}>{user?.name ?? "Service partner"}</Text>
+                  <Pressable onPress={() => setEditNameOpen(true)} accessibilityRole="button" accessibilityLabel="Edit your name"
+                    style={{ flexDirection: "row", alignItems: "center", gap: 6, minHeight: 32 }}>
+                    <Text style={styles.name}>{user?.name ?? "Service partner"}</Text>
+                    <Ionicons name="create-outline" size={18} color={Colors.brand700} />
+                  </Pressable>
                   {user?.phone ? <Text style={styles.muted}>{user.phone}</Text> : null}
                   {verification ? (
                     <View style={{ marginTop: 6, flexDirection: "row", alignItems: "center", gap: 6 }}>

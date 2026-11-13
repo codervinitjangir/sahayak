@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { View, Text, ScrollView, StyleSheet, Alert, Linking, Switch, Pressable } from "react-native";
+import { View, Text, ScrollView, StyleSheet, Alert, Linking, Switch, Pressable, Share } from "react-native";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors, Typography, Spacing, Radius } from "../../../constants/theme";
 import { useAuthStore } from "../../../store/authStore";
@@ -10,11 +11,59 @@ import { EMERGENCY_NUMBER } from "../../../components/ui/SafetyActions";
 import { WEB_URL } from "../../../constants";
 import { useMyVehicles } from "../../shared/ownerData";
 import { vehiclesApi } from "../../../services/api/vehicles";
+import { usersApi, type OwnerProfile } from "../../../services/api/users";
+import EditProfileModal from "../EditProfileModal";
 
 export default function AccountTab({ onAddVehicle }: { onAddVehicle: () => void }) {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const vehicles = useMyVehicles();
+  const qc = useQueryClient();
+  // The real profile from the backend; the auth store only knows a placeholder
+  // name after a session restore.
+  const me = useQuery({ queryKey: ["owner", "me"], queryFn: usersApi.getMe });
+  const [editOpen, setEditOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const displayName = me.data?.name ?? user?.name ?? "Vehicle Owner";
+
+  const exportData = async () => {
+    setExporting(true);
+    try {
+      const data = await usersApi.exportMe();
+      await Share.share({ title: "My Sahayak data", message: JSON.stringify(data, null, 2) });
+    } catch {
+      Alert.alert("Could not export", "Check your connection and try again.");
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const confirmDeleteAccount = () =>
+    Alert.alert(
+      "Delete your account?",
+      "Your name, phone, email, vehicles and notifications are erased and you are signed out. Past jobs stay on record without your details. This cannot be undone.",
+      [
+        { text: "Keep my account", style: "cancel" },
+        {
+          text: "Delete account",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await usersApi.deleteMe();
+              logout();
+            } catch (err: any) {
+              const code = err?.response?.data?.error?.code;
+              Alert.alert(
+                "Could not delete",
+                code === "ACCOUNT_HAS_ACTIVE_JOB"
+                  ? "Finish or cancel your active request first."
+                  : "Check your connection and try again."
+              );
+            }
+          },
+        },
+      ]
+    );
 
   // Settings & preferences state
   const [vehiclesCollapsed, setVehiclesCollapsed] = useState(false);
@@ -61,11 +110,12 @@ export default function AccountTab({ onAddVehicle }: { onAddVehicle: () => void 
       <Card>
         <View style={styles.profile}>
           <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{(user?.name ?? "U").trim().charAt(0).toUpperCase()}</Text>
+            <Text style={styles.avatarText}>{displayName.trim().charAt(0).toUpperCase()}</Text>
           </View>
           <View style={{ flex: 1, gap: 2 }}>
-            <Text style={styles.name}>{user?.name ?? "Vehicle Owner"}</Text>
-            {user?.phone ? <Text style={styles.phone}>{user.phone}</Text> : null}
+            <Text style={styles.name}>{displayName}</Text>
+            {(me.data?.phone ?? user?.phone) ? <Text style={styles.phone}>{me.data?.phone ?? user?.phone}</Text> : null}
+            {me.data?.email ? <Text style={styles.phone}>{me.data.email}</Text> : null}
             <View style={styles.membershipPill}>
               <Ionicons name="shield-checkmark" size={14} color={Colors.brand700} />
               <Text style={styles.membershipText}>Verified Sahayak Member</Text>
@@ -279,7 +329,28 @@ export default function AccountTab({ onAddVehicle }: { onAddVehicle: () => void 
         </Card>
       </View>
 
+      {/* Your data (G8 / G10) */}
+      <View>
+        <SectionHeader title="Your account" />
+        <Card noPad>
+          <ListRow icon="create-outline" title="Edit profile" subtitle="Name and email" onPress={() => setEditOpen(true)} />
+          <ListRow
+            icon="download-outline"
+            title={exporting ? "Preparing your data…" : "Download my data"}
+            subtitle="Everything Sahayak stores about you"
+            onPress={exporting ? undefined : () => void exportData()}
+          />
+          <ListRow icon="trash-outline" title="Delete account" subtitle="Erase your details and sign out" onPress={confirmDeleteAccount} last />
+        </Card>
+      </View>
+
       <Button label="Sign out" variant="outline" onPress={confirmSignOut} />
+      <EditProfileModal
+        visible={editOpen}
+        profile={me.data ?? null}
+        onClose={() => setEditOpen(false)}
+        onSaved={(p) => qc.setQueryData(["owner", "me"], p as OwnerProfile)}
+      />
     </ScrollView>
   );
 }

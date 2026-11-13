@@ -34,6 +34,12 @@ export interface MobilePartnerEarnings {
 }
 
 export const partnerApi = {
+  /** Edit the partner's display name (PATCH /partners/me, G8). */
+  updateMe: (name: string) =>
+    apiClient
+      .patch<{ id: string; name: string; phone: string; verification_status: string }>("/partners/me", { name })
+      .then((r) => r.data),
+
   /** Register a partner (POST /partners). Identity comes from the bearer, not this body. */
   register: (name: string, phone: string, primaryCategoryCode: string) =>
     apiClient

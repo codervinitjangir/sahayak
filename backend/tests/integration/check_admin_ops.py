@@ -49,6 +49,8 @@ conn = psycopg2.connect(S.DATABASE_URL.replace("postgresql+asyncpg://", "postgre
 conn.autocommit = True
 _results: list[tuple[bool, str, str]] = []
 _cleaned = False
+# Owners whose phone the run rewrites (account deletion), purged by id.
+DELETED_OWNERS: list = []
 
 
 def check(label, ok, detail=""):
@@ -82,6 +84,10 @@ def counts():
 
 def purge():
     q = conn.cursor()
+    if DELETED_OWNERS:
+        # Deletion erased issue_description, so these jobs are found by owner.
+        q.execute("UPDATE jobs SET issue_description = %(tag)s WHERE user_id = ANY(%(ids)s::uuid[])",
+                  {"tag": TAG + " deleted-owner", "ids": [str(i) for i in DELETED_OWNERS]})
     job_ids = "(SELECT id FROM jobs WHERE issue_description LIKE %(tag)s)"
     user_ids = "(SELECT id FROM users WHERE phone LIKE %(p)s)"
     partner_ids = "(SELECT id FROM partners WHERE phone LIKE %(p)s)"
@@ -98,6 +104,8 @@ def purge():
     q.execute("DELETE FROM jobs WHERE issue_description LIKE %(tag)s", params)
     q.execute("DELETE FROM partners WHERE phone LIKE %(p)s", params)
     q.execute("DELETE FROM users WHERE phone LIKE %(p)s", params)
+    if DELETED_OWNERS:
+        q.execute("DELETE FROM users WHERE id = ANY(%(ids)s::uuid[])", {"ids": [str(i) for i in DELETED_OWNERS]})
 
 
 async def main():
@@ -209,6 +217,59 @@ async def main():
         d = r.json().get("data") or {}
         check("audit-log endpoint filters by target", r.status_code == 200
               and [i["action"] for i in d.get("items", [])] == ["user_reinstated", "user_suspended"], f"{d.get('items')}")
+
+        section("5b. Owner self-service: profile, export, deletion (ADR-025)")
+        auth2 = uuid.uuid4()
+        owner2 = one("INSERT INTO users (name, phone, email, auth_user_id) VALUES "
+                     "('Self QA owner', %(p)s, 'selfqa@sahayak-admopsqa.invalid', %(a)s) RETURNING id",
+                     {"p": PHONE_PREFIX + "3", "a": str(auth2)})["id"]
+        DELETED_OWNERS.append(owner2)
+        veh2 = one("INSERT INTO vehicles (user_id, vehicle_type, vehicle_number) VALUES "
+                   "(%(u)s, 'two_wheeler', 'QA87SELF001') RETURNING id", {"u": owner2})["id"]
+        current["identity"] = Identity(auth_user_id=auth2, role="user", local_id=uuid.UUID(str(owner2)))
+
+        r = await c.patch("/api/v1/users/me", json={"name": "Self QA renamed"})
+        check("PATCH /users/me renames", r.status_code == 200
+              and (r.json().get("data") or {}).get("name") == "Self QA renamed", f"HTTP {r.status_code} {r.text[:120]}")
+        r = await c.patch("/api/v1/users/me", json={"email": "selfqa@sahayak-admopsqa.invalid"})
+        check("re-saving my own email is fine", r.status_code == 200, f"HTTP {r.status_code}")
+        r = await c.patch("/api/v1/users/me", json={"phone": "+911"})
+        check("phone is not editable (422)", r.status_code == 422, f"HTTP {r.status_code}")
+
+        r = await c.post("/api/v1/jobs", json={
+            "service_code": "battery_jumpstart", "pickup_lat": 23.03, "pickup_lng": 72.56,
+            "pickup_address_text": "Self QA secret address", "issue_description": f"{TAG} self",
+            "vehicle_id": str(veh2),
+        })
+        job2 = (r.json().get("data") or {}).get("id")
+        r = await c.get("/api/v1/users/me/export")
+        d = r.json().get("data") or {}
+        check("export has profile, vehicle and the job with its timeline", r.status_code == 200
+              and d.get("profile", {}).get("phone") == PHONE_PREFIX + "3" and len(d.get("vehicles", [])) == 1
+              and any(j["id"] == job2 and j["timeline"] for j in d.get("jobs", [])), f"HTTP {r.status_code}")
+
+        conn.cursor().execute("UPDATE jobs SET status='assigned' WHERE id=%(i)s", {"i": job2})
+        r = await c.delete("/api/v1/users/me")
+        check("delete refused while a job is live (409 ACCOUNT_HAS_ACTIVE_JOB)", r.status_code == 409
+              and r.json()["error"]["code"] == "ACCOUNT_HAS_ACTIVE_JOB", f"HTTP {r.status_code}")
+        conn.cursor().execute("UPDATE jobs SET status='completed', completed_at=now() WHERE id=%(i)s", {"i": job2})
+
+        r = await c.delete("/api/v1/users/me")
+        check("delete -> 200", r.status_code == 200, f"HTTP {r.status_code} {r.text[:160]}")
+        u2 = one("SELECT name, phone, email, auth_user_id, deleted_at FROM users WHERE id=%(i)s", {"i": owner2})
+        check("row anonymised: no name, phone, email or login", u2["name"] == "Deleted user"
+              and u2["phone"].startswith("del") and u2["email"] is None and u2["auth_user_id"] is None
+              and u2["deleted_at"] is not None, f"{u2}")
+        j2 = one("SELECT pickup_address_text, issue_description, vehicle_id, vehicle_number FROM jobs WHERE id=%(i)s", {"i": job2})
+        check("job kept, free text erased, plate snapshot kept", j2 is not None and j2["pickup_address_text"] is None
+              and j2["issue_description"] is None and j2["vehicle_id"] is None and j2["vehicle_number"] == "QA87SELF001", f"{j2}")
+        check("vehicles gone", one("SELECT count(*) AS n FROM vehicles WHERE user_id=%(i)s", {"i": owner2})["n"] == 0)
+        async with AsyncSessionLocal() as db:
+            try:
+                await auth_service.resolve_identity(db, TokenClaims(auth_user_id=auth2))
+                check("the old login resolves to nothing", False, "resolved")
+            except ForbiddenError as exc:
+                check("the old login resolves to nothing", exc.code in ("USER_NOT_REGISTERED", "IDENTITY_NOT_LINKED"), exc.code)
 
     app.dependency_overrides.clear()
     section("6. Cleanup")

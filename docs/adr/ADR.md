@@ -1186,3 +1186,19 @@ The second bug was blunter: `partner_supply` filtered on `p.is_verified`, a bool
 6. **Suspension is enforced in `resolve_identity`**, the one function every authenticated request passes through, as 403 `ACCOUNT_SUSPENDED`. Partners already have `verification_status = 'suspended'`, which removes them from dispatch; that path now writes audit rows too.
 
 **Consequences.** Staff contact details for owners and partners are visible on the board by design: the board exists so support can phone a stranded driver. Only `require_admin` routes serve it. Not built yet: staff roles (ops/finance/support) and an admin invite flow, so every admin can still do everything.
+
+
+# ADR-025: Deleting an owner account anonymises the row instead of removing it
+
+**Date:** 2026-11-14 · **Status:** Accepted
+
+**Context.** An owner must be able to delete their account and to get a copy of their data (NEXT-STEPS G10; India's DPDP Act 2023 points the same way). A hard `DELETE FROM users` would either fail on foreign keys or cascade into jobs, payments and ratings that belong to partners' earnings and to the payment record as much as to the owner.
+
+**Decision.**
+1. `DELETE /users/me` **anonymises in one transaction**: name becomes `Deleted user`, phone becomes `del` + 12 hex of the id (unique, 15 chars, never dialable), email, `auth_user_id` and `phone_verified` are cleared, `deleted_at` is set (alembic/0005). Vehicles and the owner's notifications are deleted. On their jobs, `pickup_address_text`, `issue_description` and `vehicle_id` are cleared; the job, its price, payments, timeline and `vehicle_number` snapshot stay. Rating **scores** stay (they are in a partner's average, ADR-018); the owner's rating **comments** are erased.
+2. **Refused while a request is live** (409 `ACCOUNT_HAS_ACTIVE_JOB`): someone may be driving to them.
+3. **Login removal is best-effort, after the commit.** The Supabase account is deleted with the server's secret key; if that fails, nothing is lost, because no table holds the `auth_user_id` any more and the anonymised phone no longer matches for re-linking, so the old token resolves to `USER_NOT_REGISTERED`.
+4. `GET /users/me/export` returns profile, vehicles, jobs (with timeline, payments, ratings) and notifications as JSON. Partner contact details are left out: they are the partner's data, not the owner's.
+5. A deleted row reads as 404 on every `/users/me` route.
+
+**Consequences.** Pickup **coordinates** remain on past jobs (the column is NOT NULL and dispatch analytics read it); the address text that would make them easy to read does not. A lawyer should confirm retention under R3. Partner self-deletion is not built: partners have payout obligations (payments C) that need deciding first.

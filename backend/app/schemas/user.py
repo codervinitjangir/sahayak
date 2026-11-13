@@ -79,3 +79,30 @@ class UserAuthLinkResponse(BaseModel):
     phone_verified: Optional[bool] = False
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class UserMeResponse(BaseModel):
+    """GET/PATCH /users/me: the owner's own profile."""
+
+    id: uuid.UUID
+    name: str
+    phone: str
+    email: Optional[str] = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class UserMeUpdateRequest(BaseModel):
+    """PATCH /users/me. Phone is the login and is not editable. Send
+    `"email": null` to clear the email; leave it out to keep it."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: Optional[str] = Field(default=None, min_length=1, max_length=100)
+    email: Optional[str] = Field(default=None, max_length=150, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+class UserDeleteResponse(BaseModel):
+    deleted: bool = True
+

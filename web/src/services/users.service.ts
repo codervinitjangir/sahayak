@@ -1,7 +1,35 @@
 import { apiClient } from './api';
 import { UserRegistrationResponse, CreateUserPayload } from '../types/users';
 
+/** GET/PATCH /users/me (G8). */
+export interface OwnerProfile {
+  id: string;
+  name: string;
+  phone: string;
+  email?: string | null;
+  created_at: string;
+}
+
 export const usersService = {
+  async getMe(): Promise<OwnerProfile> {
+    return (await apiClient<OwnerProfile>('/users/me', { method: 'GET' })).data;
+  },
+
+  /** Send email: null to clear it. 400 USER_ALREADY_EXISTS if the email is taken. */
+  async updateMe(body: { name?: string; email?: string | null }): Promise<OwnerProfile> {
+    return (await apiClient<OwnerProfile>('/users/me', { method: 'PATCH', body: JSON.stringify(body) })).data;
+  },
+
+  /** Everything Sahayak stores about the owner (G10). */
+  async exportMe(): Promise<Record<string, unknown>> {
+    return (await apiClient<Record<string, unknown>>('/users/me/export', { method: 'GET' })).data;
+  },
+
+  /** ADR-025. 409 ACCOUNT_HAS_ACTIVE_JOB while a request is live. Irreversible. */
+  async deleteMe(): Promise<void> {
+    await apiClient<{ deleted: boolean }>('/users/me', { method: 'DELETE' });
+  },
+
   /**
    * Registers the caller as a vehicle owner via POST /api/v1/users.
    *
