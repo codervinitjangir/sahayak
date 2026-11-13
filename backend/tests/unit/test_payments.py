@@ -125,3 +125,4 @@ async def test_confirm_payment_success():
         assert res.status == "paid"
         assert res.gateway_ref_id == "UPI-TXN-12345"
         assert res.upi_intent is None  # no active upi intent when already paid
+

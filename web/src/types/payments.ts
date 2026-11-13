@@ -23,3 +23,4 @@ export interface PaymentConfirmRequest {
   gateway_ref_id?: string | null;
   payment_method?: PaymentMethod | null;
 }
+

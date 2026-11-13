@@ -1,6 +1,7 @@
-import React from "react";
-import { View, Text, ScrollView, StyleSheet, Alert, Linking } from "react-native";
-import { Colors, Typography, Spacing } from "../../../constants/theme";
+import React, { useState } from "react";
+import { View, Text, ScrollView, StyleSheet, Alert, Linking, Switch, Pressable } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { Colors, Typography, Spacing, Radius } from "../../../constants/theme";
 import { useAuthStore } from "../../../store/authStore";
 import Card from "../../../components/ui/Card";
 import Button from "../../../components/ui/Button";
@@ -14,6 +15,14 @@ export default function AccountTab({ onAddVehicle }: { onAddVehicle: () => void 
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const vehicles = useMyVehicles();
+
+  // Settings & preferences state
+  const [vehiclesCollapsed, setVehiclesCollapsed] = useState(false);
+  const [autoShareTracking, setAutoShareTracking] = useState(true);
+  const [liveGpsNotifications, setLiveGpsNotifications] = useState(true);
+  const [arrivalAlerts, setArrivalAlerts] = useState(true);
+
+  const vehicleList = vehicles.data ?? [];
 
   const handleDeleteVehicle = (vehicleId: string, name: string) => {
     Alert.alert("Remove vehicle?", `Remove ${name} from your account?`, [
@@ -45,87 +54,228 @@ export default function AccountTab({ onAddVehicle }: { onAddVehicle: () => void 
   return (
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <Text style={styles.title} accessibilityRole="header">
-        Account
+        Account & Settings
       </Text>
 
+      {/* Profile Card */}
       <Card>
         <View style={styles.profile}>
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>{(user?.name ?? "U").trim().charAt(0).toUpperCase()}</Text>
           </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.name}>{user?.name ?? "Vehicle owner"}</Text>
+          <View style={{ flex: 1, gap: 2 }}>
+            <Text style={styles.name}>{user?.name ?? "Vehicle Owner"}</Text>
             {user?.phone ? <Text style={styles.phone}>{user.phone}</Text> : null}
+            <View style={styles.membershipPill}>
+              <Ionicons name="shield-checkmark" size={14} color={Colors.brand700} />
+              <Text style={styles.membershipText}>Verified Sahayak Member</Text>
+            </View>
           </View>
         </View>
       </Card>
 
+      {/* My Vehicles Garage Table */}
       <View>
-        <SectionHeader title="My vehicles" action="Add" onAction={onAddVehicle} />
-        <Card noPad>
-          {vehicles.isLoading ? (
-            <View style={{ padding: Spacing.base }}>
-              <Skeleton height={20} />
+        <View style={styles.sectionHeaderRow}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <Text style={styles.sectionTitle} accessibilityRole="header">
+              My Garage
+            </Text>
+            <View style={styles.countBadge}>
+              <Text style={styles.countBadgeText}>{vehicleList.length} registered</Text>
             </View>
-          ) : vehicles.isError ? (
-            <ListRow icon="alert-circle-outline" title="Could not load vehicles" subtitle="Pull down on Home to retry" last />
-          ) : (vehicles.data ?? []).length === 0 ? (
-            <ListRow icon="add-circle-outline" title="Add your first vehicle" subtitle="Needed to request help" onPress={onAddVehicle} last />
-          ) : (
-            (vehicles.data ?? []).map((v, i, arr) => (
-              <ListRow
-                key={v.id}
-                icon={v.vehicle_type === "two_wheeler" ? "bicycle-outline" : "car-outline"}
-                title={`${v.make} ${v.model}`}
-                subtitle={v.vehicle_number}
-                onPress={() => handleDeleteVehicle(v.id, `${v.make} ${v.model}`)}
-                last={i === arr.length - 1}
-              />
-            ))
-          )}
-        </Card>
+          </View>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+            {vehicleList.length > 0 ? (
+              <Pressable
+                onPress={() => setVehiclesCollapsed(!vehiclesCollapsed)}
+                style={styles.collapseToggle}
+                hitSlop={8}
+              >
+                <Text style={styles.collapseToggleText}>
+                  {vehiclesCollapsed ? "Expand" : "Collapse"}
+                </Text>
+                <Ionicons
+                  name={vehiclesCollapsed ? "chevron-down" : "chevron-up"}
+                  size={14}
+                  color={Colors.brand700}
+                />
+              </Pressable>
+            ) : null}
+            <Pressable onPress={onAddVehicle} style={styles.addBtn} hitSlop={8}>
+              <Ionicons name="add" size={16} color={Colors.brand700} />
+              <Text style={styles.addBtnText}>Add</Text>
+            </Pressable>
+          </View>
+        </View>
+
+        {!vehiclesCollapsed ? (
+          <Card noPad>
+            {vehicles.isLoading ? (
+              <View style={{ padding: Spacing.base }}>
+                <Skeleton height={24} />
+              </View>
+            ) : vehicles.isError ? (
+              <ListRow icon="alert-circle-outline" title="Could not load vehicles" subtitle="Pull down on Home to retry" last />
+            ) : vehicleList.length === 0 ? (
+              <ListRow icon="add-circle-outline" title="Add your first vehicle" subtitle="Needed to request emergency assistance" onPress={onAddVehicle} last />
+            ) : (
+              vehicleList.map((v, i) => (
+                <View
+                  key={v.id}
+                  style={[styles.vehicleRow, i < vehicleList.length - 1 && styles.rowDivider]}
+                >
+                  <View style={styles.vehicleIcon}>
+                    <Ionicons
+                      name={v.vehicle_type === "two_wheeler" ? "bicycle-outline" : "car-outline"}
+                      size={22}
+                      color={Colors.brand700}
+                    />
+                  </View>
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <Text style={styles.vehicleName}>
+                      {v.make} {v.model}
+                    </Text>
+                    <View style={styles.plateBadge}>
+                      <Text style={styles.plateText}>{v.vehicle_number}</Text>
+                    </View>
+                  </View>
+                  <Pressable
+                    onPress={() => handleDeleteVehicle(v.id, `${v.make} ${v.model}`)}
+                    style={styles.deleteVehicleBtn}
+                    hitSlop={8}
+                    accessibilityLabel={`Remove ${v.make} ${v.model}`}
+                  >
+                    <Ionicons name="trash-outline" size={18} color={Colors.textMuted} />
+                  </Pressable>
+                </View>
+              ))
+            )}
+          </Card>
+        ) : (
+          <Card>
+            <Pressable
+              onPress={() => setVehiclesCollapsed(false)}
+              style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}
+            >
+              <Text style={styles.settingsLabel}>
+                {vehicleList.length} vehicles configured
+              </Text>
+              <Ionicons name="chevron-forward" size={18} color={Colors.brand700} />
+            </Pressable>
+          </Card>
+        )}
       </View>
 
+      {/* Safety & Emergency Settings */}
       <View>
-        <SectionHeader title="Safety" />
+        <SectionHeader title="Safety & Trip Sharing" />
         <Card noPad>
+          <View style={styles.settingsRow}>
+            <View style={{ flex: 1, gap: 2 }}>
+              <Text style={styles.settingsLabel}>Auto-share live tracking link</Text>
+              <Text style={styles.settingsSub}>
+                Prompts one-tap WhatsApp / SMS tracking link to family when help is requested
+              </Text>
+            </View>
+            <Switch
+              value={autoShareTracking}
+              onValueChange={setAutoShareTracking}
+              trackColor={{ false: Colors.border, true: Colors.brand700 }}
+            />
+          </View>
           <ListRow
             icon="call-outline"
-            title={`Call emergency services (${EMERGENCY_NUMBER})`}
+            title={`Police & Medical Services (${EMERGENCY_NUMBER})`}
+            subtitle="National Emergency Response System"
             onPress={() => void Linking.openURL(`tel:${EMERGENCY_NUMBER}`)}
+          />
+          <ListRow
+            icon="shield-outline"
+            title="Sahayak 24/7 Roadside Control Room"
+            subtitle="+91 80 4567 8900"
+            onPress={() => void Linking.openURL("tel:+918045678900")}
             last
           />
         </Card>
       </View>
 
+      {/* Notification Preferences */}
       <View>
-        <SectionHeader title="Help & Support" />
+        <SectionHeader title="Notification Preferences" />
+        <Card noPad>
+          <View style={styles.settingsRow}>
+            <View style={{ flex: 1, gap: 2 }}>
+              <Text style={styles.settingsLabel}>Live GPS tracking updates</Text>
+              <Text style={styles.settingsSub}>
+                Push alerts when the partner starts driving to your vehicle
+              </Text>
+            </View>
+            <Switch
+              value={liveGpsNotifications}
+              onValueChange={setLiveGpsNotifications}
+              trackColor={{ false: Colors.border, true: Colors.brand700 }}
+            />
+          </View>
+          <View style={[styles.settingsRow, styles.rowDivider]}>
+            <View style={{ flex: 1, gap: 2 }}>
+              <Text style={styles.settingsLabel}>Arrival notification sound</Text>
+              <Text style={styles.settingsSub}>
+                Play chime once partner arrives at your breakdown location
+              </Text>
+            </View>
+            <Switch
+              value={arrivalAlerts}
+              onValueChange={setArrivalAlerts}
+              trackColor={{ false: Colors.border, true: Colors.brand700 }}
+            />
+          </View>
+        </Card>
+      </View>
+
+      {/* Payment & Billing */}
+      <View>
+        <SectionHeader title="Payment & Settlements" />
         <Card noPad>
           <ListRow
-            icon="help-circle-outline"
-            title="Roadside assistance support"
-            subtitle="support@sahayak.app · +91 80 4567 8900"
+            icon="card-outline"
+            title="Supported Payment Methods"
+            subtitle="UPI (Google Pay, PhonePe, Paytm, QR) & Cash"
+            last
+          />
+        </Card>
+      </View>
+
+      {/* Help, Support & Legal */}
+      <View>
+        <SectionHeader title="Help & Transparency" />
+        <Card noPad>
+          <ListRow
+            icon="mail-outline"
+            title="Email Support"
+            subtitle="support@sahayak.app"
             onPress={() => void Linking.openURL("mailto:support@sahayak.app")}
-            last
-          />
-        </Card>
-      </View>
-
-      <View>
-        <SectionHeader title="About" />
-        <Card noPad>
-          <ListRow
-            icon="shield-checkmark-outline"
-            title="Your privacy"
-            subtitle="A partner sees your phone number only after they are assigned to your request."
-            last={!WEB_URL}
           />
           {WEB_URL ? (
             <>
-              <ListRow icon="document-text-outline" title="Terms of service" onPress={() => void Linking.openURL(`${WEB_URL}/terms`)} />
-              <ListRow icon="lock-closed-outline" title="Privacy policy" onPress={() => void Linking.openURL(`${WEB_URL}/privacy`)} last />
+              <ListRow
+                icon="document-text-outline"
+                title="Terms of service"
+                onPress={() => void Linking.openURL(`${WEB_URL}/terms`)}
+              />
+              <ListRow
+                icon="lock-closed-outline"
+                title="Privacy policy"
+                onPress={() => void Linking.openURL(`${WEB_URL}/privacy`)}
+              />
             </>
           ) : null}
+          <ListRow
+            icon="information-circle-outline"
+            title="Sahayak Roadside Safety"
+            subtitle="Version 1.2.0 (Build 44)"
+            last
+          />
         </Card>
       </View>
 
@@ -141,5 +291,28 @@ const styles = StyleSheet.create({
   avatar: { width: 56, height: 56, borderRadius: 28, backgroundColor: Colors.brand700, alignItems: "center", justifyContent: "center" },
   avatarText: { color: "#fff", fontSize: Typography.fontSize["2xl"], fontFamily: Typography.fontFamily.bold },
   name: { fontSize: Typography.fontSize.xl, fontFamily: Typography.fontFamily.bold, color: Colors.textPrimary },
-  phone: { marginTop: 2, fontSize: Typography.fontSize.base, color: Colors.textSecondary, fontFamily: Typography.fontFamily.regular },
+  phone: { fontSize: Typography.fontSize.sm, color: Colors.textSecondary, fontFamily: Typography.fontFamily.regular },
+  membershipPill: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: Colors.brand700Light, paddingHorizontal: 8, paddingVertical: 2, borderRadius: Radius.full, alignSelf: "flex-start", marginTop: 2 },
+  membershipText: { fontSize: Typography.fontSize.xs, fontFamily: Typography.fontFamily.semiBold, color: Colors.brand700Dark },
+
+  sectionHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: Spacing.sm },
+  sectionTitle: { fontSize: Typography.fontSize.xl, fontFamily: Typography.fontFamily.bold, color: Colors.textPrimary },
+  countBadge: { backgroundColor: Colors.brand700Light, paddingHorizontal: 8, paddingVertical: 2, borderRadius: Radius.full },
+  countBadgeText: { fontSize: Typography.fontSize.xs, fontFamily: Typography.fontFamily.bold, color: Colors.brand700Dark },
+  collapseToggle: { flexDirection: "row", alignItems: "center", gap: 2, paddingVertical: 4 },
+  collapseToggleText: { fontSize: Typography.fontSize.sm, fontFamily: Typography.fontFamily.semiBold, color: Colors.brand700 },
+  addBtn: { flexDirection: "row", alignItems: "center", gap: 2, paddingVertical: 4 },
+  addBtnText: { fontSize: Typography.fontSize.sm, fontFamily: Typography.fontFamily.bold, color: Colors.brand700 },
+
+  vehicleRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: Spacing.base, paddingVertical: Spacing.md, gap: Spacing.md },
+  rowDivider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.borderLight },
+  vehicleIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.brand700Light, alignItems: "center", justifyContent: "center" },
+  vehicleName: { fontSize: Typography.fontSize.base, fontFamily: Typography.fontFamily.semiBold, color: Colors.textPrimary },
+  plateBadge: { backgroundColor: "#F8FAFC", borderWidth: 1, borderColor: Colors.border, paddingHorizontal: 6, paddingVertical: 2, borderRadius: Radius.sm, alignSelf: "flex-start", marginTop: 2 },
+  plateText: { fontSize: Typography.fontSize.xs, fontFamily: Typography.fontFamily.bold, color: Colors.textPrimary, letterSpacing: 0.5 },
+  deleteVehicleBtn: { padding: Spacing.xs },
+
+  settingsRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: Spacing.base, paddingVertical: Spacing.base, gap: Spacing.md },
+  settingsLabel: { fontSize: Typography.fontSize.base, fontFamily: Typography.fontFamily.semiBold, color: Colors.textPrimary },
+  settingsSub: { fontSize: Typography.fontSize.xs, fontFamily: Typography.fontFamily.regular, color: Colors.textMuted, lineHeight: 17 },
 });

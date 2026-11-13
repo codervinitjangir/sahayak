@@ -40,3 +40,4 @@ export const paymentsApi = {
       .post<PaymentRecord>(`/payments/${paymentId}/confirm`, payload)
       .then((r) => r.data),
 };
+

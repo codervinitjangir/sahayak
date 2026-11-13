@@ -12,6 +12,7 @@ import {
   Alert,
   StatusBar,
   RefreshControl,
+  Linking,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -37,6 +38,7 @@ import {
 } from "../../../services/api/partner";
 import type { PartnerStackParamList } from "../../../types";
 import { inr, metresToKm } from "../partnerFormat";
+import { WEB_URL } from "../../../constants";
 
 type Nav = NativeStackNavigationProp<PartnerStackParamList, "PartnerHome">;
 type TabKey = "home" | "earnings" | "account";
@@ -72,6 +74,10 @@ export default function PartnerHomeScreen() {
   const [activeJob, setActiveJob] = useState<BackendJob | null>(null);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState<string[]>([]);
+  const [servicesCollapsed, setServicesCollapsed] = useState(false);
+  const [loudAlerts, setLoudAlerts] = useState(true);
+  const [vibrateAlerts, setVibrateAlerts] = useState(true);
+  const [navApp, setNavApp] = useState("Google Maps");
 
   // Five independent reads: one failing degrades only its own card.
   const load = useCallback(async () => {
@@ -400,13 +406,181 @@ export default function PartnerHomeScreen() {
               </View>
             </Card>
 
+            {/* Collapsible Services Table */}
             <View>
-              <SectionHeader title="Services you offer" />
+              <View style={styles.sectionHeaderRow}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                  <Text style={styles.sectionTitle} accessibilityRole="header">
+                    Services & Capabilities
+                  </Text>
+                  <View style={styles.countBadge}>
+                    <Text style={styles.countBadgeText}>{services.length} active</Text>
+                  </View>
+                </View>
+                <Pressable
+                  onPress={() => setServicesCollapsed(!servicesCollapsed)}
+                  style={styles.toggleCollapseBtn}
+                  hitSlop={8}
+                >
+                  <Text style={styles.toggleCollapseText}>
+                    {servicesCollapsed ? "Expand" : "Collapse"}
+                  </Text>
+                  <Ionicons
+                    name={servicesCollapsed ? "chevron-down" : "chevron-up"}
+                    size={16}
+                    color={Colors.brand700}
+                  />
+                </Pressable>
+              </View>
+
+              {!servicesCollapsed ? (
+                <Card noPad>
+                  {/* Table Header */}
+                  <View style={styles.tableHeaderRow}>
+                    <Text style={[styles.tableHeaderCell, { flex: 2 }]}>SERVICE & SCOPE</Text>
+                    <Text style={[styles.tableHeaderCell, { flex: 1, textAlign: "right" }]}>
+                      BASE RATE
+                    </Text>
+                  </View>
+
+                  {services.length === 0 ? (
+                    <View style={{ padding: Spacing.base }}>
+                      <Text style={styles.muted}>
+                        {loading ? "Loading service matrix…" : "No services linked yet."}
+                      </Text>
+                    </View>
+                  ) : (
+                    services.map((s, i) => (
+                      <View
+                        key={s.service_id}
+                        style={[
+                          styles.tableRow,
+                          i < services.length - 1 && styles.tableRowBorder,
+                        ]}
+                      >
+                        <View style={{ flex: 2, gap: 2 }}>
+                          <Text style={styles.serviceNameText}>{s.name}</Text>
+                          <Text style={styles.serviceMetaText}>
+                            {s.code.includes("towing")
+                              ? "Heavy Equipment / Tow Rig"
+                              : "Standard Emergency Specialization"}
+                          </Text>
+                        </View>
+                        <View style={{ flex: 1, alignItems: "flex-end", justifyContent: "center" }}>
+                          <Text style={styles.servicePriceText}>
+                            {s.base_price != null ? `From ₹${s.base_price}` : "Standard"}
+                          </Text>
+                        </View>
+                      </View>
+                    ))
+                  )}
+
+                  <View style={styles.tableFooterNote}>
+                    <Ionicons name="information-circle-outline" size={15} color={Colors.textMuted} />
+                    <Text style={styles.tableFooterText}>
+                      Mapped to your verified inventory & tools
+                    </Text>
+                  </View>
+                </Card>
+              ) : (
+                <Card>
+                  <Pressable
+                    onPress={() => setServicesCollapsed(false)}
+                    style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}
+                  >
+                    <View style={{ gap: 2 }}>
+                      <Text style={styles.serviceNameText}>
+                        {services.length} services configured
+                      </Text>
+                      <Text style={styles.serviceMetaText}>
+                        Tap to expand full rates & capability table
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color={Colors.brand700} />
+                  </Pressable>
+                </Card>
+              )}
+            </View>
+
+            {/* Operational Settings & Preferences */}
+            <View>
+              <SectionHeader title="Operational Settings" />
               <Card noPad>
-                {services.length === 0 ? (
-                  <ListRow icon="construct-outline" title={loading ? "Loading…" : "No services linked yet"} last />
+                <View style={styles.settingsRow}>
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <Text style={styles.settingsLabel}>Loud offer sound alerts</Text>
+                    <Text style={styles.settingsSub}>
+                      High-priority chime for incoming breakdown offers
+                    </Text>
+                  </View>
+                  <Switch
+                    value={loudAlerts}
+                    onValueChange={setLoudAlerts}
+                    trackColor={{ false: Colors.border, true: Colors.brand700 }}
+                  />
+                </View>
+
+                <View style={[styles.settingsRow, styles.settingsDivider]}>
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <Text style={styles.settingsLabel}>Vibrate on job status updates</Text>
+                    <Text style={styles.settingsSub}>
+                      Tactile alerts when owner confirms arrival
+                    </Text>
+                  </View>
+                  <Switch
+                    value={vibrateAlerts}
+                    onValueChange={setVibrateAlerts}
+                    trackColor={{ false: Colors.border, true: Colors.brand700 }}
+                  />
+                </View>
+
+                <ListRow
+                  icon="navigate-outline"
+                  title="Navigation app"
+                  subtitle={navApp}
+                  onPress={() => {
+                    Alert.alert("Select Navigation App", "Choose your default navigation tool for pickups:", [
+                      { text: "Google Maps", onPress: () => setNavApp("Google Maps") },
+                      { text: "Apple Maps", onPress: () => setNavApp("Apple Maps") },
+                      { text: "Cancel", style: "cancel" },
+                    ]);
+                  }}
+                  last
+                />
+              </Card>
+            </View>
+
+            {/* Partner Dispatch & Support */}
+            <View>
+              <SectionHeader title="Partner Helpline & Legal" />
+              <Card noPad>
+                <ListRow
+                  icon="call-outline"
+                  title="24/7 Dispatch Control Room"
+                  subtitle="+91 80 4567 8900"
+                  onPress={() => void Linking.openURL("tel:+918045678900")}
+                />
+                {WEB_URL ? (
+                  <>
+                    <ListRow
+                      icon="document-text-outline"
+                      title="Partner terms of service"
+                      onPress={() => void Linking.openURL(`${WEB_URL}/terms`)}
+                    />
+                    <ListRow
+                      icon="lock-closed-outline"
+                      title="Partner privacy policy"
+                      onPress={() => void Linking.openURL(`${WEB_URL}/privacy`)}
+                      last
+                    />
+                  </>
                 ) : (
-                  services.map((s, i, arr) => <ListRow key={s.service_id} icon="construct-outline" title={s.name} last={i === arr.length - 1} />)
+                  <ListRow
+                    icon="shield-checkmark-outline"
+                    title="Sahayak Partner Network"
+                    subtitle="Version 1.2.0 (Build 44)"
+                    last
+                  />
                 )}
               </Card>
             </View>
@@ -480,4 +654,26 @@ const styles = StyleSheet.create({
   avatarText: { color: "#fff", fontSize: Typography.fontSize["2xl"], fontFamily: Typography.fontFamily.bold },
   name: { fontSize: Typography.fontSize.xl, fontFamily: Typography.fontFamily.bold, color: Colors.textPrimary },
   verText: { fontSize: Typography.fontSize.sm, fontFamily: Typography.fontFamily.semiBold },
+
+  sectionHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: Spacing.sm },
+  sectionTitle: { fontSize: Typography.fontSize.xl, fontFamily: Typography.fontFamily.bold, color: Colors.textPrimary },
+  countBadge: { backgroundColor: Colors.brand700Light, paddingHorizontal: 8, paddingVertical: 2, borderRadius: Radius.full },
+  countBadgeText: { fontSize: Typography.fontSize.xs, fontFamily: Typography.fontFamily.bold, color: Colors.brand700Dark },
+  toggleCollapseBtn: { flexDirection: "row", alignItems: "center", gap: 4, paddingVertical: 4 },
+  toggleCollapseText: { fontSize: Typography.fontSize.sm, fontFamily: Typography.fontFamily.semiBold, color: Colors.brand700 },
+
+  tableHeaderRow: { flexDirection: "row", backgroundColor: "#F8FAFC", paddingHorizontal: Spacing.base, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.border },
+  tableHeaderCell: { fontSize: Typography.fontSize.xs, fontFamily: Typography.fontFamily.semiBold, color: Colors.textMuted, letterSpacing: 0.5 },
+  tableRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: Spacing.base, paddingVertical: 12 },
+  tableRowBorder: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.borderLight },
+  serviceNameText: { fontSize: Typography.fontSize.base, fontFamily: Typography.fontFamily.bold, color: Colors.textPrimary },
+  serviceMetaText: { fontSize: Typography.fontSize.xs, fontFamily: Typography.fontFamily.regular, color: Colors.textMuted },
+  servicePriceText: { fontSize: Typography.fontSize.sm, fontFamily: Typography.fontFamily.bold, color: Colors.brand700 },
+  tableFooterNote: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: Spacing.base, paddingVertical: 10, backgroundColor: "#F8FAFC", borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.borderLight },
+  tableFooterText: { fontSize: Typography.fontSize.xs, fontFamily: Typography.fontFamily.regular, color: Colors.textMuted },
+
+  settingsRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: Spacing.base, paddingVertical: Spacing.base, gap: Spacing.md },
+  settingsDivider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.borderLight },
+  settingsLabel: { fontSize: Typography.fontSize.base, fontFamily: Typography.fontFamily.semiBold, color: Colors.textPrimary },
+  settingsSub: { fontSize: Typography.fontSize.xs, fontFamily: Typography.fontFamily.regular, color: Colors.textMuted, lineHeight: 17 },
 });

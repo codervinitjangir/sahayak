@@ -80,3 +80,4 @@ async def confirm_payment(
         db, payment_id, payload, identity
     )
     return envelope(payment)
+
