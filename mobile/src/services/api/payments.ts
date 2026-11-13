@@ -15,20 +15,19 @@ export interface PaymentRecord {
 }
 
 export const paymentsApi = {
-  /** Get current payment status for a job (GET /api/v1/payments/job/{jobId}) */
+  /** Newest payment for a job (GET /api/v1/payments/job/{jobId}). 404 PAYMENT_NOT_FOUND until one is opened with createPayment. */
   getJobPayment: (jobId: string) =>
     apiClient.get<PaymentRecord>(`/payments/job/${jobId}`).then((r) => r.data),
 
   /** Create/initiate a payment order (POST /api/v1/payments) */
   createPayment: (payload: {
     job_id: string;
-    amount?: number | string | null;
     payment_method?: PaymentMethod;
     gateway_ref_id?: string | null;
   }) =>
     apiClient.post<PaymentRecord>("/payments", payload).then((r) => r.data),
 
-  /** Confirm payment settled (POST /api/v1/payments/{paymentId}/confirm) */
+  /** Confirm payment received (POST /api/v1/payments/{paymentId}/confirm). Assigned partner or admin only; the owner gets 403. */
   confirmPayment: (
     paymentId: string,
     payload: {

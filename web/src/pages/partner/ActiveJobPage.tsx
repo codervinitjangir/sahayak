@@ -8,6 +8,7 @@ import { JobTimeline } from '../../components/JobTimeline';
 import { NEXT_TRANSITION, useJobStatusTransition } from '../../features/partners/useOffers';
 import { partnerService } from '../../services/partner.service';
 import { ApiError } from '../../services/api';
+import { PaymentReceivedCard } from './components/PaymentReceivedCard';
 import './partner.css';
 
 /**
@@ -56,7 +57,7 @@ export const ActiveJobPage: React.FC = () => {
   const handleAdvance = async () => {
     if (!job || !next || inputInvalid) return;
     try {
-      const updated = await transition.mutateAsync({
+      await transition.mutateAsync({
         jobId: job.id,
         status: next.next,
         startCode: needsCode ? startCode : undefined,
@@ -64,9 +65,8 @@ export const ActiveJobPage: React.FC = () => {
       });
       setStartCode('');
       void jobQuery.refetch();
-      // A completed job is no longer "active" — the dashboard is where the next
-      // one arrives, so send the partner straight back there.
-      if (updated.status === 'completed') navigate('/partner/dashboard');
+      // A completed job stays on screen so the partner can mark the payment
+      // received; the dashboard is one tap away.
     } catch {
       // Rendered from transition.error below.
     }
@@ -231,6 +231,8 @@ export const ActiveJobPage: React.FC = () => {
               </p>
             )}
             </div>
+
+            {job.status === 'completed' && <PaymentReceivedCard jobId={job.id} />}
 
             <Card aria-label="Progress">
               <CardHeader title="Progress" className="mb-3" />

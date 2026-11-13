@@ -1,5 +1,5 @@
 import React from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, useSearchParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   Shield,
@@ -20,6 +20,10 @@ import { JobStatus } from '../../types/jobs';
 
 export const PublicTrackPage: React.FC = () => {
   const { jobId } = useParams<{ jobId: string }>();
+  // The owner's share token. Without it the server answers 404, the same as
+  // for a job that does not exist.
+  const [searchParams] = useSearchParams();
+  const token = searchParams.get('t') ?? '';
 
   const {
     data: tracking,
@@ -27,9 +31,9 @@ export const PublicTrackPage: React.FC = () => {
     error,
     isFetching,
   } = useQuery({
-    queryKey: ['public-tracking', jobId],
-    queryFn: () => (jobId ? jobsService.getPublicTracking(jobId) : Promise.reject('No jobId')),
-    enabled: Boolean(jobId),
+    queryKey: ['public-tracking', jobId, token],
+    queryFn: () => jobsService.getPublicTracking(jobId as string, token),
+    enabled: Boolean(jobId && token),
     refetchInterval: (query) => {
       const status = query.state.data?.status;
       if (status === 'completed' || status === 'cancelled' || status === 'no_match_found') {
@@ -188,7 +192,7 @@ export const PublicTrackPage: React.FC = () => {
                 <div>
                   <div className="flex items-center gap-1.5">
                     <h4 className="font-bold text-ink">{tracking.partner_name}</h4>
-                    <Shield className="w-3.5 h-3.5 text-brand-700" title="Verified Sahayak Partner" />
+                    <Shield className="w-3.5 h-3.5 text-brand-700" aria-label="Verified Sahayak partner" />
                   </div>
                   <p className="text-xs text-ink-soft">
                     {tracking.partner_rating != null

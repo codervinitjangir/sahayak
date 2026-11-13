@@ -532,7 +532,7 @@ export default function OwnerHelpFlowScreen() {
                 <Button label="Cancel request" variant="outline" onPress={cancel} loading={cancelling} />
               </View>
               <View style={{ marginTop: Spacing.base }}>
-                <SafetyActions jobId={job?.id} />
+                <SafetyActions jobId={job?.id} shareToken={job?.share_token} />
               </View>
             </View>
           )}
@@ -593,7 +593,7 @@ export default function OwnerHelpFlowScreen() {
               {pollFailed ? <Text style={styles.warn}>Connection is unstable. Showing the last update.</Text> : null}
 
               <View style={{ marginTop: Spacing.base }}>
-                <SafetyActions jobId={job?.id} />
+                <SafetyActions jobId={job?.id} shareToken={job?.share_token} />
               </View>
               <View style={{ marginTop: Spacing.base }}>
                 <Button label="Cancel request" variant="outline" onPress={cancel} loading={cancelling} />

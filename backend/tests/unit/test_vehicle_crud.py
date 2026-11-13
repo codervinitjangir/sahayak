@@ -90,7 +90,8 @@ async def test_delete_vehicle_success():
 
     with patch("app.repositories.vehicle_repository.get_vehicle_by_id", return_value=mock_vehicle), \
          patch("app.repositories.vehicle_repository.has_active_jobs", return_value=False), \
-         patch("app.repositories.vehicle_repository.delete_vehicle_row", return_value=None):
+         patch("app.repositories.vehicle_repository.detach_vehicle_from_jobs", return_value=None), \
+         patch("app.repositories.vehicle_repository.delete_vehicle_by_id", return_value=None):
         res = await vehicle_service.delete_user_vehicle(db, vehicle_id, owner_id)
         assert res["id"] == vehicle_id
         assert res["deleted"] is True

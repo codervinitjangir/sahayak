@@ -146,3 +146,108 @@ When an emergency happens (e.g. at 11:30 PM on an outer ring road or highway), a
 * Payment gateway provider selection for partner payouts (Razorpay Route vs Cashfree)?
 * Telephony provider for virtual masked calling (Exotel vs Twilio)?
 
+
+---
+
+## 9. Remaining-work audit (2026-11-13, end of day)
+
+Checked against the code, not only against the tables above. Baseline: web `tsc` clean, web
+134-class suite 130/130 passing, mobile `tsc` clean, mobile 20/20, `check:rule-a` passing on both.
+**Not re-run today:** the backend unit and integration suites. The payments, partner-location,
+vehicle CRUD and public-tracking work above touches money, auth and concurrency, so the full
+regression bar in `CLAUDE.md` applies before anyone calls it done.
+
+### 9.1 Must fix before real users
+
+| # | Item | Why |
+|---|---|---|
+| R1 | **Replace the placeholder contact details.** `support@sahayak.app`, `+91 80 4567 8900` and the `sahayak.app` / `api.sahayak.app` domains appear in Terms, Privacy, the landing footer, mobile Account, mobile `SafetyActions` and `constants/index.ts` | Nothing in the repo shows these are real. A stranded driver who calls a number that does not ring is worse than no number |
+| R2 | **Rotate the Google Maps key** that was committed in `mobile/app.json` (still in git history) | Quota theft. Restrict the new key to the package name / bundle id |
+| R3 | **Lawyer review** of `/terms` and `/privacy` | Drafted from product behaviour, not by counsel |
+| R4 | **Full regression for backend work added today** (payments, partner-location, vehicle PATCH/DELETE, public tracking, `base_price`, start code, idempotency) | Money, auth and concurrency paths; migrations `0002`, `0003`, `008` are untracked and must be applied and recorded |
+| R5 | **Device run, both roles**: request → match → start code → pay → complete → rate, on a physical Android and iPhone | Native maps, GPS accuracy, SMS autofill, `tel:` and share sheets were only ever checked in a browser |
+| R6 | **Commit.** Large parts of this work are uncommitted in `Sahayak/.git` (web, mobile, backend, docs) | One bad command loses it. Commit in reviewable chunks |
+| R7 | **Public tracking link privacy review** (`/track/:jobId`, unauthenticated) | Confirm it exposes no owner phone/name/exact address beyond what ADR-017 allows, uses an unguessable token (not the raw job id), and stops working after completion |
+| R8 | **Payments hardening**: server-side confirmation only, signature-checked webhooks if a gateway is added, integer paise, idempotent confirm, duplicate and out-of-order tests | `POST /payments/{id}/confirm` as built relies on who calls it; decide whether the partner or owner confirms and prevent either from forging the other |
+
+### 9.2 Product gaps
+
+| # | Item | Notes |
+|---|---|---|
+| G1 | Extended search with radius escalation (item 11) | Specified above, not built. Until then a request ends as `no_match_found` quickly |
+| G2 | Push notifications (item 12) | Partners miss offers when the app is closed; owners miss "partner on the way" |
+| G3 | Partner payouts, tax invoices, refunds and disputes (payments C–E) | Needs the money-holding decision and CA sign-off first |
+| G4 | Partner documents and equipment upload + staff review | Towing partners cannot be enabled except by direct database edit today |
+| G5 | Real vehicle registration check | Today: normalise and de-duplicate only |
+| G6 | Hindi and Kannada | English only |
+| G7 | Masked calling or in-app chat | Numbers are shown after assignment |
+| G8 | Profile edit (owner name/email, partner name) | Vehicle edit exists; profile does not |
+| G9 | Partner notifications screen on mobile | Owner has the bell; the partner shell has none |
+| G10 | Account deletion and data export | Likely required by privacy law; not present |
+| G11 | Offline-tolerant request queue | Poor signal on highways |
+
+### 9.3 Company side: admin panel
+
+Exists: analytics (Overview, Dispatch, Matching), partner list with approve / reject, and a phone
+view for verification (`/admin/verify`). Endpoints: `GET /admin/analytics/*`, `GET /admin/partners`,
+`GET /admin/partners/{id}`, `PATCH /admin/partners/{id}/verify`.
+
+Missing, in suggested order:
+
+1. **Live jobs board** with filters, and manual reassign / cancel by staff.
+2. **Owner and partner management**: search, view history, suspend or reinstate.
+3. **Audit log**: who approved, rejected, suspended or refunded what, and when.
+4. **Staff accounts and roles** (support, ops, finance) and an admin invite flow. Today an admin is
+   linked to a login by editing the database.
+5. **Support inbox / disputes**, tied to payments item E.
+6. **Catalogue and pricing editor** (`base_price`, services, categories).
+7. **Payments back office**: collections, commission, payout runs, reconciliation.
+8. **Alerts**: no-match rate, partners on duty by zone, stuck jobs.
+
+### 9.4 Mobile specifics
+
+* Partner registration exists in the app; **staff verification is not on the partner's phone**, by design.
+* Partner map screen shows pickup and the partner's own marker; a straight connector is drawn unless
+  `EXPO_PUBLIC_ROUTING_URL` points at a routing service you operate.
+* Expo SDK 58 / React Native 0.88. Dependencies that were unused were removed; re-check
+  `npx expo install --check` before each store build.
+* No store assets beyond the icon set: screenshots, privacy-nutrition labels (iOS), data-safety form
+  (Android), store listing copy, EAS build profiles and signing.
+* No crash and error reporting (Sentry or similar) and no analytics.
+
+### 9.5 Web specifics
+
+* The restored editorial landing page uses stock photographs in its collage. They show people who
+  are not Sahayak partners; replace them with real photos or illustrations before launch.
+* No SEO basics beyond `<title>`/meta: sitemap, robots, social preview image.
+* No error boundary reporting and no uptime monitoring.
+* Rate-limit and abuse protection on the public `/track/:jobId` endpoint.
+
+### 9.6 Engineering hygiene
+
+| # | Item |
+|---|---|
+| E1 | CI: run web and mobile `tsc`, `vitest`, `check:rule-a`, and the brand-hygiene tests on every push |
+| E2 | Backend: re-export `backend-routes.json` fixtures for **both** clients after the new routes (per project memory) and keep the route-inventory tests green |
+| E3 | Mobile tests only cover pure logic. Add component tests for the owner flow and partner offer flow (React Native Testing Library) |
+| E4 | End-to-end smoke test against a staging backend (sign in with a test number, request, accept, complete) |
+| E5 | Staging and production environments, secrets management, and a rollback plan |
+| E6 | Backups and restore drill (the project database was paused once already) |
+| E7 | Observability: structured logs exist; add metrics, alerts and a status page |
+| E8 | Update `HANDOFF-frontend-contract.md` and `docs/FRONTEND-GUIDE.md` for the redesign and the new endpoints, and tell Adarsh |
+
+### 9.7 Claims in this document not verified by me
+
+The "Done" rows in sections 2–4 were written by another process in this repository and I have not
+tested them. In particular: live partner location, vehicle delete guard, partner-rates-owner,
+public tracking, and UPI / cash payments. Treat them as "implemented, unverified" until R4 and R5
+are done.
+
+### 9.8 Suggested next two weeks
+
+1. R1, R2, R6 (an afternoon).
+2. R4 and R7, R8 (backend regression and security review of the new endpoints).
+3. R5 (device run) and fix what breaks.
+4. G1 (radius escalation), then G2 (push).
+5. Admin items 1–3.
+6. R3 in parallel (legal) and E1 (CI).

@@ -16,7 +16,7 @@ differently depending on which endpoint is asked.
 import uuid
 from typing import List, Optional
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.job import Job
@@ -114,10 +114,27 @@ async def update_vehicle_row(
     return vehicle
 
 
-async def delete_vehicle_row(db: AsyncSession, vehicle: Vehicle) -> None:
-    """Delete a vehicle row and flush."""
-    await db.delete(vehicle)
-    await db.flush()
+async def detach_vehicle_from_jobs(db: AsyncSession, vehicle_id: uuid.UUID) -> None:
+    """Null jobs.vehicle_id on this vehicle's past jobs, ahead of deleting it.
+
+    jobs.vehicle_id references vehicles(id) with no ON DELETE rule, so a
+    vehicle with any job history cannot be deleted while those rows point at
+    it. Nulling the pointer loses nothing: each job keeps its own snapshot of
+    vehicle_number, which is what history and receipts read.
+    """
+    await db.execute(
+        update(Job).where(Job.vehicle_id == vehicle_id).values(vehicle_id=None)
+    )
+
+
+async def delete_vehicle_by_id(db: AsyncSession, vehicle_id: uuid.UUID) -> None:
+    """Delete a vehicle row with a Core DELETE.
+
+    Not session.delete(obj): that walks Vehicle.jobs to null the children,
+    which is a lazy load, and a lazy load under AsyncSession raises
+    MissingGreenlet instead of issuing the query.
+    """
+    await db.execute(delete(Vehicle).where(Vehicle.id == vehicle_id))
 
 
 async def has_active_jobs(db: AsyncSession, vehicle_id: uuid.UUID) -> bool:

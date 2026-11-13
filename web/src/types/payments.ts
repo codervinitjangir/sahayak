@@ -14,7 +14,6 @@ export interface Payment {
 
 export interface PaymentCreateRequest {
   job_id: string;
-  amount?: number | string | null;
   payment_method?: PaymentMethod;
   gateway_ref_id?: string | null;
 }

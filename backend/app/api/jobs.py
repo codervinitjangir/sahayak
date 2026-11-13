@@ -218,14 +218,20 @@ async def get_job_partner_location(
 )
 async def get_public_job_tracking(
     job_id: uuid.UUID,
+    t: Optional[str] = Query(
+        default=None,
+        max_length=64,
+        description="Share token from the owner's GET /jobs/{job_id} (share_token).",
+    ),
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[PublicJobTrackingResponse]:
     """Return sanitized, unauthenticated live tracking for family and friends.
 
-    Excludes owner personal phone and private start codes while providing live
-    partner GPS, vehicle, service, and emergency assistance numbers.
+    Requires the owner's share token: the job id alone is known to every
+    partner the job was offered to (ADR-017). A missing or wrong token is the
+    same 404 as a missing job. Excludes owner phone and the start code.
     """
-    tracking = await job_service.get_public_job_tracking(db, job_id)
+    tracking = await job_service.get_public_job_tracking(db, job_id, t)
     return envelope(tracking)
 
 

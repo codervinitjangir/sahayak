@@ -74,6 +74,11 @@ class Settings(BaseSettings):
     # report in again. It costs no history.
     REDIS_URL: str = "redis://127.0.0.1:6379/0"
 
+    # Key for the HMAC behind public trip-share links (/track/{job_id}?t=...).
+    # Optional: blank falls back to SUPABASE_SECRET_KEY. Rotating it revokes
+    # every share link already sent. See job_service.share_token_for.
+    SHARE_LINK_SECRET: str = ""
+
     @property
     def SUPABASE_JWT_ISSUER(self) -> str:
         """Expected `iss` claim, derived from SUPABASE_URL.

@@ -18,7 +18,7 @@ async def test_get_public_job_tracking_not_found():
 
     with patch("app.repositories.job_repository.get_job_by_id", return_value=None):
         with pytest.raises(NotFoundError):
-            await job_service.get_public_job_tracking(db, job_id)
+            await job_service.get_public_job_tracking(db, job_id, job_service.share_token_for(job_id))
 
 
 @pytest.mark.asyncio
@@ -61,12 +61,12 @@ async def test_get_public_job_tracking_success_with_partner_and_redis():
 
     with patch("app.repositories.job_repository.get_job_by_id", return_value=mock_job), \
          patch("app.repositories.service_repository.get_service_by_id", return_value=mock_service), \
-         patch("app.repositories.job_repository.get_latest_assignment", return_value=mock_assignment), \
+         patch("app.repositories.job_repository.get_responsible_assignment", return_value=mock_assignment), \
          patch("app.repositories.job_repository.get_partner_by_id", return_value=mock_partner), \
          patch("app.services.job_service._pickup_coordinates", return_value=(12.9716, 77.5946)), \
          patch("app.services.job_service.get_redis", return_value=mock_redis):
 
-        res = await job_service.get_public_job_tracking(db, job_id)
+        res = await job_service.get_public_job_tracking(db, job_id, job_service.share_token_for(job_id))
 
         assert res.id == job_id
         assert res.status == "partner_en_route"

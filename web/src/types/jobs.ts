@@ -128,6 +128,8 @@ export interface Job {
   owner_phone?: string | null;
   /** Owner-only: the 4-digit code the owner reads out to the partner on arrival. */
   start_code?: string | null;
+  /** Owner-only. Required as ?t= on the public /track link. */
+  share_token?: string | null;
   requested_at: string;
   completed_at?: string;
   cancelled_at?: string;
@@ -187,6 +189,8 @@ export interface ServiceCatalogItem {
   category_id?: number | null;
   category_code?: string | null;
   category_name?: string | null;
+  /** Catalogue base price in rupees (string or number on the wire). */
+  base_price?: number | string | null;
 }
 
 export interface ServiceCatalogResponse {

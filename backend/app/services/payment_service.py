@@ -15,9 +15,9 @@ from app.schemas.payment import (
 )
 from app.services.auth_service import Identity
 from app.utils.errors import (
-    BadRequestError,
     ConflictError,
     ErrorCode,
+    ForbiddenError,
     NotFoundError,
 )
 from app.utils.logging import log_event
@@ -79,7 +79,9 @@ async def _assert_job_access(
     if job is None:
         raise NotFoundError(ErrorCode.JOB_NOT_FOUND, "Job not found")
 
-    is_admin = identity.role in ("ops", "super_admin")
+    # Identity.role is "admin" for every platform admin (ADR-020); the ops /
+    # super_admin grading lives on the admins row and is not on the identity.
+    is_admin = identity.role == "admin"
     is_owner = identity.role == "user" and identity.local_id == job.user_id
 
     assignment = await job_repository.get_responsible_assignment(db, job.id)
@@ -98,23 +100,35 @@ async def _assert_job_access(
 async def get_latest_job_payment(
     db: AsyncSession, job_id: uuid.UUID, identity: Identity
 ) -> PaymentResponse:
-    """Read the current payment record for a job, creating a pending row if none exists."""
-    job, _, _ = await _assert_job_access(db, job_id, identity)
+    """Read the newest payment record for a job.
+
+    Read-only: a job with no payment yet answers 404 PAYMENT_NOT_FOUND and the
+    client opens one with POST /payments. A GET that inserted rows would create
+    a payment every time anyone merely looked at the screen.
+    """
+    await _assert_job_access(db, job_id, identity)
 
     payment = await payment_repository.get_latest_payment_for_job(db, job_id)
     if payment is None:
-        # Determine base amount from job
-        amount = job.price_final or job.price_estimate or Decimal("499.00")
-        payment = await payment_repository.create_payment(
-            db,
-            job_id=job.id,
-            amount=amount,
-            payment_method="upi",
-            status="pending",
-        )
-        await db.commit()
+        raise NotFoundError(ErrorCode.PAYMENT_NOT_FOUND, "No payment for this job yet")
 
     return _to_payment_response(payment)
+
+
+def _job_amount(job: Job) -> Decimal:
+    """What this job costs, from the job row and nowhere else.
+
+    The amount is never taken from the request: a payer who could name the
+    figure could open a Rs 1 order for a Rs 899 job. A job with no price yet is
+    refused rather than billed a made-up default.
+    """
+    amount = job.price_final or job.price_estimate
+    if amount is None or amount <= 0:
+        raise ConflictError(
+            ErrorCode.INVALID_PAYMENT_AMOUNT,
+            "This job has no price yet, so a payment cannot be opened",
+        )
+    return amount
 
 
 async def create_or_initiate_payment(
@@ -134,10 +148,7 @@ async def create_or_initiate_payment(
     if latest is not None and latest.status == "paid":
         return _to_payment_response(latest)
 
-    # Calculate effective amount
-    amount = payload.amount
-    if amount is None or amount <= 0:
-        amount = job.price_final or job.price_estimate or Decimal("499.00")
+    amount = _job_amount(job)
 
     payment_method = payload.payment_method or "upi"
 
@@ -178,14 +189,26 @@ async def confirm_payment(
     payload: PaymentConfirmRequest,
     identity: Identity,
 ) -> PaymentResponse:
-    """Mark a pending payment as paid upon UPI/Cash completion."""
+    """Mark a pending payment as paid, once the payee has received the money.
+
+    Only the assigned partner (who is handed the cash or sees the UPI credit)
+    or an admin may confirm. The owner is the payer, and a payer attesting to
+    their own payment proves nothing: an owner who could call this could close
+    any bill without paying it. The owner can still read the payment and open
+    the UPI intent; settlement is the receiving side's call.
+    """
     payment = await payment_repository.get_payment_by_id(db, payment_id)
     if payment is None:
         raise NotFoundError(ErrorCode.PAYMENT_NOT_FOUND, "Payment not found")
 
-    job, is_owner, is_partner = await _assert_job_access(
+    job, _is_owner, is_partner = await _assert_job_access(
         db, payment.job_id, identity
     )
+    if not (is_partner or identity.role == "admin"):
+        raise ForbiddenError(
+            ErrorCode.FORBIDDEN,
+            "Only the assigned partner or an admin can confirm a payment was received.",
+        )
 
     # Idempotent return if already paid
     if payment.status == "paid":

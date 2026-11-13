@@ -11,6 +11,8 @@ type State = "idle" | "locating" | "error";
 
 interface SafetyActionsProps {
   jobId?: string;
+  /** From the owner's job detail; the public page answers 404 without it. */
+  shareToken?: string | null;
 }
 
 /**
@@ -18,7 +20,7 @@ interface SafetyActionsProps {
  * share your current position with someone you trust. The share goes through the
  * system share sheet as a live tracking link or maps link.
  */
-export default function SafetyActions({ jobId }: SafetyActionsProps = {}) {
+export default function SafetyActions({ jobId, shareToken }: SafetyActionsProps = {}) {
   const [state, setState] = useState<State>("idle");
 
   const call = () => {
@@ -28,9 +30,9 @@ export default function SafetyActions({ jobId }: SafetyActionsProps = {}) {
   const shareLocation = async () => {
     setState("locating");
     try {
-      if (jobId) {
+      if (jobId && shareToken) {
         const webBase = process.env.EXPO_PUBLIC_WEB_URL || "https://sahayak.app";
-        const url = `${webBase}/track/${jobId}`;
+        const url = `${webBase}/track/${jobId}?t=${encodeURIComponent(shareToken)}`;
         await Share.share({ message: `Track my roadside assistance live on Sahayak: ${url}` });
         setState("idle");
         return;

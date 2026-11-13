@@ -25,6 +25,8 @@ import Card from "../../../components/ui/Card";
 import { jobsApi } from "../../../services/api/jobs";
 import type { BackendJob } from "../../../services/api/jobs";
 import { partnerApi } from "../../../services/api/partner";
+import { paymentsApi } from "../../../services/api/payments";
+import type { PaymentRecord } from "../../../services/api/payments";
 import type { MobilePartnerEarnings } from "../../../services/api/partner";
 import { useAuthStore } from "../../../store/authStore";
 import type { PartnerStackParamList } from "../../../types";
@@ -61,6 +63,28 @@ export default function PartnerJobDoneScreen() {
   const [partnerRating, setPartnerRating] = useState<number>(0);
   const [ratingSubmitted, setRatingSubmitted] = useState<boolean>(false);
   const [submittingRating, setSubmittingRating] = useState<boolean>(false);
+  // Settlement is the receiving side's call: the owner can open the UPI
+  // intent, but only the partner (or an admin) can say the money arrived.
+  const [payment, setPayment] = useState<PaymentRecord | null>(null);
+  const [confirming, setConfirming] = useState<"upi" | "cash" | null>(null);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
+
+  const confirmReceived = async (method: "upi" | "cash") => {
+    if (!jobId) return;
+    setConfirming(method);
+    setPaymentError(null);
+    try {
+      let current = payment;
+      if (!current) {
+        current = await paymentsApi.createPayment({ job_id: jobId, payment_method: method });
+      }
+      setPayment(await paymentsApi.confirmPayment(current.id, { payment_method: method }));
+    } catch {
+      setPaymentError("Could not record the payment. Check your connection and try again.");
+    } finally {
+      setConfirming(null);
+    }
+  };
 
   const handleRateCustomer = async (score: number) => {
     setPartnerRating(score);
@@ -90,6 +114,12 @@ export default function PartnerJobDoneScreen() {
       setLoadError(
         "Sahayak could not load this completed job. The work is still saved; check your connection and retry."
       );
+    }
+    try {
+      setPayment(await paymentsApi.getJobPayment(jobId));
+    } catch {
+      // 404 until the owner opens a payment; confirming will open one.
+      setPayment(null);
     }
     try {
       setEarnings(await partnerApi.getEarnings());
@@ -224,6 +254,38 @@ export default function PartnerJobDoneScreen() {
                 This is the amount saved against the job. Payouts are settled by
                 Sahayak operations; there is no in-app withdrawal.
               </Text>
+            </Card>
+
+            <Card style={styles.ratingCard}>
+              <Text style={styles.cardHeading}>Payment</Text>
+              {payment?.status === "paid" ? (
+                <Text style={styles.ratingThanks}>
+                  Received{payment.payment_method ? ` by ${payment.payment_method.toUpperCase()}` : ""}. Thank you!
+                </Text>
+              ) : (
+                <>
+                  <Text style={styles.ratingSubtitle}>
+                    Mark this bill settled once the money is in your hands or your UPI account.
+                  </Text>
+                  <Button
+                    label="Cash received"
+                    onPress={() => void confirmReceived("cash")}
+                    variant="primary"
+                    loading={confirming === "cash"}
+                    disabled={confirming !== null}
+                    fullWidth
+                  />
+                  <Button
+                    label="UPI payment received"
+                    onPress={() => void confirmReceived("upi")}
+                    variant="secondary"
+                    loading={confirming === "upi"}
+                    disabled={confirming !== null}
+                    fullWidth
+                  />
+                  {paymentError && <Text style={styles.ratingSubtitle}>{paymentError}</Text>}
+                </>
+              )}
             </Card>
 
             <Card style={styles.ratingCard}>

@@ -252,8 +252,9 @@ export const jobsService = {
   /**
    * Sanitized public trip tracking for family and friends. Does not require sign-in.
    */
-  async getPublicTracking(jobId: string): Promise<PublicJobTracking> {
-    const res = await apiClient<PublicJobTracking>(`/jobs/${jobId}/public-tracking`, {
+  async getPublicTracking(jobId: string, token: string): Promise<PublicJobTracking> {
+    const res = await apiClient<PublicJobTracking>(
+      `/jobs/${jobId}/public-tracking?t=${encodeURIComponent(token)}`, {
       method: 'GET',
     });
     return res.data;

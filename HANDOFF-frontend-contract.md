@@ -2215,16 +2215,19 @@ calls (26 web call sites, was 23).
 
 ### 17.2 Vehicle CRUD
 - `PATCH /api/v1/vehicles/{vehicle_id}`: Update `make`, `model`, `vehicle_type`, or `vehicle_number` (normalised automatically).
-- `DELETE /api/v1/vehicles/{vehicle_id}`: Remove vehicle from caller's account. Refuses with 409 `VEHICLE_HAS_ACTIVE_JOB` if the vehicle is in an active roadside assistance job.
+- `DELETE /api/v1/vehicles/{vehicle_id}`: Remove vehicle from caller's account. Refuses with 409 `VEHICLE_HAS_ACTIVE_JOB` if the vehicle is in an active roadside assistance job. A vehicle with past jobs can be deleted; those jobs keep their own `vehicle_number` and their `vehicle_id` becomes `null`.
 
 ### 17.3 Public Trip / Live Status Sharing
-- `GET /api/v1/jobs/{job_id}/public-tracking`
+- `GET /api/v1/jobs/{job_id}/public-tracking?t={share_token}`
   - Unauthenticated endpoint for trip sharing with family and trusted contacts.
+  - **Requires `t`** (changed 2026-11-13). The owner's `GET /jobs/{job_id}` now returns `share_token` (owner-only, like `start_code`); the share link is `/track/{job_id}?t={share_token}`. Missing or wrong `t` → 404 `JOB_NOT_FOUND`, identical to a missing job. Reason: every partner a job is *offered* to knows its id, and ADR-017 withholds pickup coordinates until acceptance.
+  - `partner_name` / rating / ETA / live coordinates describe the partner who **accepted**, never an unanswered offer.
   - Returns sanitized breakdown details: status, service_name, masked vehicle_number, pickup_lat/lng, partner_name, partner_rating, live partner coordinates (from Redis), estimated arrival minutes, and emergency numbers (`112`, `+91 80 4567 8900`).
   - Owner phone, partner phone, and secret start code are strictly omitted.
 
 ### 17.4 In-App Payments & Settlements
-- `POST /api/v1/payments`: Create or initiate payment order (`job_id`, `amount`, `payment_method` ("upi"|"cash"|"card"|"netbanking")). Returns dynamic `upi_intent` link for deep linking to UPI apps (Google Pay, PhonePe, Paytm) and QR code generation.
-- `GET /api/v1/payments/job/{job_id}`: Get payment status for a job (creates initial pending order if absent).
-- `POST /api/v1/payments/{payment_id}/confirm`: Confirm payment completion (`gateway_ref_id`, `payment_method`). Updates status to `paid` idempotently.
+Callers: job owner, assigned partner, or admin; anyone else gets 404 `JOB_NOT_FOUND`. (Fixed 2026-11-13: admins were wrongly refused.)
+- `POST /api/v1/payments`: Open a payment order (`job_id`, `payment_method` ("upi"|"cash"|"card"|"netbanking")). **There is no `amount` field**: the amount is always the job's `price_final`, else `price_estimate`; a client-sent `amount` is ignored. A job with neither → 409 `INVALID_PAYMENT_AMOUNT`. Returns `upi_intent` for UPI deep links and QR codes.
+- `GET /api/v1/payments/job/{job_id}`: Newest payment for the job. **Read-only**: 404 `PAYMENT_NOT_FOUND` until one is opened with `POST /payments` (it used to create one).
+- `POST /api/v1/payments/{payment_id}/confirm`: Mark the money received (`gateway_ref_id`, `payment_method`); idempotent on an already-paid payment. **Assigned partner or admin only** — the owner is the payer and gets 403 `FORBIDDEN`. The owner UI opens the UPI intent and waits; the partner confirms from the completed-job screen.
 

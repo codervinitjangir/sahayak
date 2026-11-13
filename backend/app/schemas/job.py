@@ -165,6 +165,9 @@ class JobDetailResponse(BaseModel):
     # Owner-only. The partner must never receive the code through a read; they
     # verify it by submitting it to POST /jobs/{id}/start.
     start_code: Optional[str] = None
+    # Owner-only. Appended to the public share link as ?t=...; without it
+    # GET /jobs/{id}/public-tracking answers 404.
+    share_token: Optional[str] = None
     current_assignment: Optional[CurrentAssignmentResponse] = None
     timeline: list[JobTimelineEntry] = Field(default_factory=list)
 

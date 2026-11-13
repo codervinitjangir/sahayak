@@ -586,8 +586,13 @@ async def main() -> None:
         prot_token = partners[worker_prot]["token"]
         for target, body in (("partner_en_route", {}), ("in_progress", {}),
                              ("completed", {"price_final": 940})):
-            r = await c.post(f"/api/v1/jobs/{job_prot}/status",
-                             json={"status": target, **body}, headers=hdr(prot_token))
+            if target == "in_progress":  # POST /start only, with the owner's code
+                r = await c.post(f"/api/v1/jobs/{job_prot}/start",
+                                 json={"start_code": one("SELECT start_code FROM jobs WHERE id = %(i)s", {"i": job_prot})["start_code"]},
+                                 headers=hdr(prot_token))
+            else:
+                r = await c.post(f"/api/v1/jobs/{job_prot}/status",
+                                 json={"status": target, **body}, headers=hdr(prot_token))
             if r.status_code != 200:
                 raise SystemExit(f"could not complete the job at {target}: "
                                  f"{r.status_code} {r.text[:300]}")

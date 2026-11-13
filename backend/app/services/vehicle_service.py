@@ -313,7 +313,8 @@ async def delete_user_vehicle(
         )
 
     try:
-        await vehicle_repository.delete_vehicle_row(db, vehicle)
+        await vehicle_repository.detach_vehicle_from_jobs(db, vehicle_id)
+        await vehicle_repository.delete_vehicle_by_id(db, vehicle_id)
         await db.commit()
         return {"id": vehicle_id, "deleted": True}
     except SQLAlchemyError as exc:

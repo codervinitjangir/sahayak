@@ -7,6 +7,8 @@ user? is this service code real?), the transaction boundary, and the assembly of
 the read model. Every database call goes through app/repositories/job_repository.
 """
 from datetime import datetime, timezone
+import hashlib
+import hmac
 import logging
 import secrets
 import time
@@ -25,6 +27,7 @@ from app.config.redis_client import (
     get_redis,
     location_updated_at_key,
 )
+from app.config.settings import get_settings
 from app.models.job import Job
 from app.repositories import (
     job_repository,
@@ -570,6 +573,9 @@ async def get_job_with_status(
         # Owner-only by construction. A partner proves the code by submitting
         # it, never by reading it back.
         start_code=getattr(job, "start_code", None) if is_owner else None,
+        # Owner-only, same gate as start_code: the owner is the one who decides
+        # who may follow the rescue (see share_token_for).
+        share_token=share_token_for(job.id) if is_owner else None,
         current_assignment=current_assignment,
         timeline=[JobTimelineEntry.model_validate(entry) for entry in history],
     )
@@ -1247,14 +1253,54 @@ async def get_job_partner_location(
     )
 
 
+_PROCESS_SHARE_KEY = secrets.token_bytes(32)
+
+
+def _share_key() -> bytes:
+    """Key for share-link tokens.
+
+    SHARE_LINK_SECRET when set. Otherwise the Supabase secret key, which every
+    deployment already has and which never leaves the server; HMAC with a
+    distinct message prefix keeps the two uses apart. With neither configured
+    (a bare dev box) a per-process random key is used, so links simply stop
+    working on restart rather than becoming guessable.
+    """
+    settings = get_settings()
+    secret = (
+        settings.SHARE_LINK_SECRET
+        or settings.SUPABASE_SECRET_KEY
+        or settings.SUPABASE_SERVICE_ROLE_KEY
+    )
+    return secret.encode("utf-8") if secret else _PROCESS_SHARE_KEY
+
+
+def share_token_for(job_id: uuid.UUID) -> str:
+    """The capability that lets someone without an account follow one job.
+
+    The job id alone is not enough: every partner the job was *offered* to
+    knows it, and ADR-017 withholds pickup coordinates until a partner accepts.
+    An unauthenticated endpoint keyed on the id would hand those coordinates to
+    any offered partner. The token is an HMAC of the id, released only to the
+    owner in GET /jobs/{id}, so the owner decides who can watch. Stateless: no
+    column, nothing to migrate, and verifiable in constant time.
+    """
+    return hmac.new(
+        _share_key(), b"job-share:" + job_id.bytes, hashlib.sha256
+    ).hexdigest()[:32]
+
+
 async def get_public_job_tracking(
-    db: AsyncSession, job_id: uuid.UUID
+    db: AsyncSession, job_id: uuid.UUID, token: Optional[str]
 ) -> PublicJobTrackingResponse:
     """Read-only sanitized public tracking for live trip sharing with family.
 
-    Unauthenticated endpoint: does not require a bearer token. Does not leak
-    owner phone or name, nor the driver's start_code.
+    Unauthenticated, but gated on the owner's share token. A wrong or missing
+    token answers the same 404 as a missing job, so the endpoint is no
+    existence oracle. Does not leak owner phone or name, nor the start_code.
     """
+    if not token or not hmac.compare_digest(token, share_token_for(job_id)):
+        raise NotFoundError(ErrorCode.JOB_NOT_FOUND, "Job not found")
+
     job = await job_repository.get_job_by_id(db, job_id)
     if job is None:
         raise NotFoundError(ErrorCode.JOB_NOT_FOUND, "Job not found")
@@ -1270,7 +1316,9 @@ async def get_public_job_tracking(
     partner_lng: Optional[float] = None
     partner_location_updated_at: Optional[str] = None
 
-    assignment = await job_repository.get_latest_assignment(db, job.id)
+    # The partner who accepted, not the newest offer: an unanswered offer is
+    # not a rescuer, and naming them would also tell a stranger who was asked.
+    assignment = await job_repository.get_responsible_assignment(db, job.id)
     if assignment is not None and assignment.partner_id is not None:
         partner = await job_repository.get_partner_by_id(db, assignment.partner_id)
         if partner:

@@ -828,6 +828,13 @@ Full regression: **205 unit tests** (197 + 8) and **520 live assertions** across
 
 ---
 
+## Amendment (2026-11-13): the public share link is a capability, not a job id
+
+`GET /jobs/{id}/public-tracking` was added without authentication, keyed on the job id alone. That reopened exactly the leak this ADR closed: every partner a job is *offered* to receives its id, so an offered partner who never accepted could read the pickup address and coordinates through the share endpoint instead of the offer. It also named the partner from `get_latest_assignment`, i.e. whoever was asked most recently, not whoever accepted.
+
+The endpoint now requires `?t=`, an HMAC-SHA256 of the job id (key `SHARE_LINK_SECRET`, falling back to the Supabase secret key), released only to the owner in `GET /jobs/{id}` on the same gate as `start_code`. A wrong or missing token is the same 404 as a missing job. The partner shown is `get_responsible_assignment`. Stateless rather than a stored token column: nothing to migrate in the viva window, constant-time to verify, and rotating the key revokes every link at once. What it does not do is revoke one link; a per-link revocation would need the column.
+
+
 # ADR-018: The Stored Partner Rating is Maintained by the Service and Recomputed From Source — the Trigger That Was Meant To Do It Could Never Have Fired Correctly
 
 **Status:** Accepted
@@ -1131,3 +1138,16 @@ The second bug was blunter: `partner_supply` filtered on `p.is_verified`, a bool
 **All three endpoints returned 500 on every call while the 47 unit tests were green**, and that is the part worth keeping. The unit fixture monkeypatches every function in `analytics_repository`, which is the right design for testing the service's arithmetic and its refusal to invent numbers, and it makes those tests *structurally incapable* of noticing that no query in the module could execute. Same class of lesson as the escaped-exception-before-cleanup bug in `check_dispatch_capacity.py`: a suite that passes while telling you nothing about the thing you care about. The repair was not more unit tests — it was a 50-line throwaway that ran all twelve queries against the live schema, which surfaced all ten failures in one pass and was deleted once both causes were fixed.
 
 
+# ADR-022: A payment is marked paid by the side that received the money, never by the payer
+
+**Date:** 2026-11-13 · **Status:** Accepted
+
+**Context.** The first cut of `/payments` (commit 1041d82) let any caller with access to the job confirm a payment, and the owner web page called confirm the moment the owner tapped "Pay via UPI" or "Paid cash". It also took `amount` from the request body. Together that meant an owner could open a Rs 1 order for a Rs 899 job and mark it paid without paying anything. There is no payment gateway, so the server has no independent evidence that money moved.
+
+**Decision.**
+1. `POST /payments/{id}/confirm` is allowed to the assigned partner (`get_responsible_assignment`) and admins only. The owner gets 403. Without a gateway webhook, the payee is the only party whose word that money arrived is worth recording.
+2. The amount is never a request field. It is `price_final`, else `price_estimate`; a job with neither is refused (409 `INVALID_PAYMENT_AMOUNT`) instead of billed a made-up Rs 499 default. Principle 5 (never trust identity from the body) applied to money.
+3. `GET /payments/job/{id}` is read-only and answers 404 `PAYMENT_NOT_FOUND` when none exists. It used to insert a pending row on read.
+4. Admin is `identity.role == "admin"` (ADR-020); the first cut checked for `ops`/`super_admin`, which no identity ever carries, so admins were locked out.
+
+**Consequences.** Settlement is a partner action on the completed-job screen (web `ActiveJobPage`, mobile `PartnerJobDoneScreen`). A dishonest partner could still mark an unpaid bill paid, but that only harms the partner. When a real gateway arrives, its webhook becomes a third confirmer and this rule stays as it is.

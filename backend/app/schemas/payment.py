@@ -17,8 +17,10 @@ class PaymentBase(BaseModel):
 
 
 class PaymentCreate(BaseModel):
+    # No amount field: the figure always comes from the job row
+    # (payment_service._job_amount). An `amount` a client still sends is
+    # ignored, not trusted.
     job_id: uuid.UUID
-    amount: Optional[Decimal] = Field(default=None, ge=0)
     payment_method: Optional[PaymentMethod] = "upi"
     gateway_ref_id: Optional[str] = Field(default=None, max_length=100)
 

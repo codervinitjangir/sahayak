@@ -80,19 +80,18 @@ export const JobTrackingPage: React.FC = () => {
   });
 
   const [shareCopied, setShareCopied] = useState<boolean>(false);
-  const [isSettlingPayment, setIsSettlingPayment] = useState<boolean>(false);
   const [showQrModal, setShowQrModal] = useState<boolean>(false);
 
   const paymentQuery = useQuery({
     queryKey: ['jobs', jobId, 'payment'],
-    queryFn: () => (jobId ? paymentsService.getJobPayment(jobId) : Promise.reject('No jobId')),
+    queryFn: () => (jobId ? paymentsService.getOrOpenJobPayment(jobId) : Promise.reject('No jobId')),
     enabled: Boolean(jobId) && job?.status === 'completed',
     refetchInterval: (query) => (query.state.data?.status === 'paid' ? false : 3000),
   });
 
   const handleShareLiveStatus = async () => {
-    if (!job) return;
-    const shareUrl = `${window.location.origin}/track/${job.id}`;
+    if (!job?.share_token) return;
+    const shareUrl = `${window.location.origin}/track/${job.id}?t=${encodeURIComponent(job.share_token)}`;
     const text = `Track my roadside assistance live on Sahayak: ${shareUrl}`;
     if (typeof navigator.share === 'function') {
       try {
@@ -104,22 +103,6 @@ export const JobTrackingPage: React.FC = () => {
       await navigator.clipboard.writeText(shareUrl);
       setShareCopied(true);
       setTimeout(() => setShareCopied(false), 2500);
-    }
-  };
-
-  const handleConfirmPayment = async (method: 'upi' | 'cash') => {
-    if (!paymentQuery.data) return;
-    setIsSettlingPayment(true);
-    try {
-      await paymentsService.confirmPayment(paymentQuery.data.id, {
-        payment_method: method,
-        gateway_ref_id: method === 'cash' ? 'CASH-SETTLED' : undefined,
-      });
-      await paymentQuery.refetch();
-    } catch (err: unknown) {
-      console.error('Payment error', err);
-    } finally {
-      setIsSettlingPayment(false);
     }
   };
 
@@ -225,6 +208,7 @@ export const JobTrackingPage: React.FC = () => {
           <button
             type="button"
             onClick={handleShareLiveStatus}
+            disabled={!job.share_token}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-control border border-line bg-slate-50 hover:bg-slate-100 text-xs font-semibold text-ink transition-colors"
             title="Share live tracking link with family or friends"
           >
@@ -397,7 +381,7 @@ export const JobTrackingPage: React.FC = () => {
               <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-control flex items-center gap-2 text-emerald-900 text-sm font-medium">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
                 <span>
-                  Bill settled (₹{Number(paymentQuery.data.amount || job.price_final || 0)} via {paymentQuery.data.payment_method?.toUpperCase() || 'UPI'}). Receipt verified.
+                  Bill settled (₹{Number(paymentQuery.data.amount || job.price_final || 0)} via {paymentQuery.data.payment_method?.toUpperCase() || 'UPI'}). Confirmed by your mechanic.
                 </span>
               </div>
             ) : (
@@ -409,7 +393,6 @@ export const JobTrackingPage: React.FC = () => {
                   {paymentQuery.data.upi_intent && (
                     <a
                       href={paymentQuery.data.upi_intent}
-                      onClick={() => handleConfirmPayment('upi')}
                       className="inline-flex items-center gap-1.5 px-4 py-2 rounded-control bg-brand-700 text-white font-semibold text-sm hover:bg-brand-800 transition-colors"
                     >
                       <CreditCard className="w-4 h-4" />
@@ -426,15 +409,10 @@ export const JobTrackingPage: React.FC = () => {
                       Show UPI QR
                     </button>
                   )}
-                  <button
-                    type="button"
-                    disabled={isSettlingPayment}
-                    onClick={() => handleConfirmPayment('cash')}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-control border border-line bg-white hover:bg-slate-100 font-semibold text-sm text-ink transition-colors disabled:opacity-60"
-                  >
-                    Paid Cash to Partner
-                  </button>
                 </div>
+                <p className="text-xs text-ink-muted">
+                  Paying cash? Hand it to your mechanic. This bill is marked settled once they confirm they received it.
+                </p>
 
                 {showQrModal && paymentQuery.data.upi_intent && (
                   <div className="p-4 bg-white border border-line rounded-control text-center space-y-2 mt-2">
@@ -445,13 +423,6 @@ export const JobTrackingPage: React.FC = () => {
                       className="w-44 h-44 mx-auto border border-line p-2 rounded"
                     />
                     <p className="text-xs text-ink-muted font-mono">sahayak.dispatch@upi</p>
-                    <button
-                      type="button"
-                      onClick={() => handleConfirmPayment('upi')}
-                      className="text-xs text-brand-700 font-semibold hover:underline block mx-auto"
-                    >
-                      I have completed this payment
-                    </button>
                   </div>
                 )}
               </div>

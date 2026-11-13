@@ -44,6 +44,8 @@ export interface BackendJob {
   cancellation_reason?: string | null;
   /** Owner-only. Partners prove the code through POST /jobs/{id}/start. */
   start_code?: string | null;
+  /** Owner-only. Required as ?t= on the public /track link. */
+  share_token?: string | null;
   current_assignment?: CurrentAssignment | null;
   timeline?: Array<{
     status: string;

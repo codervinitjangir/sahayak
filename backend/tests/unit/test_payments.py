@@ -35,7 +35,7 @@ async def test_get_latest_job_payment_job_not_found():
 
 
 @pytest.mark.asyncio
-async def test_get_latest_job_payment_creates_pending_if_none_exists():
+async def test_get_latest_job_payment_returns_existing_order():
     db = AsyncMock()
     owner_id = uuid.uuid4()
     identity = Identity(role="user", local_id=owner_id, auth_user_id="auth-owner")
@@ -58,8 +58,7 @@ async def test_get_latest_job_payment_creates_pending_if_none_exists():
 
     with patch("app.repositories.job_repository.get_job_by_id", return_value=mock_job), \
          patch("app.repositories.job_repository.get_responsible_assignment", return_value=None), \
-         patch("app.repositories.payment_repository.get_latest_payment_for_job", return_value=None), \
-         patch("app.repositories.payment_repository.create_payment", return_value=mock_created_payment):
+         patch("app.repositories.payment_repository.get_latest_payment_for_job", return_value=mock_created_payment):
 
         res = await payment_service.get_latest_job_payment(db, job_id, identity)
         assert res.job_id == job_id
@@ -91,7 +90,8 @@ async def test_create_or_initiate_payment_cancelled_conflict():
 async def test_confirm_payment_success():
     db = AsyncMock()
     owner_id = uuid.uuid4()
-    identity = Identity(role="user", local_id=owner_id, auth_user_id="auth-owner")
+    partner_id = uuid.uuid4()
+    identity = Identity(role="partner", local_id=partner_id, auth_user_id="auth-partner")
     job_id = uuid.uuid4()
     payment_id = uuid.uuid4()
 
@@ -116,7 +116,8 @@ async def test_confirm_payment_success():
 
     with patch("app.repositories.payment_repository.get_payment_by_id", return_value=mock_pending), \
          patch("app.repositories.job_repository.get_job_by_id", return_value=mock_job), \
-         patch("app.repositories.job_repository.get_responsible_assignment", return_value=None), \
+         patch("app.repositories.job_repository.get_responsible_assignment",
+               return_value=JobAssignment(id=uuid.uuid4(), job_id=job_id, partner_id=partner_id, status="completed")), \
          patch("app.repositories.payment_repository.update_payment", return_value=mock_paid):
 
         payload = PaymentConfirmRequest(gateway_ref_id="UPI-TXN-12345", payment_method="upi")
