@@ -2222,6 +2222,8 @@ calls (26 web call sites, was 23).
   - Unauthenticated endpoint for trip sharing with family and trusted contacts.
   - **Requires `t`** (changed 2026-11-13). The owner's `GET /jobs/{job_id}` now returns `share_token` (owner-only, like `start_code`); the share link is `/track/{job_id}?t={share_token}`. Missing or wrong `t` → 404 `JOB_NOT_FOUND`, identical to a missing job. Reason: every partner a job is *offered* to knows its id, and ADR-017 withholds pickup coordinates until acceptance.
   - `partner_name` / rating / ETA / live coordinates describe the partner who **accepted**, never an unanswered offer.
+  - Once the job is `completed` or `cancelled` the response carries only `id`, `status`, `service_name`, `requested_at`, `completed_at` (everything else `null`). 24 h after it ended the link answers 404.
+  - Rate limited: 60 requests/minute per caller IP; beyond that 429 `RATE_LIMITED` with `Retry-After: 60`. The web page keeps the last good data through a failed poll.
   - Returns sanitized breakdown details: status, service_name, masked vehicle_number, pickup_lat/lng, partner_name, partner_rating, live partner coordinates (from Redis), estimated arrival minutes, and emergency numbers (`112`, `+91 80 4567 8900`).
   - Owner phone, partner phone, and secret start code are strictly omitted.
 

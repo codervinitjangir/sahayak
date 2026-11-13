@@ -834,6 +834,8 @@ Full regression: **205 unit tests** (197 + 8) and **520 live assertions** across
 
 The endpoint now requires `?t=`, an HMAC-SHA256 of the job id (key `SHARE_LINK_SECRET`, falling back to the Supabase secret key), released only to the owner in `GET /jobs/{id}` on the same gate as `start_code`. A wrong or missing token is the same 404 as a missing job. The partner shown is `get_responsible_assignment`. Stateless rather than a stored token column: nothing to migrate in the viva window, constant-time to verify, and rotating the key revokes every link at once. What it does not do is revoke one link; a per-link revocation would need the column.
 
+Follow-up the same week: once a job is completed or cancelled the link answers status only, and 24 h after it ended it is a 404, so a forwarded link does not keep saying where a car was. The endpoint is rate limited at 60/min per caller (Redis fixed window, fails open because it is read-only), which also makes brute-forcing a 128-bit token pointless twice over.
+
 
 # ADR-018: The Stored Partner Rating is Maintained by the Service and Recomputed From Source — the Trigger That Was Meant To Do It Could Never Have Fired Correctly
 

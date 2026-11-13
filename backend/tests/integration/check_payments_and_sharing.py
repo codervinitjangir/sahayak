@@ -458,6 +458,16 @@ async def main() -> None:                          # noqa: C901 - one linear scr
         section("3. Payments (ADR-022)")
         job_id = await job_through_to(c, "paid", "completed", price=899)
 
+        r = await c.get(f"/api/v1/jobs/{job_id}", headers=hdr(owner_token))
+        done_share = (data_of(r) or {}).get("share_token")
+        r = await c.get(f"/api/v1/jobs/{job_id}/public-tracking", params={"t": done_share})
+        d = data_of(r) or {}
+        check("a finished job's link shows status only",
+              r.status_code == 200 and d.get("status") == "completed"
+              and d.get("pickup_lat") is None and d.get("pickup_address_text") is None
+              and d.get("partner_name") is None and d.get("vehicle_number") is None,
+              f"HTTP {r.status_code} {code_of(r)} keys={sorted(k for k, v in d.items() if v is not None)}")
+
         r = await c.get(f"/api/v1/payments/job/{job_id}", headers=hdr(owner_token))
         check("GET before any order -> 404 PAYMENT_NOT_FOUND",
               r.status_code == 404 and code_of(r) == "PAYMENT_NOT_FOUND", f"HTTP {r.status_code} {code_of(r)}")

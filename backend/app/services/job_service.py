@@ -6,7 +6,7 @@ and delegate here. This module owns the rules (does this vehicle belong to this
 user? is this service code real?), the transaction boundary, and the assembly of
 the read model. Every database call goes through app/repositories/job_repository.
 """
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import hashlib
 import hmac
 import logging
@@ -1255,6 +1255,13 @@ async def get_job_partner_location(
 
 _PROCESS_SHARE_KEY = secrets.token_bytes(32)
 
+# Statuses after which a share link shows status only. no_match_found is left
+# out on purpose: the owner can still cancel or re-request, and the family
+# watching then still needs the pickup point.
+SHARE_LINK_ENDED_STATUSES = ("completed", "cancelled")
+# How long a share link keeps answering (status only) after the job ends.
+SHARE_LINK_AFTER_END = timedelta(hours=24)
+
 
 def _share_key() -> bytes:
     """Key for share-link tokens.
@@ -1306,6 +1313,23 @@ async def get_public_job_tracking(
         raise NotFoundError(ErrorCode.JOB_NOT_FOUND, "Job not found")
 
     service = await service_repository.get_service_by_id(db, job.service_id)
+    service_name = service.name if service else "Roadside Assistance"
+
+    # Once the job is over there is nobody to watch. A forwarded link keeps
+    # working for a day so a relative can see "completed", but it no longer
+    # says where the car was, which car, or who came; after that it is dead.
+    if job.status in SHARE_LINK_ENDED_STATUSES:
+        ended_at = job.completed_at or job.cancelled_at
+        if ended_at is not None and datetime.now(timezone.utc) - ended_at > SHARE_LINK_AFTER_END:
+            raise NotFoundError(ErrorCode.JOB_NOT_FOUND, "Job not found")
+        return PublicJobTrackingResponse(
+            id=job.id,
+            status=job.status,
+            service_name=service_name,
+            requested_at=job.requested_at,
+            completed_at=job.completed_at,
+        )
+
     pickup_lat, pickup_lng = _pickup_coordinates(job)
 
     partner_name: Optional[str] = None
@@ -1349,7 +1373,7 @@ async def get_public_job_tracking(
     return PublicJobTrackingResponse(
         id=job.id,
         status=job.status,
-        service_name=service.name if service else "Roadside Assistance",
+        service_name=service_name,
         vehicle_number=job.vehicle_number,
         pickup_address_text=job.pickup_address_text,
         pickup_lat=pickup_lat,

@@ -26,6 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api import API_V1_PREFIX
 from app.config.database import get_db
 from app.schemas.common import ApiResponse, ErrorResponse, envelope
+from app.utils.rate_limit import limit_public_tracking
 from app.schemas.job import (
     JobCancelRequest,
     JobHistoryResponse,
@@ -223,6 +224,7 @@ async def get_public_job_tracking(
         max_length=64,
         description="Share token from the owner's GET /jobs/{job_id} (share_token).",
     ),
+    _limited: None = Depends(limit_public_tracking),
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[PublicJobTrackingResponse]:
     """Return sanitized, unauthenticated live tracking for family and friends.

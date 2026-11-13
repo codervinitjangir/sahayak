@@ -28,7 +28,6 @@ export const PublicTrackPage: React.FC = () => {
   const {
     data: tracking,
     isLoading,
-    error,
     isFetching,
   } = useQuery({
     queryKey: ['public-tracking', jobId, token],
@@ -55,7 +54,9 @@ export const PublicTrackPage: React.FC = () => {
     );
   }
 
-  if (error || !tracking) {
+  // A failed poll (429, a blip) keeps showing the last good data; only a first
+  // load with nothing to show falls through to "not found".
+  if (!tracking) {
     return (
       <div className="min-h-screen bg-slate-50 py-12 px-4 flex items-center justify-center">
         <div className="max-w-md w-full bg-white border border-line rounded-card p-6 text-center space-y-4 shadow-sm">

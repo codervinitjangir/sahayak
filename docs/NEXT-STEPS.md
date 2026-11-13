@@ -174,7 +174,7 @@ regression bar in `CLAUDE.md` applies before anyone calls it done.
 | R4 | [x] (2026-11-14: 472 unit + 828 live, all green) **Full regression for backend work added today** (payments, partner-location, vehicle PATCH/DELETE, public tracking, `base_price`, start code, idempotency) | Money, auth and concurrency paths; migrations `0002`, `0003`, `008` are untracked and must be applied and recorded |
 | R5 | [ ] **Device run, both roles**: request → match → start code → pay → complete → rate, on a physical Android and iPhone | Native maps, GPS accuracy, SMS autofill, `tel:` and share sheets were only ever checked in a browser |
 | R6 | [x] (2026-11-14, migrations included) **Commit.** Large parts of this work are uncommitted in `Sahayak/.git` (web, mobile, backend, docs) | One bad command loses it. Commit in reviewable chunks |
-| R7 | [~] (token + accepted-partner-only done 2026-11-14; expiry and rate limit next) **Public tracking link privacy review** (`/track/:jobId`, unauthenticated) | Confirm it exposes no owner phone/name/exact address beyond what ADR-017 allows, uses an unguessable token (not the raw job id), and stops working after completion |
+| R7 | [x] (2026-11-14: owner-only token, accepted partner only, status-only after the job ends, 404 after 24 h, 60/min rate limit) **Public tracking link privacy review** (`/track/:jobId`, unauthenticated) | Confirm it exposes no owner phone/name/exact address beyond what ADR-017 allows, uses an unguessable token (not the raw job id), and stops working after completion |
 | R8 | [~] (server amount, partner/admin-only confirm, idempotent confirm done 2026-11-14, ADR-022; no gateway yet) **Payments hardening**: server-side confirmation only, signature-checked webhooks if a gateway is added, integer paise, idempotent confirm, duplicate and out-of-order tests | `POST /payments/{id}/confirm` as built relies on who calls it; decide whether the partner or owner confirms and prevent either from forging the other |
 
 ### 9.2 Product gaps
@@ -228,7 +228,7 @@ Missing, in suggested order:
   are not Sahayak partners; replace them with real photos or illustrations before launch.
 * No SEO basics beyond `<title>`/meta: sitemap, robots, social preview image.
 * No error boundary reporting and no uptime monitoring.
-* Rate-limit and abuse protection on the public `/track/:jobId` endpoint.
+* [x] Rate-limit on the public `/track/:jobId` endpoint (60/min per IP, 2026-11-14).
 
 ### 9.6 Engineering hygiene
 
@@ -252,7 +252,7 @@ defects, fixed in `fix/payments-sharing-review`. Still unverified on a physical 
 ### 9.8 Build order (timeline lifted 2026-11-14)
 
 Code work, in order:
-1. R7 remainder: public link stops after the job ends, plus a rate limit.
+1. [x] R7 remainder: public link stops after the job ends, plus a rate limit.
 2. G1 radius escalation.
 3. Admin items 1–3: live jobs board with staff cancel, owner/partner management, audit log.
 4. G8 profile edit and G10 account deletion / data export.
