@@ -9,12 +9,16 @@ export const EMERGENCY_NUMBER = "112";
 
 type State = "idle" | "locating" | "error";
 
+interface SafetyActionsProps {
+  jobId?: string;
+}
+
 /**
  * Two actions that need no backend and no account: call the emergency number and
  * share your current position with someone you trust. The share goes through the
- * system share sheet as a plain maps link; nothing is sent to Sahayak.
+ * system share sheet as a live tracking link or maps link.
  */
-export default function SafetyActions() {
+export default function SafetyActions({ jobId }: SafetyActionsProps = {}) {
   const [state, setState] = useState<State>("idle");
 
   const call = () => {
@@ -24,6 +28,14 @@ export default function SafetyActions() {
   const shareLocation = async () => {
     setState("locating");
     try {
+      if (jobId) {
+        const webBase = process.env.EXPO_PUBLIC_WEB_URL || "https://sahayak.app";
+        const url = `${webBase}/track/${jobId}`;
+        await Share.share({ message: `Track my roadside assistance live on Sahayak: ${url}` });
+        setState("idle");
+        return;
+      }
+
       const perm = await Location.requestForegroundPermissionsAsync();
       if (perm.status !== "granted") {
         setState("error");

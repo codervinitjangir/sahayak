@@ -45,6 +45,27 @@ export interface PartnerLiveLocation {
   updated_at?: string | null;
 }
 
+export interface PublicJobTracking {
+  id: string;
+  status: JobStatus;
+  service_name?: string | null;
+  vehicle_number?: string | null;
+  pickup_address_text?: string | null;
+  pickup_lat?: number | null;
+  pickup_lng?: number | null;
+  partner_name?: string | null;
+  partner_rating?: number | null;
+  partner_rating_count: number;
+  partner_lat?: number | null;
+  partner_lng?: number | null;
+  partner_location_updated_at?: string | null;
+  estimated_arrival_min?: number | null;
+  emergency_helpline: string;
+  sos_number: string;
+  requested_at: string;
+  completed_at?: string | null;
+}
+
 export interface JobAssignment {
   id: string;
   job_id: string;

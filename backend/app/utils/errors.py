@@ -191,6 +191,12 @@ class ErrorCode:
     # either a valid window or a 403.
     INVALID_DATE_RANGE = "INVALID_DATE_RANGE"
 
+    # Payments
+    PAYMENT_NOT_FOUND = "PAYMENT_NOT_FOUND"
+    PAYMENT_ALREADY_SETTLED = "PAYMENT_ALREADY_SETTLED"
+    INVALID_PAYMENT_AMOUNT = "INVALID_PAYMENT_AMOUNT"
+    INVALID_PAYMENT_STATE = "INVALID_PAYMENT_STATE"
+
 
 # Codes for HTTPExceptions raised by FastAPI itself (unknown route, unsupported
 # method) or by third-party dependencies, which never went through AppError.

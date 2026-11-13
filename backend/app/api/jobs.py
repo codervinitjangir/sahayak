@@ -33,6 +33,7 @@ from app.schemas.job import (
     JobCreateRequest,
     JobDetailResponse,
     JobPartnerLocationResponse,
+    PublicJobTrackingResponse,
     JobResponse,
     JobStartRequest,
     JobStatusTransitionRequest,
@@ -207,6 +208,26 @@ async def get_job_partner_location(
     """
     location = await job_service.get_job_partner_location(db, job_id, identity)
     return envelope(location)
+
+
+@router.get(
+    "/{job_id}/public-tracking",
+    response_model=ApiResponse[PublicJobTrackingResponse],
+    status_code=status.HTTP_200_OK,
+    summary="Get sanitized public live tracking details for trip sharing",
+)
+async def get_public_job_tracking(
+    job_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[PublicJobTrackingResponse]:
+    """Return sanitized, unauthenticated live tracking for family and friends.
+
+    Excludes owner personal phone and private start codes while providing live
+    partner GPS, vehicle, service, and emergency assistance numbers.
+    """
+    tracking = await job_service.get_public_job_tracking(db, job_id)
+    return envelope(tracking)
+
 
 
 @router.post(

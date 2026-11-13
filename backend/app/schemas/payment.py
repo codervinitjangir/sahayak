@@ -2,23 +2,40 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 from typing import Optional, Literal
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+
+
+PaymentMethod = Literal["upi", "cash", "card", "netbanking"]
+PaymentStatus = Literal["pending", "paid", "failed", "refunded"]
 
 
 class PaymentBase(BaseModel):
-    amount: Optional[Decimal] = None
-    status: Optional[Literal["pending", "paid", "failed", "refunded"]] = "pending"
-    payment_method: Optional[str] = None
-    gateway_ref_id: Optional[str] = None
+    amount: Optional[Decimal] = Field(default=None, ge=0)
+    status: Optional[PaymentStatus] = "pending"
+    payment_method: Optional[PaymentMethod] = None
+    gateway_ref_id: Optional[str] = Field(default=None, max_length=100)
 
 
-class PaymentCreate(PaymentBase):
+class PaymentCreate(BaseModel):
     job_id: uuid.UUID
+    amount: Optional[Decimal] = Field(default=None, ge=0)
+    payment_method: Optional[PaymentMethod] = "upi"
+    gateway_ref_id: Optional[str] = Field(default=None, max_length=100)
 
 
-class PaymentResponse(PaymentBase):
+class PaymentConfirmRequest(BaseModel):
+    gateway_ref_id: Optional[str] = Field(default=None, max_length=100)
+    payment_method: Optional[PaymentMethod] = None
+
+
+class PaymentResponse(BaseModel):
     id: uuid.UUID
     job_id: uuid.UUID
+    amount: Optional[Decimal] = None
+    status: PaymentStatus
+    payment_method: Optional[str] = None
+    gateway_ref_id: Optional[str] = None
+    upi_intent: Optional[str] = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

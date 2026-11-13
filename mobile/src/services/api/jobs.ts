@@ -196,6 +196,31 @@ export const jobsApi = {
       }>(`/jobs/${jobId}/partner-location`)
       .then((r) => r.data),
 
+  /** Get public trip tracking for family (GET /api/v1/jobs/{jobId}/public-tracking) */
+  getPublicTracking: (jobId: string) =>
+    apiClient
+      .get<{
+        id: string;
+        status: string;
+        service_name?: string | null;
+        vehicle_number?: string | null;
+        pickup_address_text?: string | null;
+        pickup_lat?: number | null;
+        pickup_lng?: number | null;
+        partner_name?: string | null;
+        partner_rating?: number | null;
+        partner_rating_count: number;
+        partner_lat?: number | null;
+        partner_lng?: number | null;
+        partner_location_updated_at?: string | null;
+        estimated_arrival_min?: number | null;
+        emergency_helpline: string;
+        sos_number: string;
+        requested_at: string;
+        completed_at?: string | null;
+      }>(`/jobs/${jobId}/public-tracking`)
+      .then((r) => r.data),
+
   /** Submit rating for completed job (POST /api/v1/jobs/{jobId}/ratings) */
   submitRating: (jobId: string, rating: number, comment?: string) =>
     apiClient

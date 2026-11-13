@@ -41,6 +41,7 @@ from app.schemas.job import (
     JobHistoryItem,
     JobHistoryResponse,
     JobPartnerLocationResponse,
+    PublicJobTrackingResponse,
     JobStatusTransitionRequest,
     JobStatusTransitionResponse,
     JobTimelineEntry,
@@ -1244,3 +1245,77 @@ async def get_job_partner_location(
         longitude=lng,
         updated_at=updated_at,
     )
+
+
+async def get_public_job_tracking(
+    db: AsyncSession, job_id: uuid.UUID
+) -> PublicJobTrackingResponse:
+    """Read-only sanitized public tracking for live trip sharing with family.
+
+    Unauthenticated endpoint: does not require a bearer token. Does not leak
+    owner phone or name, nor the driver's start_code.
+    """
+    job = await job_repository.get_job_by_id(db, job_id)
+    if job is None:
+        raise NotFoundError(ErrorCode.JOB_NOT_FOUND, "Job not found")
+
+    service = await service_repository.get_service_by_id(db, job.service_id)
+    pickup_lat, pickup_lng = _pickup_coordinates(job)
+
+    partner_name: Optional[str] = None
+    partner_rating: Optional[float] = None
+    partner_rating_count: int = 0
+    estimated_arrival_min: Optional[int] = None
+    partner_lat: Optional[float] = None
+    partner_lng: Optional[float] = None
+    partner_location_updated_at: Optional[str] = None
+
+    assignment = await job_repository.get_latest_assignment(db, job.id)
+    if assignment is not None and assignment.partner_id is not None:
+        partner = await job_repository.get_partner_by_id(db, assignment.partner_id)
+        if partner:
+            partner_name = partner.name
+            partner_rating = float(partner.rating_avg) if partner.rating_avg is not None else None
+            partner_rating_count = partner.rating_count or 0
+        estimated_arrival_min = assignment.estimated_arrival_min
+
+        # If active job, read live coordinates from Redis
+        if job.status in ("assigned", "partner_en_route", "in_progress"):
+            client = get_redis()
+            try:
+                positions = await client.geopos(PARTNER_LOCATIONS_KEY, str(assignment.partner_id))
+                if positions and positions[0] is not None:
+                    lng_val, lat_val = positions[0]
+                    partner_lat = float(lat_val)
+                    partner_lng = float(lng_val)
+                ts_str = await client.get(location_updated_at_key(assignment.partner_id))
+                if ts_str:
+                    try:
+                        dt = datetime.fromtimestamp(float(ts_str), timezone.utc)
+                        partner_location_updated_at = dt.isoformat()
+                    except (ValueError, TypeError):
+                        pass
+            except Exception as exc:
+                logging.getLogger(__name__).warning("Redis lookup failed in public tracking: %s", exc)
+
+    return PublicJobTrackingResponse(
+        id=job.id,
+        status=job.status,
+        service_name=service.name if service else "Roadside Assistance",
+        vehicle_number=job.vehicle_number,
+        pickup_address_text=job.pickup_address_text,
+        pickup_lat=pickup_lat,
+        pickup_lng=pickup_lng,
+        partner_name=partner_name,
+        partner_rating=partner_rating,
+        partner_rating_count=partner_rating_count,
+        partner_lat=partner_lat,
+        partner_lng=partner_lng,
+        partner_location_updated_at=partner_location_updated_at,
+        estimated_arrival_min=estimated_arrival_min,
+        emergency_helpline="+91 80 4567 8900",
+        sos_number="112",
+        requested_at=job.requested_at,
+        completed_at=job.completed_at,
+    )
+

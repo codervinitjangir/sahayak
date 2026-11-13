@@ -12,6 +12,7 @@ import {
   JobCancelResponse,
   JobStatusTransitionResponse,
   PartnerLiveLocation,
+  PublicJobTracking,
 } from '../types/jobs';
 
 /**
@@ -243,6 +244,16 @@ export const jobsService = {
    */
   async getPartnerLocation(jobId: string): Promise<PartnerLiveLocation> {
     const res = await apiClient<PartnerLiveLocation>(`/jobs/${jobId}/partner-location`, {
+      method: 'GET',
+    });
+    return res.data;
+  },
+
+  /**
+   * Sanitized public trip tracking for family and friends. Does not require sign-in.
+   */
+  async getPublicTracking(jobId: string): Promise<PublicJobTracking> {
+    const res = await apiClient<PublicJobTracking>(`/jobs/${jobId}/public-tracking`, {
       method: 'GET',
     });
     return res.data;

@@ -465,3 +465,34 @@ class JobPartnerLocationResponse(BaseModel):
     updated_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class PublicJobTrackingResponse(BaseModel):
+    """Sanitized public tracking projection for trip / live status sharing.
+
+    Allows family members, friends, or emergency dispatchers to monitor rescue
+    progress without an account or login. All owner PII (phone, full name) and
+    job secrets (such as the start code) are strictly excluded.
+    """
+
+    id: uuid.UUID
+    status: str
+    service_name: Optional[str] = None
+    vehicle_number: Optional[str] = None
+    pickup_address_text: Optional[str] = None
+    pickup_lat: Optional[float] = None
+    pickup_lng: Optional[float] = None
+    partner_name: Optional[str] = None
+    partner_rating: Optional[float] = None
+    partner_rating_count: int = 0
+    partner_lat: Optional[float] = None
+    partner_lng: Optional[float] = None
+    partner_location_updated_at: Optional[str] = None
+    estimated_arrival_min: Optional[int] = None
+    emergency_helpline: str = "+91 80 4567 8900"
+    sos_number: str = "112"
+    requested_at: datetime
+    completed_at: Optional[datetime] = None
+
+    model_config = ConfigDict(extra="forbid")
+

@@ -9,6 +9,7 @@ import { LandingPage } from '../pages/landing/LandingPage';
 import { LoginPage } from '../pages/auth/LoginPage';
 import { TermsPage, PrivacyPage } from '../pages/legal/LegalPage';
 import { OwnerSignup } from '../pages/owner/OwnerSignup';
+import { PublicTrackPage } from '../pages/public/PublicTrackPage';
 const PartnerSignup = lazy(() => import('../pages/partner/PartnerSignup').then((m) => ({ default: m.PartnerSignup })));
 const PartnerConsole = lazy(() => import('../pages/partner/PartnerConsole').then((m) => ({ default: m.PartnerConsole })));
 const OffersPage = lazy(() => import('../pages/partner/OffersPage').then((m) => ({ default: m.OffersPage })));
@@ -30,6 +31,7 @@ export const AppRoutes: React.FC = () => {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/terms" element={<TermsPage />} />
       <Route path="/privacy" element={<PrivacyPage />} />
+      <Route path="/track/:jobId" element={<PublicTrackPage />} />
       <Route path="/signup" element={<Navigate to="/owner/signup" replace />} />
       <Route path="/owner/signup" element={<OwnerSignup />} />
       <Route path="/owner/request" element={<RequestHelpPage />} />

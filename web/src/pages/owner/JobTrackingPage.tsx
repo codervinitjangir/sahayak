@@ -1,7 +1,20 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, Phone, UserCheck, Shield, Clock, AlertTriangle, Navigation, CheckCircle2 } from 'lucide-react';
+import {
+  ArrowLeft,
+  Phone,
+  UserCheck,
+  Shield,
+  Clock,
+  AlertTriangle,
+  Navigation,
+  CheckCircle2,
+  Share2,
+  CreditCard,
+  QrCode,
+  Check,
+} from 'lucide-react';
 import { useJob, useCancelJob } from '../../features/jobs/hooks';
 import { StatusBadge } from '../../components/StatusBadge';
 import { JobTimeline } from '../../components/JobTimeline';
@@ -10,6 +23,7 @@ import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import { StarRating } from '../../components/ui/StarRating';
 import { SafetyStrip } from '../../components/SafetyStrip';
 import { jobsService } from '../../services/jobs.service';
+import { paymentsService } from '../../services/payments.service';
 import { Job, JobStatus, JobTimelineEvent } from '../../types/jobs';
 
 function extractTimestamps(job: Job): Partial<Record<JobStatus, string | undefined>> {
@@ -64,6 +78,50 @@ export const JobTrackingPage: React.FC = () => {
     enabled: Boolean(jobId) && ['assigned', 'partner_en_route', 'in_progress'].includes(job?.status || ''),
     refetchInterval: 5000,
   });
+
+  const [shareCopied, setShareCopied] = useState<boolean>(false);
+  const [isSettlingPayment, setIsSettlingPayment] = useState<boolean>(false);
+  const [showQrModal, setShowQrModal] = useState<boolean>(false);
+
+  const paymentQuery = useQuery({
+    queryKey: ['jobs', jobId, 'payment'],
+    queryFn: () => (jobId ? paymentsService.getJobPayment(jobId) : Promise.reject('No jobId')),
+    enabled: Boolean(jobId) && job?.status === 'completed',
+    refetchInterval: (query) => (query.state.data?.status === 'paid' ? false : 3000),
+  });
+
+  const handleShareLiveStatus = async () => {
+    if (!job) return;
+    const shareUrl = `${window.location.origin}/track/${job.id}`;
+    const text = `Track my roadside assistance live on Sahayak: ${shareUrl}`;
+    if (typeof navigator.share === 'function') {
+      try {
+        await navigator.share({ title: 'My Rescue Status', text, url: shareUrl });
+      } catch {
+        // Dismissal is fine
+      }
+    } else {
+      await navigator.clipboard.writeText(shareUrl);
+      setShareCopied(true);
+      setTimeout(() => setShareCopied(false), 2500);
+    }
+  };
+
+  const handleConfirmPayment = async (method: 'upi' | 'cash') => {
+    if (!paymentQuery.data) return;
+    setIsSettlingPayment(true);
+    try {
+      await paymentsService.confirmPayment(paymentQuery.data.id, {
+        payment_method: method,
+        gateway_ref_id: method === 'cash' ? 'CASH-SETTLED' : undefined,
+      });
+      await paymentQuery.refetch();
+    } catch (err: unknown) {
+      console.error('Payment error', err);
+    } finally {
+      setIsSettlingPayment(false);
+    }
+  };
 
   const canRate = ratingsQuery.data ? ratingsQuery.data.can_rate : !isRated;
   const alreadyRated = isRated || (ratingsQuery.data ? !ratingsQuery.data.can_rate : false);
@@ -164,6 +222,24 @@ export const JobTrackingPage: React.FC = () => {
               Vehicle: {job.vehicle_number}
             </p>
           </div>
+          <button
+            type="button"
+            onClick={handleShareLiveStatus}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-control border border-line bg-slate-50 hover:bg-slate-100 text-xs font-semibold text-ink transition-colors"
+            title="Share live tracking link with family or friends"
+          >
+            {shareCopied ? (
+              <>
+                <Check className="w-3.5 h-3.5 text-emerald-600" />
+                <span className="text-emerald-700">Link copied!</span>
+              </>
+            ) : (
+              <>
+                <Share2 className="w-3.5 h-3.5 text-brand-700" />
+                <span>Share Live</span>
+              </>
+            )}
+          </button>
         </div>
 
         {/* Dynamic Status Progress Description */}
@@ -303,6 +379,85 @@ export const JobTrackingPage: React.FC = () => {
             </div>
           );
         })()}
+
+        {/* Completed Job Payment Card */}
+        {job.status === 'completed' && paymentQuery.data && (
+          <div className="pt-4 border-t border-line space-y-3">
+            <div className="flex items-center justify-between">
+              <h4 className="font-bold text-ink flex items-center gap-2">
+                <CreditCard className="w-4 h-4 text-brand-700" />
+                Service Settlement & Payment
+              </h4>
+              <span className="text-xs px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider bg-slate-100 text-ink">
+                ₹{Number(paymentQuery.data.amount || job.price_final || 0)}
+              </span>
+            </div>
+
+            {paymentQuery.data.status === 'paid' ? (
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-control flex items-center gap-2 text-emerald-900 text-sm font-medium">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>
+                  Bill settled (₹{Number(paymentQuery.data.amount || job.price_final || 0)} via {paymentQuery.data.payment_method?.toUpperCase() || 'UPI'}). Receipt verified.
+                </span>
+              </div>
+            ) : (
+              <div className="p-4 bg-slate-50 border border-line rounded-control space-y-3">
+                <p className="text-xs text-ink-soft">
+                  The partner has completed the work. Please settle the final amount:
+                </p>
+                <div className="flex flex-wrap gap-2.5">
+                  {paymentQuery.data.upi_intent && (
+                    <a
+                      href={paymentQuery.data.upi_intent}
+                      onClick={() => handleConfirmPayment('upi')}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-control bg-brand-700 text-white font-semibold text-sm hover:bg-brand-800 transition-colors"
+                    >
+                      <CreditCard className="w-4 h-4" />
+                      Pay ₹{Number(paymentQuery.data.amount || job.price_final || 0)} via UPI
+                    </a>
+                  )}
+                  {paymentQuery.data.upi_intent && (
+                    <button
+                      type="button"
+                      onClick={() => setShowQrModal(!showQrModal)}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-control border border-line bg-white hover:bg-slate-100 font-semibold text-sm text-ink transition-colors"
+                    >
+                      <QrCode className="w-4 h-4 text-brand-700" />
+                      Show UPI QR
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    disabled={isSettlingPayment}
+                    onClick={() => handleConfirmPayment('cash')}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-control border border-line bg-white hover:bg-slate-100 font-semibold text-sm text-ink transition-colors disabled:opacity-60"
+                  >
+                    Paid Cash to Partner
+                  </button>
+                </div>
+
+                {showQrModal && paymentQuery.data.upi_intent && (
+                  <div className="p-4 bg-white border border-line rounded-control text-center space-y-2 mt-2">
+                    <p className="text-xs font-bold text-ink">Scan with any UPI App (GPay / PhonePe / Paytm)</p>
+                    <img
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(paymentQuery.data.upi_intent)}`}
+                      alt="UPI Payment QR"
+                      className="w-44 h-44 mx-auto border border-line p-2 rounded"
+                    />
+                    <p className="text-xs text-ink-muted font-mono">sahayak.dispatch@upi</p>
+                    <button
+                      type="button"
+                      onClick={() => handleConfirmPayment('upi')}
+                      className="text-xs text-brand-700 font-semibold hover:underline block mx-auto"
+                    >
+                      I have completed this payment
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Completed Job Rating Card */}
         {job.status === 'completed' && canRate && !alreadyRated && (

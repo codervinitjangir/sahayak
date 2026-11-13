@@ -2216,3 +2216,15 @@ calls (26 web call sites, was 23).
 ### 17.2 Vehicle CRUD
 - `PATCH /api/v1/vehicles/{vehicle_id}`: Update `make`, `model`, `vehicle_type`, or `vehicle_number` (normalised automatically).
 - `DELETE /api/v1/vehicles/{vehicle_id}`: Remove vehicle from caller's account. Refuses with 409 `VEHICLE_HAS_ACTIVE_JOB` if the vehicle is in an active roadside assistance job.
+
+### 17.3 Public Trip / Live Status Sharing
+- `GET /api/v1/jobs/{job_id}/public-tracking`
+  - Unauthenticated endpoint for trip sharing with family and trusted contacts.
+  - Returns sanitized breakdown details: status, service_name, masked vehicle_number, pickup_lat/lng, partner_name, partner_rating, live partner coordinates (from Redis), estimated arrival minutes, and emergency numbers (`112`, `+91 80 4567 8900`).
+  - Owner phone, partner phone, and secret start code are strictly omitted.
+
+### 17.4 In-App Payments & Settlements
+- `POST /api/v1/payments`: Create or initiate payment order (`job_id`, `amount`, `payment_method` ("upi"|"cash"|"card"|"netbanking")). Returns dynamic `upi_intent` link for deep linking to UPI apps (Google Pay, PhonePe, Paytm) and QR code generation.
+- `GET /api/v1/payments/job/{job_id}`: Get payment status for a job (creates initial pending order if absent).
+- `POST /api/v1/payments/{payment_id}/confirm`: Confirm payment completion (`gateway_ref_id`, `payment_method`). Updates status to `paid` idempotently.
+
