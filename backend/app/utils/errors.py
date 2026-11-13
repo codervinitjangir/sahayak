@@ -202,6 +202,15 @@ class ErrorCode:
     INVALID_PAYMENT_AMOUNT = "INVALID_PAYMENT_AMOUNT"
     INVALID_PAYMENT_STATE = "INVALID_PAYMENT_STATE"
 
+    # Disputes (ADR-027)
+    DISPUTE_NOT_FOUND = "DISPUTE_NOT_FOUND"
+    # Only a completed job can be disputed: before that the owner cancels instead.
+    JOB_NOT_DISPUTABLE = "JOB_NOT_DISPUTABLE"
+    # One open dispute per job (partial unique index), so a double tap is a 409.
+    DISPUTE_ALREADY_OPEN = "DISPUTE_ALREADY_OPEN"
+    # Staff tried to resolve a dispute someone already closed.
+    DISPUTE_ALREADY_CLOSED = "DISPUTE_ALREADY_CLOSED"
+
 
 # Codes for HTTPExceptions raised by FastAPI itself (unknown route, unsupported
 # method) or by third-party dependencies, which never went through AppError.

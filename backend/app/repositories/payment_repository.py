@@ -72,3 +72,11 @@ async def update_payment(
     await db.refresh(payment)
     return payment
 
+
+
+async def get_service_name(db: AsyncSession, service_id: int) -> Optional[str]:
+    """Catalogue name for a receipt line."""
+    from app.models.service import Service
+
+    result = await db.execute(select(Service.name).where(Service.id == service_id))
+    return result.scalar_one_or_none()

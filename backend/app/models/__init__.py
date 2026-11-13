@@ -31,3 +31,4 @@ __all__ = [
     "Payment",
     "Notification",
 ]
+from app.models.dispute import JobDispute

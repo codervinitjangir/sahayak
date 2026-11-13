@@ -36,6 +36,8 @@ async def lifespan(app: FastAPI):
     log_event("app_stopped", outcome="success")
 
 
+from app.api.disputes import admin_disputes_router, router as disputes_router
+
 app = FastAPI(
     title="Sahayak API",
     description="Real-Time Emergency Vehicle Assistance & Service Dispatch Platform",
@@ -116,4 +118,8 @@ app.include_router(services_router)
 app.include_router(admin_router)
 app.include_router(admin_partners_router)
 app.include_router(admin_ops_router)
+
+# Problem reports and the staff dispute queue (ADR-027)
+app.include_router(disputes_router)
+app.include_router(admin_disputes_router)
 

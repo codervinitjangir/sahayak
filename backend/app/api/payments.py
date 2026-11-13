@@ -10,6 +10,7 @@ from app.schemas.payment import (
     PaymentCreate,
     PaymentResponse,
 )
+from app.schemas.dispute import ReceiptResponse
 from app.services import payment_service
 from app.services.auth_service import Identity
 from app.utils.auth import get_current_identity
@@ -81,3 +82,18 @@ async def confirm_payment(
     )
     return envelope(payment)
 
+
+
+@router.get(
+    "/{payment_id}/receipt",
+    response_model=ApiResponse[ReceiptResponse],
+    status_code=status.HTTP_200_OK,
+    summary="Receipt for a settled payment (not a GST tax invoice)",
+)
+async def get_payment_receipt(
+    payment_id: uuid.UUID,
+    identity: Identity = Depends(get_current_identity),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[ReceiptResponse]:
+    """409 INVALID_PAYMENT_STATE while the payment is still pending."""
+    return envelope(await payment_service.get_receipt(db, payment_id, identity))

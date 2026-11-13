@@ -435,7 +435,7 @@ async def admin_set_user_suspension(
     summary="Staff actions, newest first",
 )
 async def admin_audit_log(
-    target_type: Optional[str] = Query(None, pattern="^(job|user|partner)$"),
+    target_type: Optional[str] = Query(None, pattern="^(job|user|partner|dispute)$"),
     target_id: Optional[uuid.UUID] = Query(None),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),

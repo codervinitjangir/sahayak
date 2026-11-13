@@ -239,3 +239,47 @@ async def confirm_payment(
 
     return _to_payment_response(payment)
 
+
+
+async def get_receipt(
+    db: AsyncSession, payment_id: uuid.UUID, identity: Identity
+) -> "ReceiptResponse":
+    """Receipt for a settled payment (Phase 3 step D).
+
+    Same access rule as reading the payment: owner, the responsible partner,
+    or an admin; anyone else gets 404. Only a paid or refunded payment has a
+    receipt, since a pending order is a bill, not proof of payment. This is not
+    a GST tax invoice: there is no GSTIN on record, so no tax line is invented.
+    """
+    from app.schemas.dispute import ReceiptResponse
+
+    payment = await payment_repository.get_payment_by_id(db, payment_id)
+    if payment is None:
+        raise NotFoundError(ErrorCode.PAYMENT_NOT_FOUND, "Payment not found")
+    job, _, _ = await _assert_job_access(db, payment.job_id, identity)
+    if payment.status not in ("paid", "refunded"):
+        raise ConflictError(
+            ErrorCode.INVALID_PAYMENT_STATE, "A receipt is only available once the payment is settled"
+        )
+
+    partner_name = None
+    assignment = await job_repository.get_responsible_assignment(db, job.id)
+    if assignment is not None and assignment.partner_id is not None:
+        partner = await job_repository.get_partner_by_id(db, assignment.partner_id)
+        partner_name = partner.name if partner is not None else None
+
+    return ReceiptResponse(
+        receipt_number=f"SHY-{str(payment.id)[:8].upper()}",
+        payment_id=payment.id,
+        job_id=job.id,
+        service_name=await payment_repository.get_service_name(db, job.service_id),
+        vehicle_number=job.vehicle_number,
+        partner_name=partner_name,
+        pickup_address=job.pickup_address_text,
+        completed_at=job.completed_at,
+        paid_at=payment.created_at,
+        amount=payment.amount,
+        payment_method=payment.payment_method,
+        payment_reference=payment.gateway_ref_id,
+        status=payment.status,
+    )
