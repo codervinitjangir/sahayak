@@ -55,7 +55,7 @@ change recorded.
 | 9 | Partner rates the owner (Two-Way Ratings) | [x] Done (2026-11-13) | [backend] | Interactive 1–5 star rating submitted by partner on completion via `PartnerJobDoneScreen.tsx` |
 | 10 | Public Trip Live Sharing (`/track/:jobId?t=`) | [x] Done, hardened 2026-11-14 | [backend] | `GET /api/v1/jobs/{id}/public-tracking?t=<share_token>`; token is owner-only (ADR-017 amendment) |
 | 11 | Extended Searching & Auto-Retry with Radius Escalation | [x] Done (2026-11-14, ADR-023) | [backend] | 10 km &rarr; 20 km &rarr; 35 km expansion; 10-minute active search window with live timer & instant cancel |
-| 12 | Push notifications (FCM & APNs) | [ ] Next Up | [backend] | Events: new offer, assigned, on the way, started, completed, cancelled. Respect ADR-017 |
+| 12 | Push notifications (FCM & APNs) | [~] Server done 2026-11-14 (ADR-026); app wiring needs EAS | [backend] | Events: new offer, assigned, on the way, started, completed, cancelled. Respect ADR-017 |
 | 13 | Hindi and Kannada localization | [ ] Planned | no | Move strings into translation files; native-speaker review |
 
 ## 4. Phase 3: payments & settlements (progress update)
@@ -182,7 +182,7 @@ regression bar in `CLAUDE.md` applies before anyone calls it done.
 | # | Item | Notes |
 |---|---|---|
 | G1 | [x] Extended search with radius escalation (item 11) | Done 2026-11-14: `POST /jobs/{id}/retry-search`, owner app polls every 15 s for 10 min (ADR-023) |
-| G2 | Push notifications (item 12) | Partners miss offers when the app is closed; owners miss "partner on the way" |
+| G2 | [~] Push notifications (item 12) | Server done 2026-11-14 (ADR-026): token registry + after-commit Expo sender, live-tested with the Expo call stubbed. **To finish (needs you):** `cd mobile && npx expo install expo-notifications expo-device`, `eas init` (adds `extra.eas.projectId`), upload FCM key / APNs key in EAS credentials, then after sign-in call `Notifications.getExpoPushTokenAsync({projectId})` and `devicesApi.register(token, Platform.OS)`; call `devicesApi.unregister` in logout |
 | G3 | Partner payouts, tax invoices, refunds and disputes (payments C–E) | Needs the money-holding decision and CA sign-off first |
 | G4 | Partner documents and equipment upload + staff review | Towing partners cannot be enabled except by direct database edit today |
 | G5 | Real vehicle registration check | Today: normalise and de-duplicate only |
@@ -257,7 +257,7 @@ Code work, in order:
 3. [x] Admin items 1–3: live jobs board with staff cancel, owner/partner management, audit log.
 4. [x] G8 profile edit and G10 account deletion / data export.
 5. [x] G9 partner notifications screen on mobile.
-6. G2 push notifications (device token registry + sender; needs FCM/APNs credentials to go live).
+6. [~] G2 push notifications: server done; app wiring needs an EAS project (see G2 row).
 7. E1 CI.
 
 Needs a person, not code: R1 (real contact values and UPI ID), R2 (rotate Maps key), R3 (lawyer),

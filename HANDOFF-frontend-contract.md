@@ -2260,3 +2260,8 @@ All `require_admin`; anyone else 403. Every write is audited in the same transac
 - `PATCH /api/v1/partners/me` body `{name}` (partner only) → `{id, name, phone, verification_status}`.
 - New 403 code anywhere: `ACCOUNT_SUSPENDED` (ADR-024).
 - Web: owner home has a "Your account" section. Mobile: owner Account tab "Your account" card; partner taps their name to edit it.
+
+### 17.8 Push notifications (ADR-026, 2026-11-14)
+- `POST /api/v1/devices/push-token` body `{token, platform?: "ios"|"android"|"web"}`. `token` must look like `ExponentPushToken[...]` or `ExpoPushToken[...]` (else 422). Owner or partner only (admin 403). Call after every sign-in.
+- `DELETE /api/v1/devices/push-token` body `{token}`. Call before sign-out. Always 200.
+- Every in-app notification is also pushed (title "Sahayak", body = the feed message, `data: {event, job_id}`) once its transaction commits. Use `data.job_id` to deep-link.

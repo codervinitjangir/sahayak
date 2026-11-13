@@ -43,7 +43,7 @@ OWNER_PHONE = PHONE_PREFIX + "1"
 PARTNER_PHONE = PHONE_PREFIX + "2"
 TAG = "ADMOPS-QA"
 TABLES = ("users", "partners", "jobs", "job_status_history", "job_assignments",
-          "notifications", "admin_audit_log")
+          "notifications", "admin_audit_log", "device_push_tokens")
 
 conn = psycopg2.connect(S.DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://"))
 conn.autocommit = True
@@ -98,6 +98,9 @@ def purge():
               f"OR target_id IN {partner_ids}", params)
     q.execute("ALTER TABLE admin_audit_log ENABLE TRIGGER trg_admin_audit_log_append_only")
     q.execute("COMMIT")
+    q.execute(f"DELETE FROM device_push_tokens WHERE owner_id IN {user_ids} OR owner_id IN {partner_ids}"
+              + (" OR owner_id = ANY(%(ids)s::uuid[])" if DELETED_OWNERS else ""),
+              {**params, "ids": [str(i) for i in DELETED_OWNERS]})
     q.execute(f"DELETE FROM notifications WHERE job_id IN {job_ids}", params)
     q.execute(f"DELETE FROM job_status_history WHERE job_id IN {job_ids}", params)
     q.execute(f"DELETE FROM job_assignments WHERE job_id IN {job_ids}", params)
@@ -161,6 +164,35 @@ async def main():
         r = await c.get("/api/v1/admin/jobs")
         check("an owner cannot read the board", r.status_code == 403, f"HTTP {r.status_code}")
 
+        section("1b. Device push tokens (ADR-026)")
+        from app.services import push_service
+        sent: list = []
+
+        async def fake_send(messages):
+            sent.extend(messages)
+            return []
+        push_service._send = fake_send
+        TOKEN = "ExponentPushToken[admopsQA87xxxxxx]"
+        current["identity"] = as_owner
+        r = await c.post("/api/v1/devices/push-token", json={"token": TOKEN, "platform": "android"})
+        check("owner registers a push token", r.status_code == 200, f"HTTP {r.status_code} {r.text[:120]}")
+        r = await c.post("/api/v1/devices/push-token", json={"token": "not-a-token"})
+        check("a malformed token is 422", r.status_code == 422, f"HTTP {r.status_code}")
+        current["identity"] = as_admin
+        r = await c.post("/api/v1/devices/push-token", json={"token": TOKEN})
+        check("an admin cannot register a device (403)", r.status_code == 403, f"HTTP {r.status_code}")
+        check("token row stored once", one("SELECT count(*) AS n FROM device_push_tokens WHERE token=%(t)s",
+                                          {"t": TOKEN})["n"] == 1)
+
+        # A rolled-back transaction must not push.
+        from app.services import notification_service as ns
+        async with AsyncSessionLocal() as db:
+            await ns._write_notification(db, recipient_type="user", recipient_id=uuid.UUID(str(owner)),
+                                         event="job_completed", message="rollback probe", job_id=None, channel="in_app")
+            await db.rollback()
+        await asyncio.sleep(1.0)
+        check("a rolled-back notification sends no push", not any(m["body"] == "rollback probe" for m in sent), f"{sent}")
+
         section("2. Staff cancel: one commit with history, notification and audit")
         current["identity"] = as_admin
         r = await c.post(f"/api/v1/admin/jobs/{job_id}/cancel", json={"reason": "owner called, duplicate"})
@@ -170,6 +202,12 @@ async def main():
         check("history row names support", h is not None and h["note"].startswith("Cancelled by support"), f"{h}")
         n = one("SELECT event FROM notifications WHERE job_id=%(i)s AND event='job_cancelled_by_support'", {"i": job_id})
         check("owner is notified it was support", n is not None)
+        for _ in range(20):
+            if any(m["to"] == TOKEN for m in sent):
+                break
+            await asyncio.sleep(0.25)
+        check("...and the push reached the owner's device after commit",
+              any(m["to"] == TOKEN and m["body"] == "This job was cancelled by Sahayak support." for m in sent), f"{sent}")
         a = one("SELECT admin_id, action, reason, details FROM admin_audit_log WHERE target_id=%(i)s", {"i": job_id})
         check("audit row with admin, reason and from_status", a is not None and str(a["admin_id"]) == str(admin_id)
               and a["action"] == "job_cancelled" and a["details"]["from_status"] == "no_match_found", f"{a}")

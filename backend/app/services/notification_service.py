@@ -55,6 +55,7 @@ from app.schemas.notification import (
 from app.services.auth_service import Identity
 from app.utils.errors import ErrorCode, NotFoundError
 from app.utils.logging import log_event
+from app.services import push_service
 
 RecipientRole = Literal["user", "partner"]
 # Who can cause a change. "admin" is never a recipient: staff read the board.
@@ -181,6 +182,19 @@ def recipients_for(
 # ---------------------------------------------------------------------------
 
 
+async def _write_notification(db: AsyncSession, **row) -> None:
+    """Stage the feed row and, with it, the device push (ADR-026).
+
+    The push is only queued here; push_service sends it from an after_commit
+    hook, so a status change that rolls back never reaches anyone's phone.
+    """
+    await notification_repository.create_notification_row(db, **row)
+    push_service.stage(
+        db, recipient_type=row["recipient_type"], recipient_id=row["recipient_id"],
+        message=row.get("message"), event_name=row["event"], job_id=row.get("job_id"),
+    )
+
+
 async def notify_job_status_change(
     db: AsyncSession,
     *,
@@ -233,7 +247,7 @@ async def notify_job_status_change(
                     outcome="skipped",
                 )
                 continue
-            await notification_repository.create_notification_row(
+            await _write_notification(
                 db,
                 recipient_type="user",
                 recipient_id=job.user_id,
@@ -245,7 +259,7 @@ async def notify_job_status_change(
             written += 1
         else:
             for partner_id in partner_ids:
-                await notification_repository.create_notification_row(
+                await _write_notification(
                     db,
                     recipient_type="partner",
                     recipient_id=partner_id,
@@ -282,7 +296,7 @@ async def notify_offer(
     job in a transaction that is about to commit and there is nothing here that
     needs any other column.
     """
-    await notification_repository.create_notification_row(
+    await _write_notification(
         db,
         recipient_type="partner",
         recipient_id=partner_id,

@@ -1202,3 +1202,19 @@ The second bug was blunter: `partner_supply` filtered on `p.is_verified`, a bool
 5. A deleted row reads as 404 on every `/users/me` route.
 
 **Consequences.** Pickup **coordinates** remain on past jobs (the column is NOT NULL and dispatch analytics read it); the address text that would make them easy to read does not. A lawyer should confirm retention under R3. Partner self-deletion is not built: partners have payout obligations (payments C) that need deciding first.
+
+
+# ADR-026: Push notifications are a copy of the in-app row, sent through Expo after the transaction commits
+
+**Date:** 2026-11-14 · **Status:** Accepted (server side); device wiring pending
+
+**Context.** Partners miss offers and owners miss "partner on the way" when the app is closed (NEXT-STEPS G2). The in-app feed already writes exactly the right rows in the right transactions (ADR-019).
+
+**Decision.**
+1. **The feed row stays the source of truth.** Every row goes through `notification_service._write_notification`, which also *stages* a push in the session (`push_service.stage`). A SQLAlchemy `after_commit` listener hands the staged pushes to a background task; `after_rollback` drops them. A status change that rolls back never reaches a phone, and the HTTP call to Expo never sits inside a transaction or a row lock (the reason ADR-015 keeps Redis out of locks applies here too).
+2. **Expo Push API**, not raw FCM/APNs: one HTTPS endpoint for both platforms, and the server needs no Google or Apple credentials (those live in the Expo/EAS project). Optional `EXPO_ACCESS_TOKEN`; `PUSH_ENABLED=false` turns sending off.
+3. **Token registry** `device_push_tokens` (alembic/0006): `POST /devices/push-token` (owner or partner; a token moves to whoever signed in on the device last), `DELETE /devices/push-token` on sign-out (only your own; otherwise a no-op). Tokens Expo reports as `DeviceNotRegistered` are pruned. Tokens are never logged.
+4. **Same text as the feed.** ADR-019 keeps names and numbers out of messages, so a lock-screen preview reveals nothing ADR-017 withholds.
+5. **Best-effort.** A failed push is logged and the feed still has the row.
+
+**Consequences / not done.** The mobile app does not register tokens yet: it needs `expo-notifications`, an EAS project id and FCM/APNs credentials on the Expo account. `services/api/devices.ts` is ready for that. Delivery receipts (Expo's second "getReceipts" step) are not polled.

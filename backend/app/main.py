@@ -11,6 +11,7 @@ from app.api.jobs import router as jobs_router
 from app.api.notifications import router as notifications_router
 from app.api.partners import router as partners_router
 from app.api.payments import router as payments_router
+from app.api.devices import router as devices_router
 from app.api.ratings import router as ratings_router
 from app.api.services import router as services_router
 from app.api.users import router as users_router
@@ -92,6 +93,9 @@ app.include_router(ratings_router)
 
 # Include the payments router (UPI, cash orders, payment confirmation)
 app.include_router(payments_router)
+
+# Device push tokens (ADR-026).
+app.include_router(devices_router)
 
 # Include the notifications router (the in-app feed both sides poll). Its own
 # prefix, /api/v1/notifications, shared with nothing.

@@ -79,6 +79,12 @@ class Settings(BaseSettings):
     # every share link already sent. See job_service.share_token_for.
     SHARE_LINK_SECRET: str = ""
 
+    # Push notifications via Expo (ADR-026). PUSH_ENABLED=false stops all
+    # sends (rows still land in the in-app feed). EXPO_ACCESS_TOKEN is only
+    # needed if "enhanced push security" is turned on in the Expo project.
+    PUSH_ENABLED: bool = True
+    EXPO_ACCESS_TOKEN: str = ""
+
     @property
     def SUPABASE_JWT_ISSUER(self) -> str:
         """Expected `iss` claim, derived from SUPABASE_URL.
