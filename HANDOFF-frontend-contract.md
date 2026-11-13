@@ -1081,7 +1081,7 @@ backgrounded or the partner goes off shift.
 
 ### Correction to something I told you earlier
 
-An earlier version of this section, and of `adarsh-send-2026-09-25.md` §4, said
+An earlier version of this section, and of the 2026-09-25 message to Adarsh (§4), said
 `GET /api/v1/partners/{id}/current-assignment` existed and merely lacked an
 `assignment_id`. **That was wrong** — there was no such route, and no GET route on
 `/partners` at all. Both documents are now corrected. If you designed anything against
