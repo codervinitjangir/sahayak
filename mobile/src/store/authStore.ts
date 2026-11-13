@@ -36,6 +36,11 @@ export function appRoleFor(role: BackendRole): UserRole {
   return role === "partner" ? "partner" : "owner";
 }
 
+/** Lazy so tests and web never load the native notifications module. */
+function registerPushLater(): void {
+  void import("../services/push").then((m) => m.registerForPush()).catch(() => undefined);
+}
+
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   token: null,
@@ -43,8 +48,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   isLoading: false,
   isRestoringSession: IS_SUPABASE_CONFIGURED,
 
-  setUser: (user, token) =>
-    set({ user, token, isAuthenticated: true, isLoading: false }),
+  setUser: (user, token) => {
+    set({ user, token, isAuthenticated: true, isLoading: false });
+    registerPushLater();
+  },
 
   setGuestUser: (user) =>
     set({ user, token: null, isAuthenticated: false, isLoading: false }),
@@ -52,10 +59,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   setToken: (token) => set({ token, isAuthenticated: Boolean(token) }),
 
   logout: () => {
+    const authToken = get().token;
     set({ user: null, token: null, isAuthenticated: false });
-    // Ends the Supabase session too, or the subscription below immediately
-    // restores the token this just cleared.
-    void supabaseSignOut();
+    // Drop this device's push token first (it needs the old access token), then
+    // end the Supabase session, or the subscription below restores the token.
+    void import("../services/push")
+      .then((m) => m.unregisterPush(authToken))
+      .catch(() => undefined)
+      .finally(() => void supabaseSignOut());
   },
 
   setLoading: (v) => set({ isLoading: v }),
@@ -100,6 +111,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
                 },
                 isAuthenticated: true,
               });
+              registerPushLater();
             }
           } catch {
             // Leave user as is if offline
