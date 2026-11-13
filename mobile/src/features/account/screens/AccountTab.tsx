@@ -76,6 +76,19 @@ export default function AccountTab({ onAddVehicle }: { onAddVehicle: () => void 
       </View>
 
       <View>
+        <SectionHeader title="Help & Support" />
+        <Card noPad>
+          <ListRow
+            icon="help-circle-outline"
+            title="Roadside assistance support"
+            subtitle="support@sahayak.app · +91 80 4567 8900"
+            onPress={() => void Linking.openURL("mailto:support@sahayak.app")}
+            last
+          />
+        </Card>
+      </View>
+
+      <View>
         <SectionHeader title="About" />
         <Card noPad>
           <ListRow

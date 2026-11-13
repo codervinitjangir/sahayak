@@ -90,6 +90,7 @@ export const LandingFooter: React.FC = () => {
           <ul className="landing-footer__col-links">
             <li><a href="#top">About Us</a></li>
             <li><a href="#top">Bengaluru Network</a></li>
+            <li><a href="mailto:support@sahayak.app">Help &amp; Support</a></li>
             <li><Link to="/privacy">Privacy Policy</Link></li>
             <li><Link to="/terms">Terms of Service</Link></li>
           </ul>

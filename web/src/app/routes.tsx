@@ -54,12 +54,9 @@ export const AppRoutes: React.FC = () => {
       <Route path="/partner" element={<Navigate to="/partner/dashboard" replace />} />
       <Route path="/partner/*" element={<Navigate to="/partner/dashboard" replace />} />
 
-      {/* Ops console over the three admin analytics endpoints.
-          Not wrapped in RequireRole: that guard reads client-side role state and
-          would bounce an admin whose local role has not been set yet, while
-          protecting nothing — `require_admin` on each endpoint is the real
-          boundary, and AdminConsole renders its 403 explicitly. */}
+      {/* Ops console & partner verification queue */}
       <Route path="/admin" element={<Navigate to="/admin/overview" replace />} />
+      <Route path="/admin/verify" element={<Navigate to="/admin/partners" replace />} />
       <Route path="/admin/:tab" element={<AdminConsole />} />
 
       {/* Fallback */}

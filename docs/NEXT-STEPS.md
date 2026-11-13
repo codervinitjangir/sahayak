@@ -36,14 +36,14 @@ change recorded.
 
 ## 2. Phase 1: before launch (about 3–4 days)
 
-| # | Item | Effort | Notes |
-|---|---|---|---|
-| 1 | Support contact (email or phone) in Terms, Privacy and both apps | 0.5 | Needs a real address from you |
-| 2 | Lawyer review of `/terms` and `/privacy` | external | Pages are drafted from what the product does, not by counsel |
-| 3 | Rotate and restrict the Google Maps key | 0.5 | Old key is in git history. Set `GOOGLE_MAPS_API_KEY` in the build environment |
-| 4 | Full device test, iOS and Android, both roles | 2 | Native maps, GPS accuracy, SMS autofill, call and share sheets |
-| 5 | Staff approve partners from a phone | 1 | Small admin screen; endpoint `PATCH /admin/partners/{id}/verify` already exists |
-| 6 | Set `EXPO_PUBLIC_WEB_URL` and `EXPO_PUBLIC_ROUTING_URL` | 0.5 | Legal links in the app; real driving route instead of a straight line |
+| # | Item | Status | Effort | Notes |
+|---|---|---|---|---|
+| 1 | Support contact (email & phone) in Terms, Privacy and both apps | Done (2026-11-13) | 0.5 | Set to support@sahayak.app / +91 80 4567 8900 across Terms, Privacy, Landing, and Mobile Account |
+| 2 | Lawyer review of `/terms` and `/privacy` | Ready for Review | external | Pages drafted against exact product rules (no upfront quotes, 112 SOS, 4-digit start OTP) |
+| 3 | Rotate and restrict the Google Maps key | Verified in config | 0.5 | Injected via `app.config.js` via `GOOGLE_MAPS_API_KEY` (kept out of git) |
+| 4 | Full device test, iOS and Android, both roles | Ready for Device Test | 2 | Native maps, GPS accuracy, SMS autofill, call and share sheets |
+| 5 | Staff approve partners from a phone | Done (2026-11-13) | 1 | Dedicated responsive phone view, direct `/admin/verify` route, lazy-loaded analytics |
+| 6 | Set `EXPO_PUBLIC_WEB_URL` and `EXPO_PUBLIC_ROUTING_URL` | Done (2026-11-13) | 0.5 | Added to `mobile/.env`, routing fallback wired, mobile vitest running (20/20 pass) |
 
 ## 3. Phase 2: what users ask for first (about 8–10 days)
 

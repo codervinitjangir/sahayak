@@ -62,29 +62,32 @@ const SHARED = {
   placeholderData: <T,>(previous: T | undefined) => previous,
 } as const;
 
-export function useOverview(preset: WindowPreset) {
+export function useOverview(preset: WindowPreset, options?: { enabled?: boolean }) {
   const params = paramsFor(preset);
   return useQuery({
     queryKey: ['admin', 'overview', preset],
     queryFn: () => adminService.getOverview(params),
     ...SHARED,
+    ...options,
   });
 }
 
-export function useDispatch(preset: WindowPreset) {
+export function useDispatch(preset: WindowPreset, options?: { enabled?: boolean }) {
   const params = paramsFor(preset);
   return useQuery({
     queryKey: ['admin', 'dispatch', preset],
     queryFn: () => adminService.getDispatch(params),
     ...SHARED,
+    ...options,
   });
 }
 
-export function useMatching(preset: WindowPreset) {
+export function useMatching(preset: WindowPreset, options?: { enabled?: boolean }) {
   const params = paramsFor(preset);
   return useQuery({
     queryKey: ['admin', 'matching', preset],
     queryFn: () => adminService.getMatching(params),
     ...SHARED,
+    ...options,
   });
 }

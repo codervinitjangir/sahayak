@@ -53,9 +53,9 @@ export const AdminConsole: React.FC = () => {
   const [preset, setPreset] = useState<WindowPreset>('7d');
   const { logout } = useAuth();
 
-  const overview = useOverview(preset);
-  const dispatch = useDispatch(preset);
-  const matching = useMatching(preset);
+  const overview = useOverview(preset, { enabled: active === 'overview' });
+  const dispatch = useDispatch(preset, { enabled: active === 'dispatch' });
+  const matching = useMatching(preset, { enabled: active === 'matching' });
 
   const query =
     active === 'overview' ? overview : active === 'dispatch' ? dispatch : matching;
@@ -162,55 +162,58 @@ export const AdminConsole: React.FC = () => {
           <div>
             <div className="flex items-center gap-2 mb-1.5">
               <span className="px-2 py-0.5 rounded-[6px] text-xs font-bold bg-[#E6F4F1] text-[#0F766E] uppercase tracking-wider">
-                Live Ops Console
+                {active === 'partners' ? 'Ops Verification Queue' : 'Live Ops Console'}
               </span>
             </div>
             <h1 className="text-2xl font-bold tracking-tight text-[#0F172A]">
-              Analytics
+              {active === 'partners' ? 'Partner Verification & KYC' : 'Analytics'}
             </h1>
             <p className="mt-0.5 text-xs text-[#475569] max-w-2xl leading-relaxed">
-              Read-only. Every figure carries its own caveats — the amber panel on each tab is part
-              of the report, not a warning about it.
+              {active === 'partners'
+                ? 'Review mechanic profiles, inspect workshop credentials and tools, and approve or reject partners on phone or desktop.'
+                : 'Read-only. Every figure carries its own caveats — the amber panel on each tab is part of the report, not a warning about it.'}
             </p>
           </div>
 
-          {/* Time Window Selector & Refresh */}
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <div
-              role="group"
-              aria-label="Time window"
-              className="flex items-center gap-1 bg-white p-1 rounded-[12px] border border-[#EEF2F6] shadow-2xs"
-            >
-              {WINDOW_PRESETS.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => setPreset(p.id)}
-                  aria-pressed={preset === p.id}
-                  className={`rounded-[8px] px-3 py-1.5 text-xs font-semibold transition-all ${
-                    preset === p.id
-                      ? 'bg-[#0F766E] text-white shadow-2xs'
-                      : 'text-[#475569] hover:text-[#0F172A] hover:bg-[#F6F8FA]'
-                  }`}
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
+          {/* Time Window Selector & Refresh (analytics tabs only) */}
+          {active !== 'partners' && (
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <div
+                role="group"
+                aria-label="Time window"
+                className="flex items-center gap-1 bg-white p-1 rounded-[12px] border border-[#EEF2F6] shadow-2xs"
+              >
+                {WINDOW_PRESETS.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => setPreset(p.id)}
+                    aria-pressed={preset === p.id}
+                    className={`rounded-[8px] px-3 py-1.5 text-xs font-semibold transition-all ${
+                      preset === p.id
+                        ? 'bg-[#0F766E] text-white shadow-2xs'
+                        : 'text-[#475569] hover:text-[#0F172A] hover:bg-[#F6F8FA]'
+                    }`}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
 
-            <button
-              type="button"
-              onClick={() => query.refetch()}
-              disabled={query.isFetching}
-              className="flex items-center gap-1.5 rounded-[12px] border border-[#EEF2F6] bg-white hover:bg-[#FFFFFF] px-3.5 py-2 text-xs font-semibold text-[#0F172A] transition-colors shadow-2xs disabled:opacity-50"
-            >
-              <RefreshCw
-                className={`h-3.5 w-3.5 text-[#0F766E] ${query.isFetching ? 'animate-spin' : ''}`}
-                aria-hidden="true"
-              />
-              <span>Refresh</span>
-            </button>
-          </div>
+              <button
+                type="button"
+                onClick={() => query.refetch()}
+                disabled={query.isFetching}
+                className="flex items-center gap-1.5 rounded-[12px] border border-[#EEF2F6] bg-white hover:bg-[#FFFFFF] px-3.5 py-2 text-xs font-semibold text-[#0F172A] transition-colors shadow-2xs disabled:opacity-50"
+              >
+                <RefreshCw
+                  className={`h-3.5 w-3.5 text-[#0F766E] ${query.isFetching ? 'animate-spin' : ''}`}
+                  aria-hidden="true"
+                />
+                <span>Refresh</span>
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Subnav Tabs & Scope Status */}
@@ -234,11 +237,13 @@ export const AdminConsole: React.FC = () => {
             ))}
           </nav>
 
-          <WindowCaption
-            from={query.data?.window.requested_from ?? null}
-            firstJob={query.data?.window.first_job_at ?? null}
-            lastJob={query.data?.window.last_job_at ?? null}
-          />
+          {active !== 'partners' && (
+            <WindowCaption
+              from={query.data?.window.requested_from ?? null}
+              firstJob={query.data?.window.first_job_at ?? null}
+              lastJob={query.data?.window.last_job_at ?? null}
+            />
+          )}
         </div>
 
         {/* Panel Rendering */}
