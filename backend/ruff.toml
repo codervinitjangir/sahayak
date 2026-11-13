@@ -1,0 +1,6 @@
+[lint.per-file-ignores]
+# SQLAlchemy relationship annotations name other models as strings on purpose
+# (resolved by the mapper registry), so importing them would create cycles.
+"app/models/*.py" = ["F821"]
+# The load script sets up sys.path / env before importing its dependencies.
+"tests/load/*.py" = ["E402"]

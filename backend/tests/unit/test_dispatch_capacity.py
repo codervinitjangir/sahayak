@@ -231,7 +231,7 @@ class TestTheCapIsRecheckedAtAccept:
             accept(FakeSession(), a, job)
 
         assert "assignment_accepted" not in state["events"]
-        assert f"job_status:assigned" not in state["events"]
+        assert "job_status:assigned" not in state["events"]
         assert a.status == "offered"
         assert job.status == STATUS_MATCHING
 
@@ -309,7 +309,7 @@ class TestWhatARefusalDoesToTheOffer:
 
         commits_at_offer = {}
         original = dispatch_service._offer_next
-        state = wire_capacity(monkeypatch, job=job, assignment=a, active=CAP)
+        wire_capacity(monkeypatch, job=job, assignment=a, active=CAP)
         patched_offer_next = dispatch_service._offer_next
 
         async def recording_offer_next(_db, _job):

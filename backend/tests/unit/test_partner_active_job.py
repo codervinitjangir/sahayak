@@ -17,7 +17,6 @@ import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
 
-import pytest
 from sqlalchemy.dialects import postgresql
 
 from app.api.partners import get_my_active_job

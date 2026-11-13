@@ -1,5 +1,4 @@
 import os
-import sys
 
 # Folders to completely skip walking inside
 SKIP_DIRS = {

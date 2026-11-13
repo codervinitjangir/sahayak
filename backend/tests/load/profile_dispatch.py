@@ -253,7 +253,7 @@ async def main() -> None:
     # the client did, the difference is round trips the client-side hooks never
     # saw, and the "Python" line above is really unattributed Postgres time.
     client_side = sum(sql_n) / len(sql_n)
-    print(f"\nRound-trip reconciliation")
+    print("\nRound-trip reconciliation")
     print(f"  statements the client timed          {client_side:5.1f}")
     print(f"  statements Postgres counted          {server_side:5.1f}")
     print(f"  unattributed round trips             {server_side - client_side:5.1f}"

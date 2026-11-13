@@ -4,7 +4,6 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from app.models.job import Job, JobAssignment
-from app.schemas.job import JobPartnerLocationResponse
 from app.services import job_service
 from app.services.auth_service import Identity
 from app.utils.errors import NotFoundError
