@@ -55,7 +55,7 @@ change recorded.
 | 9 | Partner rates the owner (Two-Way Ratings) | [x] Done (2026-11-13) | [backend] | Interactive 1–5 star rating submitted by partner on completion via `PartnerJobDoneScreen.tsx` |
 | 10 | Public Trip Live Sharing (`/track/:jobId?t=`) | [x] Done, hardened 2026-11-14 | [backend] | `GET /api/v1/jobs/{id}/public-tracking?t=<share_token>`; token is owner-only (ADR-017 amendment) |
 | 11 | Extended Searching & Auto-Retry with Radius Escalation | [x] Done (2026-11-14, ADR-023) | [backend] | 10 km &rarr; 20 km &rarr; 35 km expansion; 10-minute active search window with live timer & instant cancel |
-| 12 | Push notifications (FCM & APNs) | [~] Server done 2026-11-14 (ADR-026); app wiring needs EAS | [backend] | Events: new offer, assigned, on the way, started, completed, cancelled. Respect ADR-017 |
+| 12 | Push notifications (FCM & APNs) | [~] Server + app wiring done 2026-11-14 (ADR-026); delivery needs `eas init` + FCM/APNs keys | [backend] | Events: new offer, assigned, on the way, started, completed, cancelled. Respect ADR-017 |
 | 13 | Hindi and Kannada localization | [ ] Planned | no | Move strings into translation files; native-speaker review |
 
 ## 4. Phase 3: payments & settlements (progress update)
@@ -66,9 +66,9 @@ Today the payment lifecycle is wired with full regression coverage:
 |---|---|---|---|
 | A | Upfront price estimate before booking | [x] Done (2026-11-13) | `base_price` added to catalogue services, upfront estimates shown on service selection cards |
 | B | In-App UPI & Cash Payment at completion | [x] Done, fixed 2026-11-14 | `POST /payments`, `GET /payments/job/{id}`, `POST /payments/{id}/confirm`. Amount is server-side; only the assigned partner or an admin confirms (ADR-022). The UPI ID `sahayak.dispatch@upi` is a placeholder |
-| C | Partner payouts & settlement schedule | [ ] Planned | Settle to partners' bank accounts or UPI net of platform commission |
-| D | Downloadable receipts & GST tax invoices | [ ] Planned | Detailed invoice breakdown with service fee, partner details, and payment ref |
-| E | Refunds & dispute management | [ ] Planned | Owner "report a problem" on paid jobs with admin resolution queue |
+| C | Partner payouts & settlement schedule | [ ] Blocked: money-holding decision + CA sign-off (G3) | Settle to partners' bank accounts or UPI net of platform commission |
+| D | Downloadable receipts & GST tax invoices | [~] Receipt API done 2026-11-14 (ADR-027); no UI yet; GST invoice needs a GSTIN | Detailed invoice breakdown with service fee, partner details, and payment ref |
+| E | Refunds & dispute management | [~] API done 2026-11-14 (ADR-027): owner report, admin queue, recorded refund; no UI yet | Owner "report a problem" on paid jobs with admin resolution queue |
 
 ---
 
@@ -137,8 +137,8 @@ When an emergency happens (e.g. at 11:30 PM on an outer ring road or highway), a
 5. [x] Item 10: Public trip live sharing (Completed).
 6. [x] Payments Step A & B: Upfront estimates and in-app UPI QR / Cash settlements (Completed).
 7. [x] Item 11: Extended Searching & Radius Escalation (10 km &rarr; 20 km &rarr; 35 km) (Done 2026-11-14, ADR-023).
-8. [ ] Item 12: Push notifications via FCM & APNs (Next Up).
-9. [ ] Payments Step C & D: Partner payouts & tax invoices.
+8. [~] Item 12: Push notifications: code done; needs EAS project + credentials.
+9. [~] Payments D & E APIs done (ADR-027); C blocked on G3; UI for receipts and disputes next.
 
 ## 8. Open questions for the team
 
@@ -182,7 +182,7 @@ regression bar in `CLAUDE.md` applies before anyone calls it done.
 | # | Item | Notes |
 |---|---|---|
 | G1 | [x] Extended search with radius escalation (item 11) | Done 2026-11-14: `POST /jobs/{id}/retry-search`, owner app polls every 15 s for 10 min (ADR-023) |
-| G2 | [~] Push notifications (item 12) | Server done 2026-11-14 (ADR-026): token registry + after-commit Expo sender, live-tested with the Expo call stubbed. **To finish (needs you):** `cd mobile && npx expo install expo-notifications expo-device`, `eas init` (adds `extra.eas.projectId`), upload FCM key / APNs key in EAS credentials, then after sign-in call `Notifications.getExpoPushTokenAsync({projectId})` and `devicesApi.register(token, Platform.OS)`; call `devicesApi.unregister` in logout |
+| G2 | [~] Push notifications (item 12) | Server and app wiring done 2026-11-14 (`mobile/src/services/push.ts`: registers on sign-in/restore, unregisters on logout). **To finish (needs you):** `cd mobile && eas init` (adds `extra.eas.projectId`), upload FCM / APNs keys in EAS credentials, then a device test |
 | G3 | Partner payouts, tax invoices, refunds and disputes (payments C–E) | Needs the money-holding decision and CA sign-off first |
 | G4 | Partner documents and equipment upload + staff review | Towing partners cannot be enabled except by direct database edit today |
 | G5 | Real vehicle registration check | Today: normalise and de-duplicate only |
@@ -235,7 +235,7 @@ Missing, in suggested order:
 | # | Item |
 |---|---|
 | E1 | [x] CI (2026-11-14): web + mobile `tsc`, `vitest` (incl. brand-hygiene and route-inventory), `check:rule-a`; backend ruff + 513 unit tests; runs on main, develop, feat/**, fix/**. Live harnesses stay manual |
-| E2 | Backend: re-export `backend-routes.json` fixtures for **both** clients after the new routes (per project memory) and keep the route-inventory tests green |
+| E2 | [x] (2026-11-14, 62 routes) Backend: re-export `backend-routes.json` fixtures for **both** clients after the new routes (per project memory) and keep the route-inventory tests green |
 | E3 | Mobile tests only cover pure logic. Add component tests for the owner flow and partner offer flow (React Native Testing Library) |
 | E4 | End-to-end smoke test against a staging backend (sign in with a test number, request, accept, complete) |
 | E5 | Staging and production environments, secrets management, and a rollback plan |

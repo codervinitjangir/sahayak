@@ -1217,4 +1217,22 @@ The second bug was blunter: `partner_supply` filtered on `p.is_verified`, a bool
 4. **Same text as the feed.** ADR-019 keeps names and numbers out of messages, so a lock-screen preview reveals nothing ADR-017 withholds.
 5. **Best-effort.** A failed push is logged and the feed still has the row.
 
-**Consequences / not done.** The mobile app does not register tokens yet: it needs `expo-notifications`, an EAS project id and FCM/APNs credentials on the Expo account. `services/api/devices.ts` is ready for that. Delivery receipts (Expo's second "getReceipts" step) are not polled.
+**Consequences / not done.** Amended 2026-11-14: the mobile app now registers on sign-in and session restore and unregisters on logout (`mobile/src/services/push.ts`, lazy-imported from `authStore`). It no-ops without an EAS project id, on simulators and when permission is denied. Delivery still needs `eas init` and FCM/APNs credentials on the Expo account. Delivery receipts (Expo's second "getReceipts" step) are not polled.
+
+
+---
+
+# ADR-027: A dispute is an owner report on a completed job; a refund is recorded, not executed
+
+**Date:** 2026-11-14 · **Status:** Accepted
+
+**Context.** Payments Phase 3 E needs "report a problem" and a staff queue. There is no payment gateway (ADR-022), so the server cannot send money back.
+
+**Decision.**
+1. `job_disputes` (alembic/0007). The owner opens one with `POST /jobs/{id}/disputes` (`require_user`, own job only, else 404). Only a `completed` job is disputable (409 `JOB_NOT_DISPUTABLE`); before that the owner cancels.
+2. One open dispute per job, enforced by a partial unique index, so a double tap is 409 `DISPUTE_ALREADY_OPEN` from the constraint rather than a SELECT race.
+3. Staff resolve with `PATCH /admin/disputes/{id}` (`resolved` | `rejected` | `refunded`, note required). The dispute row is locked; a second resolver gets 409 `DISPUTE_ALREADY_CLOSED`. The resolution, the audit row (target_type `dispute`, ADR-024) and for a refund the payment's `paid` → `refunded` change commit in one transaction. A refund with no paid payment is 409 `INVALID_PAYMENT_STATE`.
+4. **A refund is a record.** Staff return the money outside the app; this marks that they did. When a gateway arrives, the refund call goes inside this transaction boundary.
+5. Receipts (Phase 3 D): `GET /payments/{id}/receipt`, same access rule as reading the payment, only for `paid`/`refunded`. `is_tax_invoice` is false: there is no GSTIN on record, so no tax line is invented.
+
+**Not done.** Owner is not notified of the resolution; no web/mobile UI for disputes or receipts yet; partner payouts (C) wait on the money-holding decision.

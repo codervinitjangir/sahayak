@@ -2265,3 +2265,12 @@ All `require_admin`; anyone else 403. Every write is audited in the same transac
 - `POST /api/v1/devices/push-token` body `{token, platform?: "ios"|"android"|"web"}`. `token` must look like `ExponentPushToken[...]` or `ExpoPushToken[...]` (else 422). Owner or partner only (admin 403). Call after every sign-in.
 - `DELETE /api/v1/devices/push-token` body `{token}`. Call before sign-out. Always 200.
 - Every in-app notification is also pushed (title "Sahayak", body = the feed message, `data: {event, job_id}`) once its transaction commits. Use `data.job_id` to deep-link.
+
+
+## 18. Receipts, disputes and push registration (2026-11-14)
+
+* `GET /api/v1/payments/{payment_id}/receipt` → `{receipt_number, payment_id, job_id, service_name, vehicle_number, partner_name, pickup_address, completed_at, paid_at, amount, currency, payment_method, payment_reference, status, is_tax_invoice}`. Owner, responsible partner or admin; 404 otherwise; 409 `INVALID_PAYMENT_STATE` while pending. Label it "Receipt", never "Tax invoice".
+* `POST /api/v1/jobs/{job_id}/disputes` (owner) body `{reason: overcharged|service_not_done|partner_behaviour|damage|other, description?}` → 201 dispute. 409 `JOB_NOT_DISPUTABLE` (not completed), 409 `DISPUTE_ALREADY_OPEN`.
+* `GET /api/v1/jobs/{job_id}/disputes` (owner) → list.
+* `GET /api/v1/admin/disputes?status=open` and `PATCH /api/v1/admin/disputes/{id}` body `{resolution: resolved|rejected|refunded, note}`. 409 `DISPUTE_ALREADY_CLOSED`, 409 `INVALID_PAYMENT_STATE` (refund with nothing paid). New error code `DISPUTE_NOT_FOUND`. `/admin/audit-log?target_type=dispute` is now valid.
+* Mobile registers its Expo push token after sign-in (`services/push.ts`). No UI change.
