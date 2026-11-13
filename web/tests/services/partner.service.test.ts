@@ -417,6 +417,8 @@ describe('partner.service — real-path contract tests', () => {
       expect(url).toMatch(/\/partners\/me\/stats$/);
       expect(options?.method ?? 'GET').toBe('GET');
       expect(stats).toEqual({
+        partnerId: 'ptr_123',
+        verificationStatus: 'verified',
         acceptanceRatePct: 92,
         ratingAvg: 4.85,
         ratingCount: 24,

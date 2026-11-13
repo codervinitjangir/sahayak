@@ -66,10 +66,10 @@ vi.mock('../../src/services/identity.service', async () => {
  * Mounts the login page with owner/partner destinations so we can assert where
  * a completed sign-in actually lands.
  */
-function renderLogin() {
+function renderLogin(entry = '/login') {
   return render(
     <AuthProvider>
-      <MemoryRouter initialEntries={['/login']}>
+      <MemoryRouter initialEntries={[entry]}>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/owner" element={<div>Owner Home</div>} />
@@ -302,5 +302,27 @@ describe('LoginPage', () => {
 
     const sos = screen.getByRole('link', { name: /Stranded right now/i });
     expect(sos).toHaveAttribute('href', '/owner/request');
+  });
+
+  it('returns an owner to the page they came from after signing in', async () => {
+    renderLogin('/login?redirect=%2Fowner%2Frequest');
+    await advanceToVerifyStep();
+    for (const [i, box] of otpBoxes().entries()) {
+      await act(async () => {
+        fireEvent.change(box, { target: { value: '824193'[i] } });
+      });
+    }
+    await waitFor(() => expect(screen.getByText('Emergency Request')).toBeInTheDocument(), { timeout: 3000 });
+  });
+
+  it('ignores a redirect that leaves the owner area (no open redirect)', async () => {
+    renderLogin('/login?redirect=https%3A%2F%2Fevil.example');
+    await advanceToVerifyStep();
+    for (const [i, box] of otpBoxes().entries()) {
+      await act(async () => {
+        fireEvent.change(box, { target: { value: '824193'[i] } });
+      });
+    }
+    await waitFor(() => expect(screen.getByText('Owner Home')).toBeInTheDocument(), { timeout: 3000 });
   });
 });

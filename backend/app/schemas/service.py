@@ -1,3 +1,4 @@
+from decimal import Decimal
 from typing import Optional
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -46,13 +47,11 @@ class ServiceCatalogItem(BaseModel):
     by it and a nested object would make that a two-step read for no gain. It is
     optional only because `services.category_id` is nullable in the schema.
 
-    **There is no price, and that absence is not an oversight.** The `services`
-    table has no price column, `jobs.price_estimate` is nullable and nothing in the
-    application ever writes it, so there is no pricing data on this side to return.
-    Both frontends currently display prices from their own hardcoded tables; those
-    numbers exist nowhere in the backend and are not stored against a job. Adding
-    an invented `estimated_price` here would make that look authoritative, which is
-    the one thing worse than its being absent. See TASKS.md.
+    `base_price` is deliberately the same constant `POST /jobs` uses to write
+    `jobs.price_estimate` (SERVICE_BASE_PRICES in job_service). The `services`
+    table still has no price column, but the split is now honest: this is a
+    read-only projection of the pricing constant, not a second source of truth.
+    A service missing from that table returns null rather than a guessed number.
     """
 
     id: int
@@ -64,6 +63,14 @@ class ServiceCatalogItem(BaseModel):
             "True when a partner needs registered equipment to be offered this "
             "service — a flatbed, for instance. Informational for an owner; the "
             "dispatch engine applies it as a hard filter regardless."
+        ),
+    )
+    base_price: Optional[Decimal] = Field(
+        None,
+        description=(
+            "Base INR price before distance/surge adjustment. Equals the "
+            "price_estimate POST /jobs stores for this code. Null when the "
+            "pricing table has no entry for this service."
         ),
     )
     category_id: Optional[int] = None

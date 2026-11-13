@@ -1,6 +1,10 @@
 // ─── Sahayak — Active Job Screen (Partner) ───────────────────────────────────
-// Uber/Ola breakdown style: Persistent Map + Route + Compact Bottom Sheet with OTP verification
-import React, { useRef, useEffect, useState } from "react";
+// Persistent map + route + compact bottom sheet, but every value on the sheet
+// comes from GET /jobs/{id}: owner contact, pickup coordinates, vehicle
+// registration, service and quote. The only way this screen advances to
+// in_progress is POST /jobs/{id}/start with the owner's code, and completion
+// requires the partner to enter the amount actually charged.
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -10,57 +14,117 @@ import {
   StatusBar,
   Animated,
   Linking,
+  Pressable,
   TextInput,
   Alert,
+  ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import * as Location from "expo-location";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RouteProp } from "@react-navigation/native";
 
 import { Colors, Typography, Spacing, Radius, Shadows } from "../../../constants/theme";
 import Button from "../../../components/ui/Button";
-import SharedMapCanvas from "../../../components/map/SharedMapCanvas";
+import RealMap from "../../../components/map/RealMap";
 import { jobsApi } from "../../../services/api/jobs";
+import type { BackendJob } from "../../../services/api/jobs";
 import type { PartnerStackParamList } from "../../../types";
+import { inr, serviceMetaFor } from "../partnerFormat";
 
 type Nav = NativeStackNavigationProp<PartnerStackParamList, "ActiveJob">;
 type Route = RouteProp<PartnerStackParamList, "ActiveJob">;
 
-const PARTNER_LOC = { latitude: 12.9756, longitude: 77.5906 };
-const USER_LOC = { latitude: 12.9716, longitude: 77.5946 };
+type Step = "en_route" | "arrived" | "in_progress";
+
+const errorCodeOf = (err: any): string | undefined =>
+  err?.response?.data?.error?.code;
 
 export default function ActiveJobScreen() {
   const nav = useNavigation<Nav>();
   const route = useRoute<Route>();
-  const currentJobId = route.params?.jobId || "active_rescue_job";
-  const [jobData, setJobData] = useState<any>(null);
+  const jobId = route.params?.jobId;
+
+  const [job, setJob] = useState<BackendJob | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  // The backend status is the source of truth; `arrived` is a purely local
+  // waypoint between en_route and submitting the code.
+  const [step, setStep] = useState<Step>("en_route");
+  const [otp, setOtp] = useState(["", "", "", ""]);
+  const otpRefs = useRef<(React.ElementRef<typeof TextInput> | null)[]>([]);
+  const [verifying, setVerifying] = useState(false);
+  const [completing, setCompleting] = useState(false);
+  const [finalAmount, setFinalAmount] = useState("");
+  const amountSeeded = useRef(false);
+  const enRouteSynced = useRef(false);
+  const [partnerLocation, setPartnerLocation] = useState<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
   const slideAnim = useRef(new Animated.Value(100)).current;
 
-  // Partner flow states: en_route -> arrived (enter 4-digit code) -> in_progress
-  const [partnerStep, setPartnerStep] = useState<"en_route" | "arrived" | "in_progress">("arrived");
-  const [otp, setOtp] = useState(["", "", "", ""]);
-  const otpRefs = useRef<(TextInput | null)[]>([]);
+  const loadJob = useCallback(
+    async (showSpinner: boolean) => {
+      if (!jobId) {
+        setLoading(false);
+        setLoadError(
+          "No job was selected. Open the job from your dashboard or an incoming offer."
+        );
+        return;
+      }
+      if (showSpinner) setLoading(true);
+      try {
+        const data = await jobsApi.getJob(jobId);
+        setJob(data);
+        setLoadError(null);
+        if (data.status === "in_progress") {
+          setStep("in_progress");
+        } else if (data.status === "assigned" || data.status === "partner_en_route") {
+          setStep((current) => (current === "arrived" ? current : "en_route"));
+        }
+      } catch {
+        if (showSpinner) {
+          setLoadError(
+            "Sahayak could not load this job. Check your connection and retry."
+          );
+        }
+      } finally {
+        if (showSpinner) setLoading(false);
+      }
+    },
+    [jobId]
+  );
 
   useEffect(() => {
-    // Notify en_route and load job details if real job
-    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(currentJobId)) {
-      jobsApi.getJob(currentJobId).then(setJobData).catch(() => {});
-      void jobsApi.updateJobStatus(currentJobId, "partner_en_route").catch(() => {});
-    }
-  }, [currentJobId]);
+    void loadJob(true);
+  }, [loadJob]);
 
-  const job = {
-    id: currentJobId,
-    pickupLocation: {
-      address: jobData?.pickup_address_text || "Bengaluru Breakdown Point",
-    },
-    vehicle: {
-      model: jobData?.vehicle_number ? `Vehicle (${jobData.vehicle_number})` : "Vehicle",
-      type: "Four-Wheeler",
-      licensePlate: jobData?.vehicle_number || "KA-01",
-    },
-  };
+  // A quiet refresh keeps cancellation and owner-side changes visible without
+  // flashing a spinner over a screen the mechanic is actively using.
+  useEffect(() => {
+    const interval = setInterval(() => void loadJob(false), 20000);
+    return () => clearInterval(interval);
+  }, [loadJob]);
+
+  // Accepting an offer leaves the assignment at `assigned`; opening this screen
+  // is the partner's signal that they are on the way. The transition is written
+  // to the backend once, and a failure is surfaced instead of pretending.
+  useEffect(() => {
+    if (!job || job.status !== "assigned" || enRouteSynced.current) return;
+    enRouteSynced.current = true;
+    jobsApi
+      .updateJobStatus(job.id, "partner_en_route")
+      .then((updated) => setJob(updated))
+      .catch(() => {
+        setActionError(
+          "Could not tell Sahayak you are en route. The job is still assigned to you; stop and retry from the dashboard if this persists."
+        );
+      });
+  }, [job]);
 
   useEffect(() => {
     Animated.spring(slideAnim, {
@@ -69,18 +133,67 @@ export default function ActiveJobScreen() {
       tension: 60,
       friction: 10,
     }).start();
-  }, [partnerStep]);
+  }, [step, slideAnim]);
 
-  const region = {
-    latitude: (PARTNER_LOC.latitude + USER_LOC.latitude) / 2,
-    longitude: (PARTNER_LOC.longitude + USER_LOC.longitude) / 2,
-    latitudeDelta: 0.018,
-    longitudeDelta: 0.018,
-  };
+  useEffect(() => {
+    if (step !== "in_progress" || amountSeeded.current) return;
+    amountSeeded.current = true;
+    if (job?.price_estimate != null) {
+      setFinalAmount(String(Math.round(Number(job.price_estimate))));
+    }
+  }, [step, job]);
+
+  // The partner's own position for the route canvas. Failure is not fatal: the
+  // pickup point and job details are still real, the partner pin just stays off.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== "granted") return;
+        const last = await Location.getLastKnownPositionAsync();
+        if (last && !cancelled) {
+          setPartnerLocation({
+            latitude: last.coords.latitude,
+            longitude: last.coords.longitude,
+          });
+        }
+        const fresh = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+        if (!cancelled) {
+          setPartnerLocation({
+            latitude: fresh.coords.latitude,
+            longitude: fresh.coords.longitude,
+          });
+        }
+      } catch {
+        // Location is optional chrome here; the sheet remains fully usable.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const pickup =
+    job?.pickup_lat != null && job?.pickup_lng != null
+      ? { latitude: Number(job.pickup_lat), longitude: Number(job.pickup_lng) }
+      : null;
+
+  const meta = serviceMetaFor(job?.service_code);
 
   const handleNavigate = () => {
-    const url = `https://maps.google.com/?q=${USER_LOC.latitude},${USER_LOC.longitude}`;
-    Linking.openURL(url);
+    if (!pickup) {
+      Alert.alert(
+        "Pickup coordinates unavailable",
+        "This job does not include a map position. Call the customer and confirm the address before driving."
+      );
+      return;
+    }
+    void Linking.openURL(
+      `https://www.google.com/maps/dir/?api=1&destination=${pickup.latitude},${pickup.longitude}`
+    );
   };
 
   const handleOtpChange = (text: string, idx: number) => {
@@ -88,9 +201,7 @@ export default function ActiveJobScreen() {
     const next = [...otp];
     next[idx] = digit;
     setOtp(next);
-    if (digit && idx < 3) {
-      otpRefs.current[idx + 1]?.focus();
-    }
+    if (digit && idx < 3) otpRefs.current[idx + 1]?.focus();
   };
 
   const handleOtpBackspace = (idx: number) => {
@@ -103,171 +214,288 @@ export default function ActiveJobScreen() {
   };
 
   const handleVerifyStartCode = async () => {
+    if (!job) return;
     const code = otp.join("");
-    if (code.length < 4) {
-      Alert.alert("Incomplete Code", "Please enter the 4-digit start code provided by customer.");
+    if (code.length !== 4) {
+      Alert.alert(
+        "Incomplete code",
+        "Enter the 4-digit start code shown on the customer's screen."
+      );
       return;
     }
-    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(currentJobId)) {
-      try {
-        await jobsApi.updateJobStatus(currentJobId, "in_progress");
-      } catch (err) {
-        console.warn("Could not sync in_progress status:", err);
+    setVerifying(true);
+    setActionError(null);
+    try {
+      const updated = await jobsApi.startJob(job.id, code);
+      setJob(updated);
+      setStep("in_progress");
+    } catch (err: any) {
+      const codeName = errorCodeOf(err);
+      if (codeName === "INVALID_START_CODE") {
+        setOtp(["", "", "", ""]);
+        otpRefs.current[0]?.focus();
+        Alert.alert(
+          "Incorrect start code",
+          "That code does not match this job. Ask the customer to read the 4 digits on their screen again."
+        );
+      } else {
+        Alert.alert(
+          "Could not start the job",
+          "Sahayak did not confirm the start code. The job is still active and has not been marked in progress. Check your connection and retry."
+        );
       }
+    } finally {
+      setVerifying(false);
     }
-    setPartnerStep("in_progress");
   };
 
-  const handleDone = async () => {
-    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(currentJobId)) {
-      try {
-        await jobsApi.updateJobStatus(currentJobId, "completed", 450);
-      } catch (err) {
-        console.warn("Could not sync completed status:", err);
-      }
+  const handleComplete = async () => {
+    if (!job) return;
+    const amount = Number(finalAmount);
+    if (!finalAmount.trim() || !Number.isFinite(amount) || amount <= 0) {
+      Alert.alert(
+        "Enter the final amount",
+        "Type the amount actually charged for this rescue. Sahayak records this as the customer's final price."
+      );
+      return;
     }
-    nav.navigate("PartnerJobDone", { jobId: currentJobId });
+    setCompleting(true);
+    setActionError(null);
+    try {
+      await jobsApi.updateJobStatus(job.id, "completed", Math.round(amount));
+      nav.replace("PartnerJobDone", { jobId: job.id });
+    } catch (err: any) {
+      const codeName = errorCodeOf(err);
+      if (codeName === "INVALID_STATUS_TRANSITION") {
+        Alert.alert(
+          "Job cannot be completed",
+          "The job is no longer in progress. Refresh the job to see its current state."
+        );
+        void loadJob(true);
+      } else {
+        Alert.alert(
+          "Could not complete the job",
+          "Sahayak did not save the completion. The job remains in progress. Check your connection and retry."
+        );
+      }
+    } finally {
+      setCompleting(false);
+    }
   };
 
-  return (
-    <View style={styles.container}>
-      <StatusBar barStyle="dark-content" translucent backgroundColor="transparent" />
+  const renderMap = () => {
+    if (!pickup) {
+      return (
+        <View style={styles.mapFallback}>
+          <Ionicons name="map-outline" size={32} color={Colors.textSecondary} />
+          <Text style={styles.mapFallbackText}>
+            Pickup coordinates were not shared for this job. Use the address and
+            call button below.
+          </Text>
+        </View>
+      );
+    }
+    return (
+      <View style={StyleSheet.absoluteFill}>
+        <RealMap userLocation={pickup} partnerLocation={partnerLocation} showRoute={!!partnerLocation} />
+        <View style={styles.mapOverlay} pointerEvents="box-none">
+          <Pressable
+            onPress={() => nav.goBack()}
+            accessibilityRole="button"
+            accessibilityLabel="Back"
+            style={styles.mapBack}
+          >
+            <Ionicons name="chevron-back" size={24} color={Colors.textPrimary} />
+          </Pressable>
+          <View style={styles.mapStatus}>
+            <Text style={styles.mapStatusText}>
+              {step === "in_progress"
+                ? "Service in progress"
+                : step === "arrived"
+                ? "Arrived at pickup"
+                : "On the way to pickup"}
+            </Text>
+          </View>
+        </View>
+      </View>
+    );
+  };
 
-      {/* ── Persistent Vector Map Canvas ── */}
-      <SharedMapCanvas
-        userLocation={USER_LOC}
-        partnerLocation={PARTNER_LOC}
-        showRoute={true}
-        showBackButton={true}
-        onBackPress={() => nav.goBack()}
-        topStatusText={partnerStep === "in_progress" ? "Service In Progress" : "Job Active · 8 min"}
-      />
+  const renderBody = () => {
+    if (loading) {
+      return (
+        <View style={styles.stateCard}>
+          <ActivityIndicator size="small" color={Colors.brand700} />
+          <Text style={styles.stateText}>Loading this job…</Text>
+        </View>
+      );
+    }
+    if (loadError) {
+      return (
+        <View style={styles.stateCard}>
+          <Ionicons name="cloud-offline-outline" size={30} color={Colors.textSecondary} />
+          <Text style={styles.stateTitle}>Job unavailable</Text>
+          <Text style={styles.stateText}>{loadError}</Text>
+          <Button
+            label="Retry"
+            onPress={() => void loadJob(true)}
+            variant="primary"
+            fullWidth
+            style={{ marginTop: Spacing.sm }}
+          />
+          <Button
+            label="Back to dashboard"
+            onPress={() => nav.goBack()}
+            variant="ghost"
+            fullWidth
+          />
+        </View>
+      );
+    }
+    if (!job) {
+      return (
+        <View style={styles.stateCard}>
+          <Ionicons name="document-outline" size={30} color={Colors.textSecondary} />
+          <Text style={styles.stateTitle}>No job selected</Text>
+          <Text style={styles.stateText}>
+            Open an accepted job from your dashboard to see its details.
+          </Text>
+        </View>
+      );
+    }
+    if (job.status === "cancelled") {
+      return (
+        <View style={styles.stateCard}>
+          <Ionicons name="close-circle-outline" size={30} color={Colors.error} />
+          <Text style={styles.stateTitle}>Job cancelled</Text>
+          <Text style={styles.stateText}>
+            This rescue was cancelled and cannot be started or completed. You do
+            not need to travel to the pickup.
+          </Text>
+          <Button
+            label="Back to dashboard"
+            onPress={() => nav.popToTop()}
+            variant="primary"
+            fullWidth
+            style={{ marginTop: Spacing.sm }}
+          />
+        </View>
+      );
+    }
+    if (job.status === "completed") {
+      return (
+        <View style={styles.stateCard}>
+          <Ionicons name="checkmark-circle-outline" size={30} color={Colors.success} />
+          <Text style={styles.stateTitle}>Job already completed</Text>
+          <Text style={styles.stateText}>
+            Final amount: {inr(job.price_final)}. This job is closed.
+          </Text>
+          <Button
+            label="View summary"
+            onPress={() => nav.replace("PartnerJobDone", { jobId: job.id })}
+            variant="primary"
+            fullWidth
+            style={{ marginTop: Spacing.sm }}
+          />
+        </View>
+      );
+    }
 
-      {/* ── My location button ── */}
-      <TouchableOpacity style={styles.myLocBtn} onPress={handleNavigate}>
-        <Ionicons name="navigate" size={20} color={Colors.brand700} />
-      </TouchableOpacity>
+    return (
+      <>
+        {actionError ? (
+          <TouchableOpacity
+            style={styles.errorBanner}
+            onPress={() => setActionError(null)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="warning-outline" size={15} color={Colors.error} />
+            <Text style={styles.errorBannerText}>{actionError}</Text>
+            <Text style={styles.errorBannerDismiss}>Dismiss</Text>
+          </TouchableOpacity>
+        ) : null}
 
-      {/* ── Bottom Sheet with Dynamic Height & Content ── */}
-      <Animated.View
-        style={[styles.sheet, { transform: [{ translateY: slideAnim }] }]}
-      >
-        <View style={styles.sheetHandle} />
-
-        {/* Identity block + Compact Icon-Row Actions */}
+        {/* Identity block + compact call/message actions */}
         <View style={styles.identityRow}>
           <View style={styles.customerAvatar}>
             <Ionicons name="person" size={20} color={Colors.textSecondary} />
           </View>
           <View style={styles.customerMeta}>
-            <Text style={styles.customerName}>Arjun Sharma</Text>
+            <Text style={styles.customerName}>
+              {job.owner_name ?? "Customer"}
+            </Text>
             <Text style={styles.customerAddress} numberOfLines={1}>
-              {job.pickupLocation.address}
+              {job.pickup_address_text}
             </Text>
           </View>
 
-          {/* Compact Icon Row (Call + Message) */}
-          <View style={styles.iconRow}>
-            <TouchableOpacity
-              style={styles.circleActionBtn}
-              onPress={() => Linking.openURL("tel:+919876543210")}
-              accessibilityRole="button"
-              accessibilityLabel="Call Customer"
-            >
-              <Ionicons name="call" size={17} color={Colors.textPrimary} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.circleActionBtn}
-              onPress={() => Linking.openURL("sms:+919876543210")}
-              accessibilityRole="button"
-              accessibilityLabel="Message Customer"
-            >
-              <Ionicons name="chatbubble-ellipses" size={17} color={Colors.textPrimary} />
-            </TouchableOpacity>
-          </View>
+          {job.owner_phone ? (
+            <View style={styles.iconRow}>
+              <TouchableOpacity
+                style={styles.circleActionBtn}
+                onPress={() => void Linking.openURL(`tel:${job.owner_phone}`)}
+                accessibilityRole="button"
+                accessibilityLabel="Call customer"
+              >
+                <Ionicons name="call" size={17} color={Colors.textPrimary} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.circleActionBtn}
+                onPress={() => void Linking.openURL(`sms:${job.owner_phone}`)}
+                accessibilityRole="button"
+                accessibilityLabel="Message customer"
+              >
+                <Ionicons name="chatbubble-ellipses" size={17} color={Colors.textPrimary} />
+              </TouchableOpacity>
+            </View>
+          ) : null}
         </View>
 
-        {/* ── Distinct Bordered Vehicle Block ── */}
+        {/* Vehicle + service, both backend fields */}
         <View style={styles.vehicleSubCard}>
           <View style={styles.vehicleIconCircle}>
-            <Ionicons name="car" size={18} color={Colors.textPrimary} />
+            <Ionicons name={meta.icon as any} size={18} color={meta.color} />
           </View>
           <View style={styles.vehicleDetails}>
-            <Text style={styles.vehicleModel}>{job.vehicle?.model || "Hyundai Creta"}</Text>
-            <Text style={styles.vehicleSubtext}>
-              {job.vehicle?.type?.toUpperCase() || "SUV"} · Silver
+            <Text style={styles.vehicleModel}>
+              {job.vehicle_number ?? "Registration not provided"}
+            </Text>
+            <Text style={styles.vehicleSubtext} numberOfLines={1}>
+              {job.service_name ?? job.service_code ?? "Service details unavailable"}
             </Text>
           </View>
-          <View style={styles.plateTag}>
-            <Text style={styles.plateText}>{job.vehicle?.licensePlate || "DL 01 AB 1234"}</Text>
-          </View>
+          {job.price_estimate != null ? (
+            <View style={styles.plateTag}>
+              <Text style={styles.plateText}>{inr(job.price_estimate)}</Text>
+            </View>
+          ) : null}
         </View>
 
-        {/* ── OTP CODE ENTRY BOXES (Partner Side - Visual Focal Point) ── */}
-        {partnerStep === "arrived" && (
-          <View style={styles.otpContainer}>
-            <View style={styles.otpHeader}>
-              <Ionicons name="shield-checkmark" size={18} color={Colors.brand700} />
-              <Text style={styles.otpHeaderTitle}>CUSTOMER START CODE</Text>
+        {job.issue_description ? (
+          <Text style={styles.issueText} numberOfLines={2}>
+            “{job.issue_description}”
+          </Text>
+        ) : null}
+
+        <View style={styles.metaRow}>
+          {job.price_estimate != null ? (
+            <View style={styles.metaItem}>
+              <Ionicons name="pricetag-outline" size={14} color={Colors.textSecondary} />
+              <Text style={styles.metaText}>Owner's quote {inr(job.price_estimate)}</Text>
             </View>
-            <Text style={styles.otpSubtitle}>
-              Ask customer for their 4-digit code to begin roadside assistance
-            </Text>
-
-            {/* 4 Large High-Contrast Entry Boxes */}
-            <View style={styles.otpBoxesRow}>
-              {otp.map((digit, i) => (
-                <TextInput
-                  key={i}
-                  ref={(r) => { otpRefs.current[i] = r; }}
-                  style={[
-                    styles.otpBox,
-                    digit ? styles.otpBoxFilled : {},
-                  ]}
-                  value={digit}
-                  onChangeText={(t) => handleOtpChange(t, i)}
-                  onKeyPress={({ nativeEvent }) => {
-                    if (nativeEvent.key === "Backspace") handleOtpBackspace(i);
-                  }}
-                  keyboardType="number-pad"
-                  maxLength={1}
-                  textAlign="center"
-                  selectTextOnFocus
-                />
-              ))}
+          ) : null}
+          {job.current_assignment?.estimated_arrival_min != null ? (
+            <View style={styles.metaItem}>
+              <Ionicons name="time-outline" size={14} color={Colors.textSecondary} />
+              <Text style={styles.metaText}>
+                {job.current_assignment.estimated_arrival_min} min ETA
+              </Text>
             </View>
+          ) : null}
+        </View>
 
-            <Button
-              label="Verify & Start Service"
-              onPress={handleVerifyStartCode}
-              variant="primary"
-              size="md"
-              fullWidth
-              style={{ marginTop: Spacing.sm }}
-            />
-          </View>
-        )}
-
-        {/* ── Job In Progress Mode ── */}
-        {partnerStep === "in_progress" && (
-          <View style={styles.inProgressContainer}>
-            <View style={styles.verifiedRow}>
-              <Ionicons name="checkmark-circle" size={18} color={Colors.brand700} />
-              <Text style={styles.verifiedText}>Code Verified · Work Underway</Text>
-            </View>
-            <Button
-              label="Mark Complete"
-              onPress={handleDone}
-              variant="primary"
-              size="lg"
-              fullWidth
-              style={{ marginTop: Spacing.sm }}
-            />
-          </View>
-        )}
-
-        {/* ── En Route Actions ── */}
-        {partnerStep === "en_route" && (
+        {/* ── En route: navigate, then confirm arrival ── */}
+        {step === "en_route" && (
           <View style={styles.enRouteBtnsRow}>
             <Button
               label="Navigate"
@@ -279,8 +507,8 @@ export default function ActiveJobScreen() {
               style={{ flex: 1 }}
             />
             <Button
-              label="Arrived at Location"
-              onPress={() => setPartnerStep("arrived")}
+              label="Arrived at location"
+              onPress={() => setStep("arrived")}
               variant="primary"
               size="md"
               fullWidth={false}
@@ -288,90 +516,148 @@ export default function ActiveJobScreen() {
             />
           </View>
         )}
+
+        {/* ── Arrived: owner's start code is the only door to in_progress ── */}
+        {step === "arrived" && (
+          <View style={styles.otpContainer}>
+            <View style={styles.otpHeader}>
+              <Ionicons name="shield-checkmark" size={18} color={Colors.brand700} />
+              <Text style={styles.otpHeaderTitle}>CUSTOMER START CODE</Text>
+            </View>
+            <Text style={styles.otpSubtitle}>
+              Ask the customer for the 4 digits shown on their tracking screen.
+              Their code is checked by Sahayak, not stored on this phone.
+            </Text>
+
+            <View style={styles.otpBoxesRow}>
+              {otp.map((digit, i) => (
+                <TextInput
+                  key={i}
+                  ref={(r) => {
+                    otpRefs.current[i] = r;
+                  }}
+                  style={[styles.otpBox, digit ? styles.otpBoxFilled : {}]}
+                  value={digit}
+                  onChangeText={(t) => handleOtpChange(t, i)}
+                  onKeyPress={({ nativeEvent }) => {
+                    if (nativeEvent.key === "Backspace") handleOtpBackspace(i);
+                  }}
+                  keyboardType="number-pad"
+                  maxLength={1}
+                  textAlign="center"
+                  selectTextOnFocus
+                  editable={!verifying}
+                />
+              ))}
+            </View>
+
+            <Button
+              label={verifying ? "Checking…" : "Verify & start service"}
+              onPress={handleVerifyStartCode}
+              loading={verifying}
+              disabled={verifying}
+              variant="primary"
+              size="md"
+              fullWidth
+              style={{ marginTop: Spacing.sm }}
+            />
+          </View>
+        )}
+
+        {/* ── In progress: collect the real amount before closing ── */}
+        {step === "in_progress" && (
+          <View style={styles.inProgressContainer}>
+            <View style={styles.verifiedRow}>
+              <Ionicons name="checkmark-circle" size={18} color={Colors.brand700} />
+              <Text style={styles.verifiedText}>Code verified · Work underway</Text>
+            </View>
+
+            <Text style={styles.amountLabel}>Final amount charged</Text>
+            <View style={styles.amountRow}>
+              <Text style={styles.amountCurrency}>₹</Text>
+              <TextInput
+                style={styles.amountInput}
+                value={finalAmount}
+                onChangeText={(t) => setFinalAmount(t.replace(/[^0-9]/g, ""))}
+                keyboardType="number-pad"
+                placeholder="0"
+                placeholderTextColor={Colors.textMuted}
+                editable={!completing}
+              />
+            </View>
+            <Text style={styles.amountHint}>
+              Enter what you actually charged. The customer sees this as the final price.
+            </Text>
+
+            <Button
+              label={completing ? "Saving…" : "Mark complete"}
+              onPress={handleComplete}
+              loading={completing}
+              disabled={completing}
+              variant="primary"
+              size="lg"
+              fullWidth
+              style={{ marginTop: Spacing.sm }}
+            />
+          </View>
+        )}
+      </>
+    );
+  };
+
+  return (
+    <View style={styles.container}>
+      <StatusBar barStyle="dark-content" />
+
+      {renderMap()}
+
+      {pickup ? (
+        <TouchableOpacity style={styles.myLocBtn} onPress={handleNavigate}>
+          <Ionicons name="navigate" size={20} color={Colors.brand700} />
+        </TouchableOpacity>
+      ) : null}
+
+      <Animated.View
+        style={[
+          styles.sheet,
+          { transform: [{ translateY: slideAnim }] },
+          !pickup && styles.sheetNoMap,
+        ]}
+      >
+        <View style={styles.sheetHandle} />
+        {renderBody()}
       </Animated.View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  mapOverlay: { position: "absolute", top: 0, left: 0, right: 0, paddingTop: 48, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", gap: 12 },
+  mapBack: { width: 48, height: 48, borderRadius: 24, backgroundColor: "#FFFFFF", alignItems: "center", justifyContent: "center", elevation: 4 },
+  mapStatus: { backgroundColor: "#FFFFFF", borderRadius: 999, paddingHorizontal: 14, minHeight: 40, justifyContent: "center", elevation: 4 },
+  mapStatusText: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#0F172A" },
   container: { flex: 1, backgroundColor: "#E2E8F0" },
-  map: { ...StyleSheet.absoluteFill as object },
-
-  topOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.xs,
-    zIndex: 10,
-  },
-  floatingBackButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: Colors.surfaceWhite,
+  map: { ...(StyleSheet.absoluteFill as object) },
+  mapFallback: {
+    flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
-    borderColor: Colors.border,
-    ...(Shadows.card as object),
+    paddingHorizontal: Spacing["2xl"],
+    gap: 10,
+    backgroundColor: "#F1F5F9",
   },
-  topBadgeRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  statusPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: Colors.surfaceWhite,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: Radius.full,
-    gap: 7,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  activePulse: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: Colors.brand700,
-  },
-  statusPillText: {
-    fontSize: Typography.fontSize.xs,
-    fontFamily: Typography.fontFamily.semiBold,
-    color: Colors.textPrimary,
-  },
-
-  partnerPin: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#1C1C1C",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 2,
-    borderColor: Colors.surfaceWhite,
-  },
-  userPin: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: Colors.surfaceWhite,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 3,
-    borderColor: Colors.brand700,
+  mapFallbackText: {
+    fontSize: Typography.fontSize.sm,
+    fontFamily: Typography.fontFamily.regular,
+    color: Colors.textSecondary,
+    textAlign: "center",
+    lineHeight: 20,
   },
 
   myLocBtn: {
     position: "absolute",
     right: Spacing.lg,
-    bottom: 310,
+    bottom: 340,
     width: 44,
     height: 44,
     borderRadius: 22,
@@ -389,6 +675,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
+    maxHeight: "78%",
     backgroundColor: Colors.surfaceWhite,
     borderTopLeftRadius: Radius["2xl"],
     borderTopRightRadius: Radius["2xl"],
@@ -400,6 +687,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
     ...(Shadows.card as object),
   },
+  sheetNoMap: { maxHeight: "92%" },
   sheetHandle: {
     width: 36,
     height: 4,
@@ -407,6 +695,48 @@ const styles = StyleSheet.create({
     backgroundColor: "#CBD5E1",
     alignSelf: "center",
     marginBottom: Spacing.xs,
+  },
+
+  stateCard: {
+    alignItems: "center",
+    paddingVertical: Spacing.lg,
+    gap: 6,
+  },
+  stateTitle: {
+    fontSize: Typography.fontSize.base,
+    fontFamily: Typography.fontFamily.bold,
+    color: Colors.textPrimary,
+  },
+  stateText: {
+    fontSize: Typography.fontSize.sm,
+    fontFamily: Typography.fontFamily.regular,
+    color: Colors.textSecondary,
+    textAlign: "center",
+    lineHeight: 20,
+  },
+
+  errorBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#FEF2F2",
+    borderWidth: 1,
+    borderColor: "#FECACA",
+    borderRadius: Radius.md,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  errorBannerText: {
+    flex: 1,
+    fontSize: Typography.fontSize.xs,
+    lineHeight: 15,
+    fontFamily: Typography.fontFamily.medium,
+    color: "#B91C1C",
+  },
+  errorBannerDismiss: {
+    fontSize: Typography.fontSize.xs,
+    fontFamily: Typography.fontFamily.bold,
+    color: "#B91C1C",
   },
 
   identityRow: {
@@ -424,9 +754,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  customerMeta: {
-    flex: 1,
-  },
+  customerMeta: { flex: 1 },
   customerName: {
     fontSize: Typography.fontSize.base,
     fontFamily: Typography.fontFamily.bold,
@@ -438,10 +766,7 @@ const styles = StyleSheet.create({
     fontFamily: Typography.fontFamily.regular,
     marginTop: 2,
   },
-  iconRow: {
-    flexDirection: "row",
-    gap: 8,
-  },
+  iconRow: { flexDirection: "row", gap: 8 },
   circleActionBtn: {
     width: 40,
     height: 40,
@@ -472,9 +797,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  vehicleDetails: {
-    flex: 1,
-  },
+  vehicleDetails: { flex: 1 },
   vehicleModel: {
     fontSize: Typography.fontSize.sm,
     fontFamily: Typography.fontFamily.semiBold,
@@ -498,10 +821,23 @@ const styles = StyleSheet.create({
     fontSize: Typography.fontSize.xs,
     fontFamily: Typography.fontFamily.bold,
     color: Colors.textPrimary,
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
   },
 
-  // ── Prominent OTP Entry Styling ──
+  issueText: {
+    fontSize: Typography.fontSize.xs,
+    fontFamily: Typography.fontFamily.regular,
+    color: Colors.textSecondary,
+    fontStyle: "italic",
+  },
+  metaRow: { flexDirection: "row", flexWrap: "wrap", gap: Spacing.base },
+  metaItem: { flexDirection: "row", alignItems: "center", gap: 6 },
+  metaText: {
+    fontSize: Typography.fontSize.xs,
+    fontFamily: Typography.fontFamily.medium,
+    color: Colors.textSecondary,
+  },
+
   otpContainer: {
     backgroundColor: "#F8FAFC",
     borderRadius: Radius.xl,
@@ -512,11 +848,7 @@ const styles = StyleSheet.create({
     gap: 6,
     marginTop: 2,
   },
-  otpHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
+  otpHeader: { flexDirection: "row", alignItems: "center", gap: 6 },
   otpHeaderTitle: {
     fontSize: Typography.fontSize.xs,
     fontFamily: Typography.fontFamily.bold,
@@ -528,12 +860,9 @@ const styles = StyleSheet.create({
     fontFamily: Typography.fontFamily.regular,
     color: Colors.textSecondary,
     textAlign: "center",
+    lineHeight: 17,
   },
-  otpBoxesRow: {
-    flexDirection: "row",
-    gap: 12,
-    marginVertical: Spacing.xs,
-  },
+  otpBoxesRow: { flexDirection: "row", gap: 12, marginVertical: Spacing.xs },
   otpBox: {
     width: 52,
     height: 60,
@@ -552,12 +881,13 @@ const styles = StyleSheet.create({
   },
 
   inProgressContainer: {
-    backgroundColor: "#FFFCF0",
+    backgroundColor: "#F0FDFA",
     borderRadius: Radius.xl,
     borderWidth: 1,
     borderColor: Colors.brand700Light,
     padding: Spacing.md,
     marginTop: 2,
+    gap: 6,
   },
   verifiedRow: {
     flexDirection: "row",
@@ -570,10 +900,42 @@ const styles = StyleSheet.create({
     fontFamily: Typography.fontFamily.semiBold,
     color: Colors.brand700,
   },
-
-  enRouteBtnsRow: {
-    flexDirection: "row",
-    gap: Spacing.sm,
-    marginTop: 4,
+  amountLabel: {
+    fontSize: Typography.fontSize.xs,
+    fontFamily: Typography.fontFamily.semiBold,
+    color: Colors.textSecondary,
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+    marginTop: Spacing.xs,
   },
+  amountRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: Colors.surfaceWhite,
+    borderWidth: 1.5,
+    borderColor: Colors.brand700,
+    borderRadius: Radius.md,
+    paddingHorizontal: Spacing.md,
+  },
+  amountCurrency: {
+    fontSize: Typography.fontSize.xl,
+    fontFamily: Typography.fontFamily.bold,
+    color: Colors.textPrimary,
+    marginRight: 6,
+  },
+  amountInput: {
+    flex: 1,
+    height: 52,
+    fontSize: Typography.fontSize["2xl"],
+    fontFamily: Typography.fontFamily.bold,
+    color: Colors.textPrimary,
+  },
+  amountHint: {
+    fontSize: Typography.fontSize.xs,
+    fontFamily: Typography.fontFamily.regular,
+    color: Colors.textSecondary,
+    lineHeight: 16,
+  },
+
+  enRouteBtnsRow: { flexDirection: "row", gap: Spacing.sm, marginTop: 4 },
 });

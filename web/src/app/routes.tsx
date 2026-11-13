@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { OwnerHome } from '../pages/owner/OwnerHome';
 import { RequestHelpPage } from '../pages/owner/RequestHelpPage';
@@ -7,19 +7,29 @@ import { RequireRole } from './RouteGuards';
 
 import { LandingPage } from '../pages/landing/LandingPage';
 import { LoginPage } from '../pages/auth/LoginPage';
+import { TermsPage, PrivacyPage } from '../pages/legal/LegalPage';
 import { OwnerSignup } from '../pages/owner/OwnerSignup';
-import { PartnerSignup } from '../pages/partner/PartnerSignup';
-import { PartnerConsole } from '../pages/partner/PartnerConsole';
-import { OffersPage } from '../pages/partner/OffersPage';
-import { ActiveJobPage } from '../pages/partner/ActiveJobPage';
-import { AdminConsole } from '../pages/admin/AdminConsole';
+const PartnerSignup = lazy(() => import('../pages/partner/PartnerSignup').then((m) => ({ default: m.PartnerSignup })));
+const PartnerConsole = lazy(() => import('../pages/partner/PartnerConsole').then((m) => ({ default: m.PartnerConsole })));
+const OffersPage = lazy(() => import('../pages/partner/OffersPage').then((m) => ({ default: m.OffersPage })));
+const ActiveJobPage = lazy(() => import('../pages/partner/ActiveJobPage').then((m) => ({ default: m.ActiveJobPage })));
+const AdminConsole = lazy(() => import('../pages/admin/AdminConsole').then((m) => ({ default: m.AdminConsole })));
+
+const RouteFallback: React.FC = () => (
+  <div className="min-h-[40vh] flex items-center justify-center text-ink-soft" role="status" aria-live="polite">
+    Loading…
+  </div>
+);
 
 export const AppRoutes: React.FC = () => {
   return (
+    <Suspense fallback={<RouteFallback />}>
     <Routes>
       {/* Public Pages */}
       <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/terms" element={<TermsPage />} />
+      <Route path="/privacy" element={<PrivacyPage />} />
       <Route path="/signup" element={<Navigate to="/owner/signup" replace />} />
       <Route path="/owner/signup" element={<OwnerSignup />} />
       <Route path="/owner/request" element={<RequestHelpPage />} />
@@ -55,5 +65,6 @@ export const AppRoutes: React.FC = () => {
       {/* Fallback */}
       <Route path="*" element={<Navigate to="/owner" replace />} />
     </Routes>
+    </Suspense>
   );
 };

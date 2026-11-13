@@ -25,6 +25,9 @@ class Partner(Base):
     verification_status: Mapped[str] = mapped_column(
         String(20), default="pending", nullable=False
     )
+    # Why an admin rejected or suspended this partner. Required by the API for those
+    # two statuses; cleared when the partner is verified or reset to pending.
+    verification_note: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     is_independent_contractor: Mapped[bool] = mapped_column(
         Boolean, default=True, nullable=True
     )

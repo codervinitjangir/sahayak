@@ -1,420 +1,444 @@
-// ─── Sahayak — Uber-Style Login Screen ──────────────────────────────────────────
-// Step 2 in user sequence: Minimalist Uber mobile onboarding language:
-// 1. "Enter your mobile number" with +91 country selector
-// 2. Full-width high-contrast black CTA button ("Continue →")
-// 3. Social login options (Google & Apple)
-// 4. 6-digit OTP verification with auto-focus inputs & pre-fill option
-import React, { useState, useRef } from "react";
+// ─── Sahayak: sign in ─────────────────────────────────────────────────────────
+// Phone number → 6-digit SMS code → (new owners) name. The role toggle only
+// decides where a brand-new account is sent; an existing account always lands
+// where the backend says it belongs (GET /auth/me), never where it tapped.
+import React, { useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
   TextInput,
+  Pressable,
   StyleSheet,
-  TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Animated,
-  Alert,
   StatusBar,
-  Dimensions,
+  Linking,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors, Typography, Radius, Spacing } from "../../../constants/theme";
 import Button from "../../../components/ui/Button";
+import LogoMark from "../../../components/brand/LogoMark";
 import { identityService } from "../../../services/identity";
-import {
-  IS_SUPABASE_CONFIGURED,
-  sendPhoneOtp,
-  toE164,
-  verifyPhoneOtp,
-} from "../../../services/supabase";
+import { usersApi } from "../../../services/api/users";
+import { partnerApi } from "../../../services/api/partner";
+import { servicesApi, type MobileCatalogService } from "../../../services/api/services";
+import { Chip } from "../../../components/ui/kit";
+import { IS_SUPABASE_CONFIGURED, sendPhoneOtp, toE164, verifyPhoneOtp } from "../../../services/supabase";
 import { appRoleFor, useAuthStore } from "../../../store/authStore";
 import type { UserRole } from "../../../types";
+import { WEB_URL } from "../../../constants";
 
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
+type Step = "phone" | "otp" | "name" | "partner";
 
-type LoginStep = "phone" | "otp";
+const OTP_LENGTH = 6;
+const RESEND_SECONDS = 30;
+
+// Dev builds only: the test number configured in Supabase's phone provider.
+const DEV_PHONE: Record<UserRole, string> = { owner: "9000000901", partner: "9000000902" };
 
 export default function LoginScreen() {
+  const { setUser, setToken, logout } = useAuthStore();
   const [role, setRole] = useState<UserRole>("owner");
-  const [step, setStep] = useState<LoginStep>("phone");
-  const [phone, setPhone] = useState("9000000901");
-  const [otp, setOtp] = useState(["", "", "", "", "", ""]);
-  const [loading, setLoading] = useState(false);
-  const [resendTimer, setResendTimer] = useState(30);
+  const [step, setStep] = useState<Step>("phone");
+  const [phone, setPhone] = useState(__DEV__ ? DEV_PHONE.owner : "");
+  const [code, setCode] = useState("");
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [category, setCategory] = useState<"towing" | "mechanical" | null>(null);
+  const [catalog, setCatalog] = useState<MobileCatalogService[]>([]);
+  const [chosen, setChosen] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [resendIn, setResendIn] = useState(0);
 
-  const otpRefs = useRef<(TextInput | null)[]>([]);
-  const slideAnim = useRef(new Animated.Value(0)).current;
-  const { setUser, setToken } = useAuthStore();
+  const codeInput = useRef<React.ElementRef<typeof TextInput>>(null);
+  const lastTried = useRef<string | null>(null);
+  const token = useRef<string | null>(null);
 
-  const isOwner = role === "owner";
+  const e164 = toE164("+91", phone);
+  const phoneOk = phone.replace(/\D/g, "").length === 10;
 
-  const toggleRole = () => {
-    const next: UserRole = role === "owner" ? "partner" : "owner";
+  useEffect(() => {
+    if (resendIn <= 0) return;
+    const id = setTimeout(() => setResendIn((n) => n - 1), 1000);
+    return () => clearTimeout(id);
+  }, [resendIn]);
+
+  const switchRole = (next: UserRole) => {
     setRole(next);
-    setStep("phone");
-    setPhone(next === "owner" ? "9000000901" : "9000000902");
-    setOtp(["", "", "", "", "", ""]);
+    setError(null);
+    if (__DEV__) setPhone(DEV_PHONE[next]);
   };
 
-  const handleSendOTP = async () => {
-    const digits = phone.replace(/\D/g, "");
-    if (digits.length < 10) {
-      Alert.alert("Invalid Phone Number", "Please enter a valid 10-digit mobile number.");
+  const sendCode = async () => {
+    if (!phoneOk) {
+      setError("Enter your 10-digit mobile number.");
       return;
     }
     if (!IS_SUPABASE_CONFIGURED) {
-      Alert.alert(
-        "Sign-in not configured",
-        "Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY in mobile/.env, then restart the dev server."
-      );
+      setError("Sign-in is not configured in this build.");
       return;
     }
-    setLoading(true);
-    try {
-      // Send a verification SMS code to the specified phone number.
-      const outcome = await sendPhoneOtp(toE164("+91", phone));
-      if (!outcome.ok) {
-        Alert.alert("Could not send code", outcome.message ?? "Please try again.");
+    setBusy(true);
+    setError(null);
+    const outcome = await sendPhoneOtp(e164);
+    setBusy(false);
+    if (!outcome.ok) {
+      setError(outcome.message ?? "Could not send the code. Try again.");
+      return;
+    }
+    setCode("");
+    lastTried.current = null;
+    setResendIn(RESEND_SECONDS);
+    setStep("otp");
+    setTimeout(() => codeInput.current?.focus(), 150);
+  };
+
+  const resend = async () => {
+    if (resendIn > 0 || busy) return;
+    setBusy(true);
+    setError(null);
+    const outcome = await sendPhoneOtp(e164);
+    setBusy(false);
+    if (!outcome.ok) {
+      setError(outcome.message ?? "Could not send a new code. Try again.");
+      return;
+    }
+    setCode("");
+    lastTried.current = null;
+    setResendIn(RESEND_SECONDS);
+  };
+
+  const finishSignIn = async (accessToken: string, displayName?: string) => {
+    const resolution = await identityService.resolve();
+    switch (resolution.kind) {
+      case "registered":
+        setUser(
+          {
+            id: resolution.identity.id,
+            phone: e164,
+            role: appRoleFor(resolution.identity.role),
+            name: displayName ?? (resolution.identity.role === "partner" ? "Service partner" : "Vehicle owner"),
+          },
+          accessToken
+        );
         return;
-      }
-      setOtp(["", "", "", "", "", ""]);
-      setStep("otp");
-      Animated.timing(slideAnim, {
-        toValue: 1,
-        duration: 350,
-        useNativeDriver: true,
-      }).start();
-    } finally {
-      setLoading(false);
+      case "needs-signup":
+        // The token is good; there is just no profile behind it yet.
+        setStep(role === "partner" ? "partner" : "name");
+        return;
+      case "needs-linking":
+        setError(
+          "A Sahayak profile is already registered with this number but is not yet linked to this login. Ask the Sahayak team to finish linking it."
+        );
+        setStep("phone");
+        return;
+      default:
+        setError(resolution.message || "Signed in, but we could not load your profile. Try again.");
+        setStep("phone");
     }
   };
 
-  const handleVerifyOTP = async () => {
-    const code = otp.join("");
-    if (code.length < 6) {
-      Alert.alert("Incomplete Code", "Please enter all 6 digits.");
-      return;
-    }
-    setLoading(true);
+  const verify = async (digits: string) => {
+    setBusy(true);
+    setError(null);
     try {
-      const verified = await verifyPhoneOtp(toE164("+91", phone), code);
+      const verified = await verifyPhoneOtp(e164, digits);
       if (!verified.ok || !verified.accessToken) {
-        Alert.alert("Verification failed", verified.message ?? "That code did not work.");
+        setError(verified.message ?? "That code did not work. Check it and try again.");
         return;
       }
-
+      token.current = verified.accessToken;
       // Stored before the next call, because that call needs it as its bearer.
       setToken(verified.accessToken);
-
-      // The role toggle on the previous screen only seeded a phone number. What
-      // this account actually *is* comes from our own tables, and only
-      // GET /api/v1/auth/me knows — so a mechanic who tapped "Owner" still lands
-      // in the partner screens.
-      const resolution = await identityService.resolve();
-
-      switch (resolution.kind) {
-        case "registered":
-          setUser(
-            {
-              id: resolution.identity.id,
-              phone: toE164("+91", phone),
-              role: appRoleFor(resolution.identity.role),
-              name: resolution.identity.role === "partner" ? "Partner Driver" : "Vehicle Owner",
-              rating: 5.0,
-              totalJobs: 0,
-              isVerified: true,
-            },
-            verified.accessToken
-          );
-          return;
-
-        case "needs-signup":
-          setUser(
-            {
-              id: "usr_" + phone.replace(/\D/g, ""),
-              phone: toE164("+91", phone),
-              role,
-              name: role === "partner" ? "Partner Driver" : "Vehicle Owner",
-              rating: 5.0,
-              totalJobs: 0,
-              isVerified: true,
-            },
-            verified.accessToken
-          );
-          return;
-
-        case "needs-linking":
-          // An unclaimed profile exists for this number. link-auth needs its id,
-          // which this account has no way to learn — deliberately, since link-auth
-          // binds on the verified phone claim and handing ids out would widen that.
-          Alert.alert(
-            "Account not linked",
-            "A Sahayak profile is already registered with this number but is not yet linked to this login. Ask the Sahayak team to finish linking it."
-          );
-          return;
-
-        default:
-          if (resolution.message?.toLowerCase().includes("network")) {
-            // Backend unreachable (e.g. laptop Wi-Fi firewall / mobile client isolation).
-            setUser(
-              {
-                id: "usr_" + phone.replace(/\D/g, ""),
-                phone: toE164("+91", phone),
-                role,
-                name: role === "partner" ? "Partner Driver" : "Vehicle Owner",
-                rating: 5.0,
-                totalJobs: 0,
-                isVerified: true,
-              },
-              verified.accessToken
-            );
-            return;
-          }
-          Alert.alert(
-            "Signed in, but…",
-            resolution.message || "Could not load your profile. Please try again."
-          );
-          return;
-      }
+      await finishSignIn(verified.accessToken);
     } finally {
-      setLoading(false);
+      setBusy(false);
     }
   };
 
-  const handleOtpChange = (text: string, idx: number) => {
-    const digit = text.replace(/\D/g, "").slice(-1);
-    const next = [...otp];
-    next[idx] = digit;
-    setOtp(next);
-    if (digit && idx < 5) {
-      otpRefs.current[idx + 1]?.focus();
+  // Auto-submit on the sixth digit, once per distinct code.
+  useEffect(() => {
+    if (step !== "otp" || code.length !== OTP_LENGTH || busy || lastTried.current === code) return;
+    lastTried.current = code;
+    void verify(code);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [code, step, busy]);
+
+  const register = async () => {
+    const clean = name.trim();
+    if (clean.length < 2) {
+      setError("Enter your name.");
+      return;
+    }
+    if (!token.current) {
+      setError("Your session expired. Please sign in again.");
+      setStep("phone");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await usersApi.createOwner(clean, e164);
+      await finishSignIn(token.current, clean);
+    } catch (e: any) {
+      const msg = e?.response?.data?.error?.message;
+      setError(msg ?? "We could not create your account. Check your connection and try again.");
+    } finally {
+      setBusy(false);
     }
   };
 
-  const handleOtpBackspace = (idx: number) => {
-    if (!otp[idx] && idx > 0) {
-      const next = [...otp];
-      next[idx - 1] = "";
-      setOtp(next);
-      otpRefs.current[idx - 1]?.focus();
+  useEffect(() => {
+    if (step !== "partner" || catalog.length > 0) return;
+    servicesApi.listServices().then(setCatalog).catch(() => setError("We could not load the list of services. Go back and try again."));
+  }, [step, catalog.length]);
+
+  const registerPartner = async () => {
+    const clean = name.trim();
+    if (clean.length < 2) return setError("Enter your name or business name.");
+    if (!category) return setError("Choose your main work.");
+    if (chosen.length === 0) return setError("Choose at least one service.");
+    if (!token.current) {
+      setError("Your session expired. Please sign in again.");
+      setStep("phone");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const created = await partnerApi.register(clean, e164, category);
+      await partnerApi.linkAuth(created.id);
+      await partnerApi.setServices(created.id, chosen).catch(() => undefined);
+      await finishSignIn(token.current, clean);
+    } catch (e: any) {
+      setError(e?.response?.data?.error?.message ?? "We could not register you. Check your connection and try again.");
+    } finally {
+      setBusy(false);
     }
   };
 
-  const handleSocialAuth = (provider: string) => {
-    Alert.alert(
-      `${provider} Sign-In`,
-      "Please enter your registered mobile number above to sign in via SMS OTP verification."
-    );
+  const back = () => {
+    setError(null);
+    if (step === "otp" || step === "name") setStep("phone");
+    if (step === "partner") {
+      logout();
+      setStep("phone");
+    }
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-      >
-        <ScrollView
-          contentContainerStyle={styles.scroll}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          {/* ── Top Header Navigation ── */}
-          <View style={styles.topHeader}>
-            {step === "otp" ? (
-              <TouchableOpacity
-                onPress={() => setStep("phone")}
-                style={styles.circleBackBtn}
-                accessibilityLabel="Back to phone input"
-              >
-                <Ionicons name="arrow-back" size={20} color={Colors.textPrimary} />
-              </TouchableOpacity>
-            ) : (
-              <View style={styles.logoBadgeSmall}>
-                <Ionicons name="flash" size={16} color="#FFFFFF" />
-                <Text style={styles.logoBadgeSmallText}>SAHAYAK</Text>
+    <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
+      <StatusBar barStyle="dark-content" />
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+          <View style={styles.topRow}>
+            {step === "phone" ? (
+              <View style={styles.brand}>
+                <LogoMark size={36} />
+                <Text style={styles.brandText}>Sahayak</Text>
               </View>
+            ) : (
+              <Pressable onPress={back} accessibilityRole="button" accessibilityLabel="Back" style={styles.backBtn}>
+                <Ionicons name="arrow-back" size={24} color={Colors.textPrimary} />
+              </Pressable>
             )}
-
-            <TouchableOpacity
-              onPress={toggleRole}
-              style={styles.roleSwitchPill}
-              activeOpacity={0.8}
-            >
-              <Ionicons
-                name={isOwner ? "construct-outline" : "car-outline"}
-                size={14}
-                color={Colors.brand700}
-              />
-              <Text style={styles.roleSwitchText}>
-                {isOwner ? "Partner Mode" : "Owner Mode"}
-              </Text>
-            </TouchableOpacity>
           </View>
 
-          {/* ── Step 1: Phone Input (Uber Style) ── */}
-          {step === "phone" ? (
-            <View style={styles.bodyBlock}>
-              <Text style={styles.uberTitle}>Enter your mobile number</Text>
-              <Text style={styles.uberSubtitle}>
-                {isOwner
-                  ? "Get instant 24/7 roadside breakdown assistance"
-                  : "Sign in to accept rescue offers and start earning"}
+          {step === "phone" && (
+            <View>
+              <Text style={styles.title} accessibilityRole="header">
+                Get help on the road
               </Text>
+              <Text style={styles.sub}>Sign in with your mobile number. No password needed.</Text>
 
-              {/* Phone Input Box */}
-              <View style={styles.phoneInputRow}>
-                <View style={styles.countryPickerPill}>
-                  <Text style={styles.flagText}>🇮🇳</Text>
-                  <Text style={styles.countryCodeText}>+91</Text>
-                  <Ionicons name="chevron-down" size={14} color={Colors.textSecondary} />
-                </View>
+              <View style={styles.seg} accessibilityRole="radiogroup">
+                {(["owner", "partner"] as const).map((r) => {
+                  const on = role === r;
+                  return (
+                    <Pressable
+                      key={r}
+                      onPress={() => switchRole(r)}
+                      accessibilityRole="radio"
+                      accessibilityState={{ selected: on }}
+                      style={[styles.segBtn, on && styles.segOn]}
+                    >
+                      <Text style={[styles.segText, on && styles.segTextOn]}>{r === "owner" ? "Vehicle owner" : "Service partner"}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              <Text style={styles.label}>Mobile number</Text>
+              <View style={[styles.phoneRow, error && !phoneOk ? { borderColor: Colors.error } : null]}>
+                <Text style={styles.prefix}>+91</Text>
                 <TextInput
-                  style={styles.phoneTextInput}
-                  placeholder="Mobile number"
-                  placeholderTextColor={Colors.textMuted}
-                  keyboardType="phone-pad"
-                  maxLength={10}
                   value={phone}
-                  onChangeText={setPhone}
-                  returnKeyType="done"
-                  onSubmitEditing={handleSendOTP}
-                  autoFocus={false}
+                  onChangeText={(t) => {
+                    setError(null);
+                    setPhone(t.replace(/\D/g, "").slice(0, 10));
+                  }}
+                  placeholder="98765 43210"
+                  placeholderTextColor={Colors.textMuted}
+                  keyboardType="number-pad"
+                  inputMode="numeric"
+                  textContentType="telephoneNumber"
+                  autoComplete="tel"
+                  maxLength={10}
+                  accessibilityLabel="Mobile number"
+                  style={styles.phoneInput}
+                  onSubmitEditing={sendCode}
                 />
               </View>
 
-              {/* Quick Supabase Test Number Chip */}
-              <TouchableOpacity
-                style={[styles.prefillChip, { marginTop: 10, alignSelf: "flex-start" }]}
-                onPress={() => setPhone(isOwner ? "9000000901" : "9000000902")}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="sparkles" size={13} color={Colors.brand700} />
-                <Text style={styles.prefillChipText}>
-                  Test Number: {isOwner ? "9000000901" : "9000000902"} (OTP: 123456)
-                </Text>
-              </TouchableOpacity>
+              {error ? <Text style={styles.error} accessibilityRole="alert">{error}</Text> : null}
 
-              {/* Primary Continue Button */}
-              <TouchableOpacity
-                style={[
-                  styles.uberPrimaryBtn,
-                  phone.length >= 10 ? styles.uberPrimaryBtnActive : styles.uberPrimaryBtnDisabled,
-                ]}
-                onPress={handleSendOTP}
-                activeOpacity={0.85}
-                disabled={loading}
-              >
-                <Text style={styles.uberPrimaryBtnText}>
-                  {loading ? "Sending Code..." : "Continue"}
-                </Text>
-                <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
-              </TouchableOpacity>
-
-              {/* Divider */}
-              <View style={styles.dividerRow}>
-                <View style={styles.dividerLine} />
-                <Text style={styles.dividerText}>or</Text>
-                <View style={styles.dividerLine} />
+              <View style={{ marginTop: Spacing.lg }}>
+                <Button label="Send code" onPress={sendCode} loading={busy} disabled={!phoneOk} />
               </View>
-
-              {/* Social Login Buttons */}
-              <TouchableOpacity
-                style={styles.socialBtn}
-                onPress={() => handleSocialAuth("Google")}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="logo-google" size={18} color="#EA4335" />
-                <Text style={styles.socialBtnText}>Continue with Google</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.socialBtn}
-                onPress={() => handleSocialAuth("Apple")}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="logo-apple" size={20} color="#000000" />
-                <Text style={styles.socialBtnText}>Continue with Apple</Text>
-              </TouchableOpacity>
-
-              <Text style={styles.disclaimerText}>
-                By continuing, you agree to receive SMS notifications. Message and data rates may apply.
+              <Text style={styles.legal}>
+                By continuing you agree to the Sahayak{" "}
+                {WEB_URL ? (
+                  <Text style={styles.legalLink} accessibilityRole="link" onPress={() => void Linking.openURL(`${WEB_URL}/terms`)}>
+                    terms of service
+                  </Text>
+                ) : (
+                  "terms of service"
+                )}{" "}
+                and{" "}
+                {WEB_URL ? (
+                  <Text style={styles.legalLink} accessibilityRole="link" onPress={() => void Linking.openURL(`${WEB_URL}/privacy`)}>
+                    privacy policy
+                  </Text>
+                ) : (
+                  "privacy policy"
+                )}
+                .
               </Text>
             </View>
-          ) : (
-            /* ── Step 2: 6-Digit OTP Verification (Uber Style) ── */
-            <View style={styles.bodyBlock}>
-              <Text style={styles.uberTitle}>Welcome back</Text>
-              <Text style={styles.uberSubtitle}>
-                Enter the 6-digit code sent to{"\n"}
-                <Text style={{ fontFamily: Typography.fontFamily.bold, color: Colors.textPrimary }}>
-                  +91 {phone}
-                </Text>
-              </Text>
+          )}
 
-              {/* 6 Digit Input Boxes */}
-              <View style={styles.otpGrid}>
-                {otp.map((digit, idx) => (
-                  <TextInput
-                    key={idx}
-                    ref={(ref) => {
-                      otpRefs.current[idx] = ref;
-                    }}
-                    style={[
-                      styles.otpBox,
-                      digit ? styles.otpBoxFilled : null,
-                    ]}
-                    value={digit}
-                    onChangeText={(t) => handleOtpChange(t, idx)}
-                    onKeyPress={({ nativeEvent }) => {
-                      if (nativeEvent.key === "Backspace") {
-                        handleOtpBackspace(idx);
-                      }
-                    }}
-                    keyboardType="number-pad"
-                    maxLength={1}
-                    selectTextOnFocus
-                    autoFocus={idx === 0}
+          {step === "otp" && (
+            <View>
+              <Text style={styles.title} accessibilityRole="header">
+                Enter the code
+              </Text>
+              <Text style={styles.sub}>We sent a 6-digit code to +91 {phone}.</Text>
+
+              <Pressable onPress={() => codeInput.current?.focus()} accessibilityLabel="Verification code" style={styles.otpRow}>
+                {Array.from({ length: OTP_LENGTH }).map((_, i) => (
+                  <View key={i} style={[styles.otpBox, code[i] ? styles.otpFilled : null, i === code.length ? styles.otpActive : null, error ? { borderColor: Colors.error } : null]}>
+                    <Text style={styles.otpDigit}>{code[i] ?? ""}</Text>
+                  </View>
+                ))}
+                <TextInput
+                  ref={codeInput}
+                  value={code}
+                  onChangeText={(t) => {
+                    setError(null);
+                    setCode(t.replace(/\D/g, "").slice(0, OTP_LENGTH));
+                  }}
+                  keyboardType="number-pad"
+                  inputMode="numeric"
+                  textContentType="oneTimeCode"
+                  autoComplete="sms-otp"
+                  maxLength={OTP_LENGTH}
+                  caretHidden
+                  style={styles.hiddenInput}
+                  accessibilityLabel="Verification code input"
+                />
+              </Pressable>
+
+              {error ? <Text style={styles.error} accessibilityRole="alert">{error}</Text> : null}
+
+              <View style={styles.otpFoot}>
+                <Pressable onPress={back} accessibilityRole="button" style={styles.linkBtn}>
+                  <Text style={styles.link}>Wrong number?</Text>
+                </Pressable>
+                <Pressable onPress={resend} disabled={resendIn > 0 || busy} accessibilityRole="button" style={styles.linkBtn}>
+                  <Text style={[styles.link, resendIn > 0 && { color: Colors.textMuted }]}>{resendIn > 0 ? `Resend in ${resendIn}s` : "Resend code"}</Text>
+                </Pressable>
+              </View>
+
+              <View style={{ marginTop: Spacing.base }}>
+                <Button label="Verify and continue" onPress={() => void verify(code)} loading={busy} disabled={code.length !== OTP_LENGTH} />
+              </View>
+            </View>
+          )}
+
+          {step === "name" && (
+            <View>
+              <Text style={styles.title} accessibilityRole="header">
+                Create your account
+              </Text>
+              <Text style={styles.sub}>Your number is verified. What should we call you?</Text>
+              <Text style={styles.label}>Full name</Text>
+              <TextInput
+                value={name}
+                onChangeText={(t) => {
+                  setError(null);
+                  setName(t);
+                }}
+                placeholder="e.g. Asha Sharma"
+                placeholderTextColor={Colors.textMuted}
+                autoCapitalize="words"
+                textContentType="name"
+                autoComplete="name"
+                accessibilityLabel="Full name"
+                style={styles.nameInput}
+                onSubmitEditing={register}
+              />
+              {error ? <Text style={styles.error} accessibilityRole="alert">{error}</Text> : null}
+              <View style={{ marginTop: Spacing.lg }}>
+                <Button label="Create account" onPress={register} loading={busy} />
+              </View>
+            </View>
+          )}
+
+          {step === "partner" && (
+            <View>
+              <Text style={styles.title} accessibilityRole="header">
+                Register as a partner
+              </Text>
+              <Text style={styles.sub}>Tell us what you do. The Sahayak team verifies every partner before they receive jobs.</Text>
+
+              <Text style={styles.label}>Your name or business name</Text>
+              <TextInput
+                value={name}
+                onChangeText={(t) => {
+                  setError(null);
+                  setName(t);
+                }}
+                placeholder="e.g. Ravi Kumar"
+                placeholderTextColor={Colors.textMuted}
+                autoCapitalize="words"
+                accessibilityLabel="Name or business name"
+                style={styles.nameInput}
+              />
+
+              <Text style={styles.label}>Main work</Text>
+              <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
+                <Chip label="Towing" selected={category === "towing"} onPress={() => setCategory("towing")} />
+                <Chip label="Mechanic / on-site repair" selected={category === "mechanical"} onPress={() => setCategory("mechanical")} />
+              </View>
+
+              <Text style={styles.label}>Services you provide</Text>
+              <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
+                {catalog.map((s) => (
+                  <Chip
+                    key={s.id}
+                    label={s.name}
+                    selected={chosen.includes(s.code)}
+                    onPress={() => setChosen((c) => (c.includes(s.code) ? c.filter((x) => x !== s.code) : [...c, s.code]))}
                   />
                 ))}
               </View>
+              <Text style={[styles.legal, { textAlign: "left" }]}>Towing needs your equipment verified by Sahayak before you are offered those jobs.</Text>
 
-              {/* Fills the fixed code that Supabase's *configured test numbers*
-                  accept. It is still useful — those numbers bypass SMS entirely,
-                  which is how the flow gets demoed without sending a message — but
-                  it is no longer a way past verification: a real number will reject
-                  this code, and the label says so rather than implying otherwise. */}
-              <TouchableOpacity
-                style={styles.prefillChip}
-                onPress={() => setOtp(["1", "2", "3", "4", "5", "6"])}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="flash-outline" size={13} color={Colors.brand700} />
-                <Text style={styles.prefillChipText}>Test numbers only: 123456</Text>
-              </TouchableOpacity>
-
-              {/* Primary Verify Button */}
-              <TouchableOpacity
-                style={[styles.uberPrimaryBtn, styles.uberPrimaryBtnActive]}
-                onPress={handleVerifyOTP}
-                activeOpacity={0.85}
-                disabled={loading}
-              >
-                <Text style={styles.uberPrimaryBtnText}>
-                  {loading ? "Verifying..." : "Verify & Continue"}
-                </Text>
-                <Ionicons name="checkmark-circle" size={18} color="#FFFFFF" />
-              </TouchableOpacity>
-
-              {/* Resend Code Link */}
-              <View style={styles.resendRow}>
-                <Text style={styles.resendSub}>Didn't receive code? </Text>
-                <TouchableOpacity onPress={handleSendOTP}>
-                  <Text style={styles.resendLink}>Resend SMS</Text>
-                </TouchableOpacity>
+              {error ? <Text style={styles.error} accessibilityRole="alert">{error}</Text> : null}
+              <View style={{ marginTop: Spacing.lg }}>
+                <Button label="Register" onPress={registerPartner} loading={busy} />
               </View>
             </View>
           )}
@@ -425,233 +449,38 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: "#FFFFFF",
-  },
-  flex: {
-    flex: 1,
-  },
-  scroll: {
-    paddingHorizontal: 24,
-    paddingBottom: 40,
-  },
-  topHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 12,
-    marginBottom: 16,
-  },
-  logoBadgeSmall: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#F8CB46",
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: Radius.md,
-    gap: 6,
-  },
-  logoBadgeSmallText: {
-    fontSize: 11,
-    fontFamily: Typography.fontFamily.bold,
-    color: "#FFFFFF",
-    letterSpacing: 1.5,
-  },
-  circleBackBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#F1F5F9",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  roleSwitchPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FFFCF0",
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: Radius.full,
-    borderWidth: 1,
-    borderColor: "#FEF6D8",
-    gap: 6,
-  },
-  roleSwitchText: {
-    fontSize: Typography.fontSize.xs,
-    fontFamily: Typography.fontFamily.bold,
-    color: Colors.brand700,
-  },
-  bodyBlock: {
-    gap: 16,
-  },
-  uberTitle: {
-    fontSize: 26,
-    fontFamily: Typography.fontFamily.bold,
-    fontWeight: "700",
-    color: "#000000",
-    letterSpacing: -0.6,
-  },
-  uberSubtitle: {
-    fontSize: 14,
-    fontFamily: Typography.fontFamily.regular,
-    color: "#545454",
-    lineHeight: 20,
-    letterSpacing: -0.1,
-  },
-  phoneInputRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginTop: 8,
-  },
-  countryPickerPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#F1F5F9",
-    paddingHorizontal: 12,
-    paddingVertical: 14,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    gap: 6,
-  },
-  flagText: {
-    fontSize: 18,
-  },
-  countryCodeText: {
-    fontSize: Typography.fontSize.sm,
-    fontFamily: Typography.fontFamily.semiBold,
-    color: Colors.textPrimary,
-  },
-  phoneTextInput: {
-    flex: 1,
-    backgroundColor: "#F1F5F9",
-    borderRadius: Radius.lg,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: Typography.fontSize.base,
-    fontFamily: Typography.fontFamily.medium,
-    color: Colors.textPrimary,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  uberPrimaryBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#000000",
-    paddingVertical: 16,
-    borderRadius: Radius.lg,
-    gap: 10,
-    marginTop: 8,
-  },
-  uberPrimaryBtnActive: {
-    backgroundColor: "#000000",
-  },
-  uberPrimaryBtnDisabled: {
-    backgroundColor: "#64748B",
-  },
-  uberPrimaryBtnText: {
-    fontSize: Typography.fontSize.base,
-    fontFamily: Typography.fontFamily.bold,
-    color: "#FFFFFF",
-  },
-  dividerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginVertical: 8,
-    gap: 12,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: Colors.border,
-  },
-  dividerText: {
-    fontSize: Typography.fontSize.xs,
-    fontFamily: Typography.fontFamily.regular,
-    color: Colors.textMuted,
-  },
-  socialBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#F8FAFC",
-    borderWidth: 1,
-    borderColor: Colors.border,
-    paddingVertical: 14,
-    borderRadius: Radius.lg,
-    gap: 10,
-  },
-  socialBtnText: {
-    fontSize: Typography.fontSize.sm,
-    fontFamily: Typography.fontFamily.semiBold,
-    color: Colors.textPrimary,
-  },
-  disclaimerText: {
-    fontSize: 11,
-    fontFamily: Typography.fontFamily.regular,
-    color: Colors.textMuted,
-    textAlign: "center",
-    lineHeight: 16,
-    marginTop: 12,
-  },
+  safe: { flex: 1, backgroundColor: Colors.surfaceWhite },
+  scroll: { flexGrow: 1, padding: Spacing.screenHorizontal, paddingBottom: Spacing["3xl"] },
+  topRow: { minHeight: 56, justifyContent: "center", marginBottom: Spacing.lg },
+  brand: { flexDirection: "row", alignItems: "center", gap: 10 },
+  brandText: { fontSize: Typography.fontSize["2xl"], fontFamily: Typography.fontFamily.bold, color: Colors.textPrimary },
+  backBtn: { width: 48, height: 48, alignItems: "center", justifyContent: "center", marginLeft: -12 },
+  title: { fontSize: Typography.fontSize["4xl"], fontFamily: Typography.fontFamily.bold, color: Colors.textPrimary, letterSpacing: Typography.letterSpacing.display, lineHeight: 36 },
+  sub: { marginTop: Spacing.sm, fontSize: Typography.fontSize.md, color: Colors.textSecondary, fontFamily: Typography.fontFamily.regular, lineHeight: 23 },
+  label: { marginTop: Spacing.xl, marginBottom: 8, fontSize: Typography.fontSize.base, fontFamily: Typography.fontFamily.semiBold, color: Colors.textPrimary },
 
-  // OTP Screen Styles
-  otpGrid: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 8,
-    marginTop: 12,
-  },
-  otpBox: {
-    flex: 1,
-    height: 52,
-    borderRadius: Radius.lg,
-    borderWidth: 1.5,
-    borderColor: Colors.border,
-    backgroundColor: "#F8FAFC",
-    textAlign: "center",
-    fontSize: 22,
-    fontFamily: Typography.fontFamily.bold,
-    color: Colors.textPrimary,
-  },
-  otpBoxFilled: {
-    borderColor: Colors.brand700,
-    backgroundColor: "#FFFCF0",
-  },
-  prefillChip: {
-    alignSelf: "flex-start",
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FFFCF0",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: Radius.full,
-    borderWidth: 1,
-    borderColor: "#FEF6D8",
-    gap: 6,
-  },
-  prefillChipText: {
-    fontSize: 11,
-    fontFamily: Typography.fontFamily.semiBold,
-    color: Colors.brand700,
-  },
-  resendRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 12,
-  },
-  resendSub: {
-    fontSize: Typography.fontSize.xs,
-    color: Colors.textSecondary,
-    fontFamily: Typography.fontFamily.regular,
-  },
-  resendLink: {
-    fontSize: Typography.fontSize.xs,
-    fontFamily: Typography.fontFamily.bold,
-    color: Colors.brand700,
-  },
+  seg: { marginTop: Spacing.xl, flexDirection: "row", padding: 4, borderRadius: Radius.md, backgroundColor: "#F1F5F9" },
+  segBtn: { flex: 1, minHeight: 44, borderRadius: Radius.sm + 2, alignItems: "center", justifyContent: "center" },
+  segOn: { backgroundColor: Colors.surfaceWhite, borderWidth: 1, borderColor: Colors.border },
+  segText: { fontSize: Typography.fontSize.base, fontFamily: Typography.fontFamily.semiBold, color: Colors.textSecondary },
+  segTextOn: { color: Colors.textPrimary },
+
+  phoneRow: { flexDirection: "row", alignItems: "center", minHeight: 56, borderWidth: 1.5, borderColor: Colors.border, borderRadius: Radius.md, backgroundColor: Colors.surfaceWhite },
+  prefix: { paddingHorizontal: 16, fontSize: Typography.fontSize.lg, fontFamily: Typography.fontFamily.semiBold, color: Colors.textPrimary, borderRightWidth: 1, borderRightColor: Colors.border },
+  phoneInput: { flex: 1, paddingHorizontal: 14, fontSize: Typography.fontSize.lg, fontFamily: Typography.fontFamily.medium, color: Colors.textPrimary, letterSpacing: 1 },
+  nameInput: { minHeight: 56, borderWidth: 1.5, borderColor: Colors.border, borderRadius: Radius.md, paddingHorizontal: 16, fontSize: Typography.fontSize.lg, fontFamily: Typography.fontFamily.medium, color: Colors.textPrimary },
+  error: { marginTop: Spacing.md, fontSize: Typography.fontSize.base, color: Colors.error, fontFamily: Typography.fontFamily.medium, lineHeight: 21 },
+  legalLink: { textDecorationLine: "underline", color: Colors.textSecondary },
+  legal: { marginTop: Spacing.base, textAlign: "center", fontSize: Typography.fontSize.xs, color: Colors.textMuted, fontFamily: Typography.fontFamily.regular, lineHeight: 17 },
+
+  otpRow: { marginTop: Spacing.xl, flexDirection: "row", gap: 8, justifyContent: "space-between" },
+  otpBox: { flex: 1, height: 58, borderRadius: Radius.md, borderWidth: 1.5, borderColor: Colors.border, alignItems: "center", justifyContent: "center", backgroundColor: Colors.surfaceWhite },
+  otpFilled: { borderColor: Colors.brand700 },
+  otpActive: { borderColor: Colors.brand700, backgroundColor: Colors.brand700Muted },
+  otpDigit: { fontSize: Typography.fontSize["3xl"], fontFamily: Typography.fontFamily.bold, color: Colors.textPrimary },
+  hiddenInput: { position: "absolute", left: 0, right: 0, top: 0, bottom: 0, opacity: 0.02, color: "transparent" },
+  otpFoot: { marginTop: Spacing.sm, flexDirection: "row", justifyContent: "space-between" },
+  linkBtn: { minHeight: 48, justifyContent: "center" },
+  link: { fontSize: Typography.fontSize.base, fontFamily: Typography.fontFamily.semiBold, color: Colors.brand700 },
+  infoIcon: { width: 56, height: 56, borderRadius: 28, backgroundColor: Colors.brand700Muted, alignItems: "center", justifyContent: "center", marginBottom: Spacing.base },
 });

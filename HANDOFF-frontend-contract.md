@@ -2175,3 +2175,19 @@ drift apart silently.
 Full regression: **410 unit/api**, **788 live assertions across fourteen harnesses**, database
 back to baseline. Web **103 tests** and typecheck clean; the route-drift guard now covers both new
 calls (26 web call sites, was 23).
+
+## Admin partner verification (2026-11-12)
+
+- `GET /api/v1/admin/partners` returns `{items, total}` (not `partners`). Each item:
+  `id, phone, name, verification_status, verification_note, is_available, rating_avg,
+  rating_count, created_at`. `business_name`, `workshop_name`, `experience_years` and
+  `services` never existed on the backend and are gone from the web types. Before this
+  change the endpoint 500'd as soon as one partner row existed.
+- New `GET /api/v1/admin/partners/{id}`: the summary plus `documents[]`
+  (`doc_type, status, has_file, rejection_reason, expiry_date, uploaded_at`) and
+  `equipment[]` (`equipment_type, registration_number, verification_status`). The storage
+  path (`file_url`) is deliberately not returned.
+- `PATCH /api/v1/admin/partners/{id}/verify` now requires `notes` (3-500 chars) when
+  `verification_status` is `rejected` or `suspended` (422 otherwise). The reason is stored in
+  `partners.verification_note` and cleared on `verified`/`pending`.
+- DB: `partners.verification_note text` (see `backend/alembic/0003_partners_verification_note.sql`).

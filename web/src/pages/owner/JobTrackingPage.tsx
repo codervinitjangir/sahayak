@@ -6,6 +6,9 @@ import { useJob, useCancelJob } from '../../features/jobs/hooks';
 import { StatusBadge } from '../../components/StatusBadge';
 import { JobTimeline } from '../../components/JobTimeline';
 import { Button } from '../../components/ui/Button';
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
+import { StarRating } from '../../components/ui/StarRating';
+import { SafetyStrip } from '../../components/SafetyStrip';
 import { jobsService } from '../../services/jobs.service';
 import { Job, JobStatus, JobTimelineEvent } from '../../types/jobs';
 
@@ -45,6 +48,8 @@ export const JobTrackingPage: React.FC = () => {
   const [isSubmittingRating, setIsSubmittingRating] = useState<boolean>(false);
   const [isRated, setIsRated] = useState<boolean>(false);
   const [ratingError, setRatingError] = useState<string | null>(null);
+  const [confirmCancelOpen, setConfirmCancelOpen] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
 
   const ratingsQuery = useQuery({
     queryKey: ['jobs', jobId, 'ratings'],
@@ -75,7 +80,7 @@ export const JobTrackingPage: React.FC = () => {
   if (isLoading) {
     return (
       <div className="max-w-2xl mx-auto px-4 py-12 text-center space-y-4 animate-pulse">
-        <div className="w-12 h-12 bg-slate-200 rounded-full mx-auto" />
+        <div className="w-12 h-12 bg-slate-200 rounded-full mx-auto" aria-hidden="true" />
         <div className="h-6 bg-slate-200 rounded w-48 mx-auto" />
         <div className="h-32 bg-slate-100 rounded-xl" />
       </div>
@@ -86,25 +91,29 @@ export const JobTrackingPage: React.FC = () => {
     return (
       <div className="max-w-2xl mx-auto px-4 py-12 text-center space-y-4">
         <AlertTriangle className="w-12 h-12 text-amber-500 mx-auto" />
-        <h2 className="text-xl font-bold text-slate-800">Job Not Found</h2>
-        <p className="text-sm text-slate-500">We could not locate this roadside assistance job.</p>
-        <Button onClick={() => navigate('/owner')}>Return to Home</Button>
+        <h2 className="text-xl font-bold text-ink">Request not found</h2>
+        <p className="text-ink-soft">We could not find this request. It may have been removed, or the link is wrong.</p>
+        <Button onClick={() => navigate('/owner')}>Back to home</Button>
       </div>
     );
   }
 
-  const handleCancel = async () => {
-    if (confirm('Are you sure you want to cancel this assistance request?')) {
-      try {
-        await cancelJobMutation.mutateAsync({ jobId: job.id, reason: 'Cancelled by owner' });
-      } catch (err: unknown) {
-        const errorObj = err as { code?: string; status?: number; message?: string };
-        if (errorObj?.code === 'JOB_ALREADY_TERMINAL' || errorObj?.status === 409) {
-          // Treated as success per FRONTEND-GUIDE §2.5 / ADR-016
-          return;
-        }
-        alert(errorObj?.message || 'Failed to cancel assistance request.');
+  const handleCancel = () => {
+    setCancelError(null);
+    setConfirmCancelOpen(true);
+  };
+
+  const confirmCancel = async () => {
+    setConfirmCancelOpen(false);
+    try {
+      await cancelJobMutation.mutateAsync({ jobId: job.id, reason: 'Cancelled by owner' });
+    } catch (err: unknown) {
+      const errorObj = err as { code?: string; status?: number; message?: string };
+      if (errorObj?.code === 'JOB_ALREADY_TERMINAL' || errorObj?.status === 409) {
+        // Treated as success per FRONTEND-GUIDE §2.5 / ADR-016
+        return;
       }
+      setCancelError(errorObj?.message || 'Could not cancel this request. Try again.');
     }
   };
 
@@ -121,42 +130,42 @@ export const JobTrackingPage: React.FC = () => {
       : null;
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
+    <div className="max-w-2xl mx-auto px-4 py-6 space-y-5">
       {/* Header */}
       <div className="flex items-center justify-between">
         <button
           type="button"
           onClick={() => navigate('/owner')}
-          className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-600 hover:text-slate-900"
+          className="inline-flex items-center gap-1.5 min-h-[44px] text-sm font-semibold text-ink-soft hover:text-ink"
         >
-          <ArrowLeft className="w-4 h-4" /> Back to Home
+          <ArrowLeft className="w-4 h-4" aria-hidden="true" /> Home
         </button>
         <StatusBadge status={job.status} />
       </div>
 
       {/* Main Status Card */}
-      <div className="p-6 bg-white border border-slate-200 rounded-2xl shadow-sm space-y-4">
+      <div className="p-5 sm:p-6 bg-white border border-line rounded-card space-y-4">
         <div className="flex items-start justify-between">
           <div>
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-              Request ID: {job.id.slice(0, 8)}...
+            <span className="text-xs font-semibold text-ink-muted uppercase tracking-wide">
+              Request {job.id.slice(0, 8)}
             </span>
-            <h1 className="text-2xl font-black text-slate-900 mt-0.5">
+            <h1 className="text-2xl font-bold tracking-tight text-ink mt-0.5">
               {job.service?.name || 'Roadside Assistance'}
             </h1>
-            <p className="text-xs font-mono px-2 py-0.5 mt-1 inline-block rounded bg-slate-100 text-slate-700 font-semibold border border-slate-200">
+            <p className="text-sm font-mono px-2 py-0.5 mt-1 inline-block rounded bg-slate-100 text-ink-soft font-semibold border border-line">
               Vehicle: {job.vehicle_number}
             </p>
           </div>
         </div>
 
         {/* Dynamic Status Progress Description */}
-        <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+        <div className="p-4 rounded-control bg-slate-50 border border-line space-y-2">
           {job.status === 'matching' && (
             <div className="flex items-center gap-3">
               <div className="w-3 h-3 rounded-full bg-amber-500 animate-ping" />
               <p className="text-sm text-amber-900 font-medium">
-                Searching and ranking verified partners in Bengaluru...
+                Looking for the best verified partner near you. You can leave this page; we will keep searching.
               </p>
             </div>
           )}
@@ -165,9 +174,9 @@ export const JobTrackingPage: React.FC = () => {
             <div className="space-y-1">
               <div className="flex items-center gap-2 text-brand-800 font-semibold text-sm">
                 <UserCheck className="w-4 h-4 text-brand-700" />
-                <span>Partner Found! Preparing to dispatch.</span>
+                <span>A partner has accepted your request.</span>
               </div>
-              <p className="text-xs text-slate-500">The partner has accepted your service request.</p>
+              <p className="text-sm text-ink-soft">The partner has accepted your request.</p>
             </div>
           )}
 
@@ -177,23 +186,41 @@ export const JobTrackingPage: React.FC = () => {
                 <Clock className="w-4 h-4 text-sky-700" />
                 <span>
                   {etaMinutes !== null
-                    ? `Partner En Route (Estimated Arrival Time: ~${etaMinutes} min)`
-                    : 'Partner En Route (Estimated Arrival Time: calculating…)'}
+                    ? `Partner is on the way · about ${etaMinutes} min`
+                    : 'Partner is on the way'}
                 </span>
               </div>
-              <p className="text-xs text-slate-500">Live coordinates are being tracked.</p>
+              <p className="text-sm text-ink-soft">Your partner is on the way to your pickup point.</p>
             </div>
+          )}
+
+          {(job.status === 'assigned' || job.status === 'partner_en_route') && job.start_code && (
+            <div className="rounded-control border-2 border-brand-700 bg-white px-4 py-3" aria-label="Start code">
+              <span className="block text-xs font-bold uppercase tracking-wide text-ink-muted">Your start code</span>
+              <span className="block text-3xl font-bold tracking-[0.4em] text-ink tnum">{job.start_code}</span>
+              <span className="block text-sm text-ink-soft mt-1">
+                Read this to your partner only once they have reached your vehicle. Work cannot start without it.
+              </span>
+            </div>
+          )}
+
+          {job.price_estimate != null && job.status !== 'cancelled' && job.status !== 'no_match_found' && (
+            <p className="text-sm text-slate-700">
+              {job.status === 'completed' && job.price_final != null
+                ? <>Final amount: <strong>₹{Number(job.price_final)}</strong></>
+                : <>Upfront estimate: <strong>₹{Number(job.price_estimate)}</strong> — the partner confirms the final amount on completion.</>}
+            </p>
           )}
 
           {job.status === 'in_progress' && (
             <p className="text-sm text-brand-800 font-medium">
-              Partner has arrived on site and work is currently in progress.
+              Your partner has started the work.
             </p>
           )}
 
           {job.status === 'completed' && (
             <p className="text-sm text-green-800 font-medium">
-              Assistance completed successfully.
+              Your request is complete.
             </p>
           )}
 
@@ -201,9 +228,9 @@ export const JobTrackingPage: React.FC = () => {
             <div className="flex items-start gap-2 text-amber-900 text-sm">
               <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
               <div>
-                <span className="font-bold block">Operations Support Alerted</span>
-                <span className="text-xs text-amber-800">
-                  Automated matching exhausted candidates. An operations specialist is manually coordinating assistance for you now.
+                <span className="font-bold block">No partner available right now</span>
+                <span className="text-sm text-amber-800">
+                  Every nearby verified partner was offered this job and none could take it. You can try again or cancel this request.
                 </span>
               </div>
             </div>
@@ -219,19 +246,19 @@ export const JobTrackingPage: React.FC = () => {
           if (!partnerName) return null;
 
           return (
-            <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+            <div className="pt-4 border-t border-line flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-brand-50 text-brand-700 flex items-center justify-center font-bold">
+                <div className="w-11 h-11 rounded-full bg-brand-50 text-brand-700 flex items-center justify-center font-bold">
                   {partnerName.charAt(0)}
                 </div>
                 <div>
                   <div className="flex items-center gap-1.5">
-                    <h4 className="text-sm font-bold text-slate-900">{partnerName}</h4>
+                    <h4 className="font-bold text-ink">{partnerName}</h4>
                     <Shield className="w-3.5 h-3.5 text-brand-700" />
                   </div>
-                  <div className="flex items-center gap-2 text-xs text-slate-500">
+                  <div className="flex items-center gap-2 text-sm text-ink-soft">
                     <span>
-                      ★ {partnerRating != null ? Number(partnerRating).toFixed(1) : 'New'} ({partnerRatingCount} jobs)
+                      {partnerRating != null ? `${Number(partnerRating).toFixed(1)} rating` : 'New partner'} · {partnerRatingCount} {partnerRatingCount === 1 ? 'job' : 'jobs'}
                     </span>
                     {distanceKm && (
                       <>
@@ -249,7 +276,7 @@ export const JobTrackingPage: React.FC = () => {
               {partnerPhone && (
                 <a
                   href={`tel:${partnerPhone}`}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-brand-700 text-white rounded-lg text-sm font-semibold hover:bg-brand-800 touch-target"
+                  className="inline-flex items-center gap-1.5 px-4 min-h-[48px] bg-brand-700 text-white rounded-control text-sm font-semibold hover:bg-brand-800"
                 >
                   <Phone className="w-4 h-4" /> Call
                 </a>
@@ -260,99 +287,94 @@ export const JobTrackingPage: React.FC = () => {
 
         {/* Completed Job Rating Card */}
         {job.status === 'completed' && canRate && !alreadyRated && (
-          <div className="pt-4 border-t border-slate-100 space-y-3">
-            <h4 className="text-sm font-bold text-slate-900">Rate your experience</h4>
-            <div className="flex items-center gap-1.5">
-              {[1, 2, 3, 4, 5].map((star) => (
-                <button
-                  key={star}
-                  type="button"
-                  onClick={() => setRating(star)}
-                  className={`text-2xl transition-transform hover:scale-110 cursor-pointer ${
-                    star <= rating ? 'text-amber-400' : 'text-slate-200'
-                  }`}
-                  aria-label={`${star} star`}
-                >
-                  ★
-                </button>
-              ))}
-              {rating > 0 && (
-                <span className="text-xs font-semibold text-slate-600 ml-2">
-                  {rating} / 5
-                </span>
-              )}
-            </div>
+          <div className="pt-4 border-t border-line space-y-3">
+            <h4 className="font-bold text-ink">How was the service?</h4>
+            <StarRating value={rating} onChange={setRating} size="lg" showScore />
             <textarea
               value={comment}
               onChange={(e) => setComment(e.target.value)}
               placeholder="Leave feedback for the partner (optional)"
-              className="w-full text-xs p-2.5 rounded-lg border border-slate-200 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              className="w-full text-base p-3 rounded-control border border-line focus:outline-none focus:ring-2 focus:ring-brand-700"
               rows={2}
             />
             {ratingError && (
-              <p className="text-xs text-red-600 font-medium">{ratingError}</p>
+              <p className="text-sm text-emergency-700 font-medium" role="alert">{ratingError}</p>
             )}
             <Button
-              size="sm"
               disabled={rating === 0 || isSubmittingRating}
               isLoading={isSubmittingRating}
               onClick={handleSubmitRating}
             >
-              Submit Rating
+              Submit rating
             </Button>
           </div>
         )}
 
         {job.status === 'completed' && (alreadyRated || isRated) && (
-          <div className="pt-3 border-t border-slate-100 text-xs font-semibold text-emerald-700 flex items-center gap-1.5">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-            Thank you for rating this service!
+          <div className="pt-4 border-t border-line text-sm font-semibold text-status-success flex items-center gap-1.5">
+            <CheckCircle2 className="w-4 h-4" aria-hidden="true" />
+            Thanks for rating this service.
           </div>
         )}
 
         {/* Cancellation Action (available across all active non-terminal statuses; no_match_found has dedicated prompt below) */}
         {job.status !== 'completed' && job.status !== 'cancelled' && job.status !== 'no_match_found' && (
-          <div className="pt-2 border-t border-slate-100 flex justify-end">
+          <div className="pt-4 border-t border-line flex justify-end">
             <Button
               variant="outline"
               size="sm"
               onClick={handleCancel}
               isLoading={cancelJobMutation.isPending}
-              className="border-red-300 text-red-700 hover:bg-red-50"
+              className="!border-emergency-600 !text-emergency-700 hover:!bg-emergency-50"
             >
-              Cancel Request
+              Cancel request
             </Button>
           </div>
         )}
 
         {/* Action on no_match_found */}
         {job.status === 'no_match_found' && (
-          <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2.5">
+          <div className="pt-4 border-t border-line flex items-center justify-end gap-2.5">
             <Button
               variant="outline"
-              size="sm"
               onClick={handleCancel}
               isLoading={cancelJobMutation.isPending}
-              className="border-slate-300 text-slate-700 hover:bg-slate-50"
             >
-              Cancel
+              Cancel request
             </Button>
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={() => navigate('/owner')}
-            >
-              Request Again
+            <Button variant="primary" onClick={() => navigate('/owner/request')}>
+              Request again
             </Button>
           </div>
         )}
       </div>
 
-      {/* Live Dispatch Progress Timeline */}
-      <div className="p-6 bg-white border border-slate-200 rounded-2xl shadow-sm space-y-4">
-        <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
-          Live Dispatch Progress
-        </h3>
+      {cancelError && (
+        <p className="text-sm text-emergency-700 font-medium" role="alert">
+          {cancelError}
+        </p>
+      )}
+
+      {job.status !== 'completed' && job.status !== 'cancelled' && (
+        <section aria-label="Safety" className="space-y-1">
+          <h3 className="text-sm font-semibold text-ink-soft">While you wait</h3>
+          <SafetyStrip />
+        </section>
+      )}
+
+      <ConfirmDialog
+        isOpen={confirmCancelOpen}
+        title="Cancel this request?"
+        description="Your partner will be told and the request will be closed. You can start a new one at any time."
+        confirmLabel="Yes, cancel"
+        cancelLabel="Keep request"
+        onConfirm={confirmCancel}
+        onCancel={() => setConfirmCancelOpen(false)}
+      />
+
+      {/* Progress timeline */}
+      <div className="p-5 sm:p-6 bg-white border border-line rounded-card space-y-4">
+        <h3 className="font-bold text-ink">Progress</h3>
         <JobTimeline
           status={job.status}
           variant="full"

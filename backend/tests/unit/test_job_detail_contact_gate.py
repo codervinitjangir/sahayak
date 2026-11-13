@@ -24,8 +24,9 @@ from datetime import datetime, timezone
 from decimal import Decimal
 
 import pytest
+from geoalchemy2 import WKTElement
 
-from app.repositories import job_repository
+from app.repositories import job_repository, service_repository, user_repository
 from app.schemas.job import JobDetailResponse
 from app.services import job_service
 from app.services.auth_service import Identity
@@ -54,6 +55,11 @@ GATED_PARTNER_FIELDS = (
     "partner_rating_count",
 )
 
+# Everything that identifies the *owner* or locates their vehicle. Same gate,
+# same reason: an offered-but-not-accepted partner has no need to know who the
+# owner is or precisely where the car is parked.
+GATED_OWNER_FIELDS = ("owner_name", "owner_phone", "pickup_lat", "pickup_lng")
+
 
 class Stub:
     def __init__(self, **kwargs):
@@ -64,15 +70,18 @@ def _job():
     return Stub(
         id=JOB_ID,
         user_id=OWNER_ID,
+        vehicle_id=uuid.UUID("44444444-4444-4444-4444-444444444444"),
         status="in_progress",
         service_id=1,
         vehicle_number="MH12AB1234",
+        pickup_location=WKTElement("POINT(73.8567 18.5204)", srid=4326),
         pickup_address_text="Baner Road",
         issue_description="Flat tyre",
         price_estimate=Decimal("500.00"),
         price_final=None,
         requested_at=NOW,
         completed_at=None,
+        start_code="4821",
     )
 
 
@@ -86,10 +95,14 @@ def _partner():
     )
 
 
+def _owner():
+    return Stub(name="Asha Rao", phone="+919876543210")
+
+
 @pytest.fixture
 def wiring(monkeypatch):
-    """Stub the four repository reads get_job_with_status makes."""
-    calls = {"get_partner_by_id": 0}
+    """Stub every repository read get_job_with_status makes."""
+    calls = {"get_partner_by_id": 0, "get_user_by_id": 0}
 
     async def get_job_by_id(db, job_id):
         return _job()
@@ -101,6 +114,13 @@ def wiring(monkeypatch):
         calls["get_partner_by_id"] += 1
         return _partner()
 
+    async def get_user_by_id(db, user_id):
+        calls["get_user_by_id"] += 1
+        return _owner()
+
+    async def get_service_by_id(db, service_id):
+        return Stub(id=service_id, code="flat_tyre", name="Flat-Tyre Support")
+
     async def get_status_history(db, job_id):
         return [Stub(status="requested", changed_at=NOW, note=None)]
 
@@ -108,6 +128,8 @@ def wiring(monkeypatch):
     monkeypatch.setattr(job_repository, "get_latest_assignment", get_latest_assignment)
     monkeypatch.setattr(job_repository, "get_partner_by_id", get_partner_by_id)
     monkeypatch.setattr(job_repository, "get_status_history", get_status_history)
+    monkeypatch.setattr(service_repository, "get_service_by_id", get_service_by_id)
+    monkeypatch.setattr(user_repository, "get_user_by_id", get_user_by_id)
     return calls
 
 
@@ -191,3 +213,69 @@ def test_count_is_absent_when_the_offer_has_no_resolvable_partner(wiring, monkey
 
     assert detail.current_assignment.partner_rating_count is None
     assert detail.current_assignment.partner_rating is None
+
+
+def test_owner_sees_the_start_code_and_pickup_coordinates(wiring):
+    """The owner is the only caller who is given the code.
+
+    It is what they read aloud to the mechanic, so the owner must have it —
+    and the mechanic must not, because submitting it is the proof they are on
+    scene. The coordinates are the other half of "where is the car": the
+    assigned partner needs both, the owner already knows them.
+    """
+    detail = _read(OWNER)
+
+    assert detail.start_code == "4821"
+    assert detail.owner_name == "Asha Rao"
+    assert detail.owner_phone == "+919876543210"
+    assert detail.pickup_lat == pytest.approx(18.5204)
+    assert detail.pickup_lng == pytest.approx(73.8567)
+
+
+def test_assigned_partner_gets_owner_contact_but_never_the_start_code(wiring):
+    """The partner needs to phone the owner and drive to the pin.
+
+    They must not be able to read the code back: GET /jobs/{id} is polled every
+    few seconds, so a code visible here would not be a proof of presence at all.
+    """
+    detail = _read(ASSIGNED_PARTNER)
+
+    assert detail.owner_name == "Asha Rao"
+    assert detail.owner_phone == "+919876543210"
+    assert detail.pickup_lat == pytest.approx(18.5204)
+    assert detail.start_code is None
+
+
+@pytest.mark.parametrize(
+    "identity", [BYSTANDER_PARTNER, BYSTANDER_OWNER], ids=["partner", "owner"]
+)
+def test_owner_identity_and_location_are_withheld_from_bystanders(wiring, identity):
+    """A bystander gets the job, not the person or the parking spot."""
+    detail = _read(identity)
+
+    for field in GATED_OWNER_FIELDS:
+        assert getattr(detail, field) is None, field
+    assert detail.start_code is None
+
+
+def test_bystander_does_not_cost_a_owner_lookup(wiring):
+    """The gate short-circuits the owner read too, not just the partner read."""
+    _read(BYSTANDER_PARTNER)
+    assert wiring["get_user_by_id"] == 0
+
+    _read(ASSIGNED_PARTNER)
+    assert wiring["get_user_by_id"] == 1
+
+
+def test_detail_carries_the_service_code_and_name(wiring):
+    """Clients speak codes; jobs store a numeric service_id.
+
+    Returning both here is what lets the owner screen label a job without
+    shipping its own id-to-code table, which is exactly the drift that made
+    GET /services necessary.
+    """
+    detail = _read(OWNER)
+
+    assert detail.service_id == 1
+    assert detail.service_code == "flat_tyre"
+    assert detail.service_name == "Flat-Tyre Support"

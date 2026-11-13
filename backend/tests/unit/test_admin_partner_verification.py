@@ -7,6 +7,7 @@ import uuid
 import pytest
 
 from app.api.admin import list_partners, verify_partner
+from pydantic import ValidationError
 from app.schemas.admin import AdminPartnerVerificationRequest
 from app.services.auth_service import Identity
 from app.utils.errors import NotFoundError
@@ -40,6 +41,7 @@ class FakePartner:
         self.is_available = is_available
         self.rating_avg = rating_avg
         self.rating_count = rating_count
+        self.verification_note = None
         self.created_at = datetime.utcnow()
 
 
@@ -88,9 +90,10 @@ def test_verify_partner_updates_status(monkeypatch):
     partner = FakePartner(verification_status="pending")
     db = FakeSession()
 
-    async def fake_update(db_session, partner_id, new_status):
+    async def fake_update(db_session, partner_id, new_status, note=None):
         if partner_id == PARTNER_ID:
             partner.verification_status = new_status
+            partner.verification_note = note
             return partner
         return None
 
@@ -108,7 +111,7 @@ def test_verify_partner_updates_status(monkeypatch):
 def test_verify_partner_not_found_raises(monkeypatch):
     db = FakeSession()
 
-    async def fake_update(db_session, partner_id, new_status):
+    async def fake_update(db_session, partner_id, new_status, note=None):
         return None
 
     monkeypatch.setattr("app.repositories.partner_repository.update_partner_verification", fake_update)
@@ -117,3 +120,35 @@ def test_verify_partner_not_found_raises(monkeypatch):
     with pytest.raises(NotFoundError):
         asyncio.run(verify_partner(uuid.uuid4(), payload, identity=ADMIN_IDENTITY, db=db))
 
+
+
+def test_reject_requires_a_reason():
+    for status in ("rejected", "suspended"):
+        for bad in (None, "", "  ", "ab"):
+            with pytest.raises(ValidationError):
+                AdminPartnerVerificationRequest(verification_status=status, notes=bad)
+
+
+def test_reject_trims_reason_and_verify_drops_notes():
+    r = AdminPartnerVerificationRequest(verification_status="rejected", notes="  RC expired ")
+    assert r.notes == "RC expired"
+    v = AdminPartnerVerificationRequest(verification_status="verified", notes="stray")
+    assert v.notes is None
+
+
+def test_reject_passes_reason_to_repository(monkeypatch):
+    partner = FakePartner()
+    db = FakeSession()
+    seen = {}
+
+    async def fake_update(db_session, partner_id, new_status, note=None):
+        seen["note"] = note
+        partner.verification_status = new_status
+        partner.verification_note = note
+        return partner
+
+    monkeypatch.setattr("app.repositories.partner_repository.update_partner_verification", fake_update)
+    payload = AdminPartnerVerificationRequest(verification_status="rejected", notes="Blurry licence")
+    res = asyncio.run(verify_partner(PARTNER_ID, payload, identity=ADMIN_IDENTITY, db=db))
+    assert seen["note"] == "Blurry licence"
+    assert res["data"].verification_note == "Blurry licence"

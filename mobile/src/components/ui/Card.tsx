@@ -1,4 +1,3 @@
-// ─── Sahayak — Card Component ─────────────────────────────────────────────────
 import React from "react";
 import { View, StyleSheet, type ViewStyle } from "react-native";
 import { Colors, Radius, Shadows } from "../../constants/theme";
@@ -6,6 +5,7 @@ import { Colors, Radius, Shadows } from "../../constants/theme";
 interface CardProps {
   children: React.ReactNode;
   style?: ViewStyle;
+  /** Adds the soft card shadow. Cards are flat with a hairline border by default. */
   elevated?: boolean;
   noPad?: boolean;
   bg?: string;
@@ -14,7 +14,7 @@ interface CardProps {
 export default function Card({
   children,
   style,
-  elevated = true,
+  elevated = false,
   noPad = false,
   bg = Colors.surfaceWhite,
 }: CardProps) {
@@ -35,7 +35,8 @@ export default function Card({
 const styles = StyleSheet.create({
   card: {
     borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Colors.border,
     overflow: "hidden",
   },
 });
-

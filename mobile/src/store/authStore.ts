@@ -96,10 +96,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
                   id: resolution.identity.id,
                   phone: data.session?.user?.phone || "",
                   role,
-                  name: role === "partner" ? "Partner Driver" : "Vehicle Owner",
-                  rating: 5.0,
-                  totalJobs: 0,
-                  isVerified: true,
+                  name: role === "partner" ? "Service partner" : "Vehicle owner",
                 },
                 isAuthenticated: true,
               });

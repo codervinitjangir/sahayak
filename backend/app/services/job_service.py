@@ -7,18 +7,25 @@ user? is this service code real?), the transaction boundary, and the assembly of
 the read model. Every database call goes through app/repositories/job_repository.
 """
 import logging
+import secrets
 import time
 import uuid
 from decimal import Decimal
 from typing import Optional
 
 from geoalchemy2 import WKTElement
+from geoalchemy2.shape import to_shape
 from sqlalchemy import func
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.job import Job
-from app.repositories import job_repository, vehicle_repository
+from app.repositories import (
+    job_repository,
+    service_repository,
+    user_repository,
+    vehicle_repository,
+)
 from app.schemas.job import (
     CurrentAssignmentResponse,
     JobCancelRequest,
@@ -140,8 +147,39 @@ def _build_pickup_point(latitude: float, longitude: float) -> WKTElement:
     return WKTElement(f"POINT({longitude} {latitude})", srid=4326)
 
 
+def _generate_start_code() -> str:
+    """A four-digit code with no leading-zero ambiguity.
+
+    1000–9999 rather than 0000–9999: a code rendered by a UI that strips
+    leading zeros becomes three digits, and a customer reading "0421" aloud is
+    a support call waiting to happen. `secrets` rather than `random` because
+    this is a proof of presence, not a display value — a predictable code is
+    a code a mechanic could guess from the previous job.
+    """
+    return str(secrets.randbelow(9000) + 1000)
+
+
+def _pickup_coordinates(job: Job) -> tuple[Optional[float], Optional[float]]:
+    """Extract (lat, lng) from the PostGIS geography column, or (None, None).
+
+    `to_shape` is used rather than SQL so the read path stays one query. The
+    column can be absent on test stubs and on very old rows, hence the guard.
+    """
+    location = getattr(job, "pickup_location", None)
+    if location is None:
+        return None, None
+    try:
+        point = to_shape(location)
+    except (TypeError, ValueError):
+        return None, None
+    return float(point.y), float(point.x)
+
+
 async def create_job(
-    db: AsyncSession, payload: JobCreateRequest, user_id: uuid.UUID
+    db: AsyncSession,
+    payload: JobCreateRequest,
+    user_id: uuid.UUID,
+    idempotency_key: Optional[str] = None,
 ) -> Job:
     """Create a job in 'requested' state and open its status audit trail.
 
@@ -175,12 +213,35 @@ async def create_job(
     returns. That happens *after* the commit and inside a guard — see
     _try_dispatch for why a dispatch failure must not fail this call.
 
+    `idempotency_key` is the client's Idempotency-Key header, already validated
+    by the route. When present, a retry of the same request returns the job the
+    first attempt created instead of dispatching a second mechanic. The early
+    read handles the ordinary retry; the unique index on (user_id,
+    idempotency_key) handles the concurrent retry that both pass that read,
+    and the IntegrityError branch below turns the loser into the same
+    successful response rather than a 500.
+
     Raises:
         NotFoundError (404): vehicle missing, or not owned by this user.
         BadRequestError (400): unknown service_code.
         InternalError (500): the write failed; the transaction is rolled back.
     """
     started = time.perf_counter()
+
+    if idempotency_key:
+        existing = await job_repository.get_job_by_idempotency_key(
+            db, user_id, idempotency_key
+        )
+        if existing is not None:
+            log_event(
+                "job_created",
+                job_id=existing.id,
+                user_id=user_id,
+                actor_role="owner",
+                outcome="replayed_idempotent_request",
+                duration_ms=round((time.perf_counter() - started) * 1000, 2),
+            )
+            return existing
 
     vehicle = await vehicle_repository.get_vehicle_by_id(db, payload.vehicle_id)
     if vehicle is None or vehicle.user_id != user_id:
@@ -222,6 +283,8 @@ async def create_job(
             pickup_address_text=payload.pickup_address_text,
             issue_description=payload.issue_description,
             price_estimate=estimated_price,
+            start_code=_generate_start_code(),
+            idempotency_key=idempotency_key,
         )
         await job_repository.create_status_history_row(
             db,
@@ -230,6 +293,34 @@ async def create_job(
             note="Job created",
         )
         await db.commit()
+    except IntegrityError as exc:
+        # A concurrent retry with the same key won the unique index. Its job is
+        # the answer to this request too, so return it instead of surfacing a
+        # constraint violation the client can do nothing with.
+        await db.rollback()
+        if idempotency_key:
+            existing = await job_repository.get_job_by_idempotency_key(
+                db, user_id, idempotency_key
+            )
+            if existing is not None:
+                log_event(
+                    "job_created",
+                    job_id=existing.id,
+                    user_id=user_id,
+                    actor_role="owner",
+                    outcome="replayed_idempotent_request",
+                    duration_ms=round((time.perf_counter() - started) * 1000, 2),
+                )
+                return existing
+        log_event(
+            "job_created",
+            level=logging.ERROR,
+            actor_role="owner",
+            outcome="failure",
+            error_type=type(exc).__name__,
+            duration_ms=round((time.perf_counter() - started) * 1000, 2),
+        )
+        raise InternalError("Could not create job") from exc
     except SQLAlchemyError as exc:
         await db.rollback()
         log_event(
@@ -392,6 +483,7 @@ async def get_job_with_status(
     is_owner = identity.role == "user" and identity.local_id == job.user_id
 
     current_assignment = None
+    may_see_contact_details = is_owner
     assignment = await job_repository.get_latest_assignment(db, job.id)
     if assignment is not None:
         is_assigned_partner = (
@@ -435,17 +527,41 @@ async def get_job_with_status(
 
     history = await job_repository.get_status_history(db, job.id)
 
+    # The client speaks service codes; the job stores a numeric id. Fetch the
+    # catalogue row so the detail response can carry both without every client
+    # keeping its own id-to-code table (which is exactly the drift that made
+    # GET /services necessary in the first place).
+    service = await service_repository.get_service_by_id(db, job.service_id)
+
+    owner = None
+    if may_see_contact_details and job.user_id is not None:
+        owner = await user_repository.get_user_by_id(db, job.user_id)
+
+    pickup_lat, pickup_lng = (
+        _pickup_coordinates(job) if may_see_contact_details else (None, None)
+    )
+
     return JobDetailResponse(
         id=job.id,
         status=job.status,
         service_id=job.service_id,
+        service_code=service.code if service else None,
+        service_name=service.name if service else None,
+        vehicle_id=getattr(job, "vehicle_id", None),
         vehicle_number=job.vehicle_number,
         pickup_address_text=job.pickup_address_text,
+        pickup_lat=pickup_lat,
+        pickup_lng=pickup_lng,
         issue_description=job.issue_description,
         price_estimate=job.price_estimate,
         price_final=job.price_final,
         requested_at=job.requested_at,
         completed_at=job.completed_at,
+        owner_name=owner.name if owner else None,
+        owner_phone=owner.phone if owner else None,
+        # Owner-only by construction. A partner proves the code by submitting
+        # it, never by reading it back.
+        start_code=getattr(job, "start_code", None) if is_owner else None,
         current_assignment=current_assignment,
         timeline=[JobTimelineEntry.model_validate(entry) for entry in history],
     )
@@ -499,6 +615,31 @@ def _check_body_applies(payload: JobStatusTransitionRequest) -> None:
             ErrorCode.FIELD_NOT_APPLICABLE,
             "cancellation_reason may only be sent when status is 'cancelled'",
         )
+
+
+async def request_status_transition(
+    db: AsyncSession,
+    job_id: uuid.UUID,
+    payload: JobStatusTransitionRequest,
+    partner_id: uuid.UUID,
+) -> JobStatusTransitionResponse:
+    """The transition a partner asks for through POST /jobs/{job_id}/status.
+
+    Identical to transition_job_status except that it refuses in_progress.
+    That move carries a proof of presence — the owner's start code — and is
+    reachable only through start_job (POST /jobs/{job_id}/start). Letting
+    /status reach it would make the code advisory, which is the same as not
+    having one.
+
+    Refused before any read, as a request-shape rule like PRICE_FINAL_REQUIRED:
+    the answer is the same for every job, so it reveals nothing about one.
+    """
+    if payload.status == "in_progress":
+        raise BadRequestError(
+            ErrorCode.INVALID_START_CODE,
+            "Starting work requires the owner's start code: use POST /jobs/{job_id}/start",
+        )
+    return await transition_job_status(db, job_id, payload, partner_id)
 
 
 async def transition_job_status(
@@ -687,6 +828,58 @@ async def transition_job_status(
         cancelled_at=job.cancelled_at,
         cancellation_reason=job.cancellation_reason,
     )
+
+
+async def start_job(
+    db: AsyncSession,
+    job_id: uuid.UUID,
+    start_code: str,
+    partner_id: uuid.UUID,
+) -> JobStatusTransitionResponse:
+    """Verify the owner's 4-digit code and move the job to in_progress.
+
+    The only path from partner_en_route to in_progress. `transition_job_status`
+    is called afterwards rather than duplicating its lock, assignment check,
+    legality check and history write — the code check is an extra gate in front
+    of the same state machine, not a second state machine.
+
+    The read before that call is deliberately unlocked: the code is immutable
+    once written, so there is no read-check-write race to close. The status
+    transition itself still takes the row lock inside transition_job_status,
+    which is where a concurrent cancel has to be caught.
+
+    Raises:
+        NotFoundError (404): no job with this id.
+        ForbiddenError (403): caller is not this job's responsible partner.
+        BadRequestError (400): wrong code, or the job predates start codes.
+    """
+    job = await job_repository.get_job_by_id(db, job_id)
+    if job is None:
+        raise NotFoundError(ErrorCode.JOB_NOT_FOUND, "Job not found")
+
+    assignment = await job_repository.get_responsible_assignment(db, job.id)
+    if assignment is None or assignment.partner_id != partner_id:
+        raise ForbiddenError(
+            ErrorCode.FORBIDDEN, "You are not the partner assigned to this job"
+        )
+
+    expected = getattr(job, "start_code", None)
+    if not expected or not secrets.compare_digest(str(expected), start_code):
+        log_event(
+            "job_start_code_rejected",
+            level=logging.WARNING,
+            job_id=str(job.id),
+            partner_id=str(partner_id),
+            actor_role="partner",
+            outcome="rejected_invalid_code",
+        )
+        raise BadRequestError(
+            ErrorCode.INVALID_START_CODE,
+            "That start code does not match this job",
+        )
+
+    payload = JobStatusTransitionRequest(status="in_progress")
+    return await transition_job_status(db, job_id, payload, partner_id)
 
 
 async def cancel_job_by_owner(

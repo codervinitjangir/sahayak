@@ -5,13 +5,13 @@
 :root {
   --color-primary: #0F766E;
   --color-primary-hover: #115E59;
-  --color-accent: #F03F3F;
-  --color-accent-hover: #D93434;
   --color-danger: #B91C1C;
   --color-success: #15803D;
   --color-warning: #B45309;
   --color-surface: #FFFFFF;
-  --color-canvas: #F8FAFC;
+  --color-canvas: #F6F8FA;
+  --color-ink: #0F172A;
+  --color-line: #E2E8F0;
 
   /* Warm Paper Stationery design system tokens */
   --paper: #F6F1E6;
@@ -53,71 +53,65 @@
   --shadow-float: 0 12px 24px 2px rgba(0, 0, 0, 0.05);
 }
 
-body {
-  margin: 0;
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  background-color: var(--color-canvas);
-  color: #1E293B;
-  -webkit-tap-highlight-color: transparent;
+html {
+  -webkit-text-size-adjust: 100%;
 }
 
-/* Accessibility focus styles (WCAG 2.1 AA) */
-button:focus-visible, 
-input:focus-visible, 
-select:focus-visible, 
-textarea:focus-visible, 
-a:focus-visible {
+body {
+  margin: 0;
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  background-color: var(--color-canvas);
+  color: var(--color-ink);
+  -webkit-tap-highlight-color: transparent;
+  font-feature-settings: 'cv11', 'ss01';
+}
+
+/* Tabular numerals wherever a figure is read at a glance. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Visible focus (WCAG 2.2 SC 2.4.7 / 2.4.11). */
+:where(button, input, select, textarea, a, [tabindex]):focus-visible {
   outline: 2px solid #0F766E;
   outline-offset: 2px;
 }
 
-/* Minimum 44x44px touch target class for mobile accessibility */
+/* Minimum 44x44px touch target. */
 .touch-target {
   min-height: 44px;
   min-width: 44px;
 }
 
-/* ==========================================================================
-   Custom Roadside Assistance Repair Wrench Cursor (Desktop)
-   Single-Sided Mechanic Wrench
-   ========================================================================== */
-@media (pointer: fine) {
-  html, body {
-    cursor: url('/cursor-repair.svg') 4 4, auto;
-  }
+/* Safe-area padding for fixed bottom bars on notched phones. */
+.safe-bottom {
+  padding-bottom: max(env(safe-area-inset-bottom), 0px);
+}
 
-  /* Interactive Elements: Glowing Active Amber Repair Wrench with Action Spark */
-  a, 
-  button, 
-  [role="button"], 
-  input[type="button"], 
-  input[type="submit"], 
-  input[type="reset"], 
-  select, 
-  label, 
-  summary,
-  .cursor-pointer,
-  .landing-btn,
-  .nav-action-btn,
-  .pill-tab,
-  .step-nav-btn {
-    cursor: url('/cursor-repair-hover.svg') 4 4, pointer !important;
-  }
-
-  /* Active Click State: Wrench lights up on mousedown anywhere */
-  body:active {
-    cursor: url('/cursor-repair-hover.svg') 4 4, pointer;
-  }
-
-  /* Text inputs / textareas retain standard text selection beam */
-  input[type="text"],
-  input[type="tel"],
-  input[type="email"],
-  input[type="password"],
-  input[type="search"],
-  input[type="number"],
-  textarea {
-    cursor: text !important;
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 
+/* Landing page only: the custom wrench cursor (scoped so the app keeps normal cursors). */
+@media (pointer: fine) {
+  .landing-root {
+    cursor: url('/cursor-repair.svg') 4 4, auto;
+  }
+  .landing-root a,
+  .landing-root button,
+  .landing-root [role="button"],
+  .landing-root select,
+  .landing-root label,
+  .landing-root .landing-btn,
+  .landing-root .nav-action-btn,
+  .landing-root .pill-tab {
+    cursor: url('/cursor-repair-hover.svg') 4 4, pointer;
+  }
+}

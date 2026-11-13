@@ -1,11 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import {
-  ArrowLeft,
-  AlertCircle,
-  Check,
-  Globe,
-} from 'lucide-react';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
+import { ArrowLeft, AlertCircle, Check, ShieldCheck, MapPin, Gauge } from 'lucide-react';
 import { useAuth } from '../../app/AuthProvider';
 import { setAuthToken } from '../../services/authToken';
 import { homeRouteForRole, identityService } from '../../services/identity.service';
@@ -15,7 +10,7 @@ import {
   toE164,
   verifyPhoneOtp,
 } from '../../services/supabase';
-import './auth.css';
+import { Logo } from '../../components/Logo';
 
 const OTP_LENGTH = 6;
 const RESEND_SECONDS = 30;
@@ -39,10 +34,10 @@ const DIAL_CODES: DialCode[] = [
   { code: '+1', iso: 'US', label: 'United States', digits: 10 },
 ];
 
-const SEEDED_NUMBER: Record<LoginRole, string> = {
-  owner: '9876543210',
-  partner: '9811122334',
-};
+/** Dev-server convenience only. A production bundle starts with an empty field. */
+const SEEDED_NUMBER: Record<LoginRole, string> = import.meta.env.DEV
+  ? { owner: '9876543210', partner: '9811122334' }
+  : { owner: '', partner: '' };
 
 
 
@@ -52,21 +47,24 @@ function formatNumber(digits: string): string {
   return `${digits.slice(0, 5)} ${digits.slice(5)}`;
 }
 
-const IndiaFlag: React.FC = () => (
-  <svg className="auth-dial__flag" viewBox="0 0 640 480" aria-hidden="true">
-    <path fill="#FF9933" d="M0 0h640v160H0z" />
-    <path fill="#FFFFFF" d="M0 160h640v160H0z" />
-    <path fill="#138808" d="M0 320h640v160H0z" />
-    <circle cx="320" cy="240" r="42" fill="#000080" />
-    <circle cx="320" cy="240" r="33" fill="#FFFFFF" />
-    <circle cx="320" cy="240" r="11" fill="#000080" />
-  </svg>
-);
 
 
+
+/**
+ * Where to send an owner after sign-in. Only same-site owner paths are honoured, so
+ * a crafted `?redirect=https://elsewhere` can never turn this page into an open redirect.
+ */
+function safeOwnerRedirect(raw: string | null): string | null {
+  if (!raw || !raw.startsWith('/owner') || raw.startsWith('//') || raw.includes('://')) return null;
+  // A registered owner has no business on the signup form.
+  if (raw.startsWith('/owner/signup')) return null;
+  return raw;
+}
 
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const redirectTo = safeOwnerRedirect(searchParams.get('redirect'));
   const { setRole, setToken } = useAuth();
 
   const [loginRole, setLoginRole] = useState<LoginRole>('owner');
@@ -205,16 +203,24 @@ export const LoginPage: React.FC = () => {
       switch (resolution.kind) {
         case 'registered':
           setRole(resolution.identity.role === 'partner' ? 'partner' : 'owner');
-          navigate(homeRouteForRole(resolution.identity.role), { replace: true });
+          navigate(
+            resolution.identity.role === 'user' && redirectTo
+              ? redirectTo
+              : homeRouteForRole(resolution.identity.role),
+            { replace: true }
+          );
           return;
 
         case 'needs-signup':
           // The token is good; there is simply no profile behind it yet. The
           // signup form posts to POST /api/v1/users, which requires exactly this
           // token — so this screen must not be reachable before sign-in.
-          navigate(loginRole === 'partner' ? '/partner/signup' : '/owner/signup', {
-            replace: true,
-          });
+          navigate(
+            loginRole === 'partner'
+              ? '/partner/signup'
+              : `/owner/signup${redirectTo ? `?redirect=${encodeURIComponent(redirectTo)}` : ''}`,
+            { replace: true }
+          );
           return;
 
         case 'needs-linking':
@@ -233,7 +239,7 @@ export const LoginPage: React.FC = () => {
           return;
       }
     },
-    [dial.code, loginRole, navigate, phone, setRole, setToken]
+    [dial.code, loginRole, navigate, phone, redirectTo, setRole, setToken]
   );
 
   // Auto-submit the moment the sixth digit lands — no extra tap on a roadside.
@@ -311,15 +317,22 @@ export const LoginPage: React.FC = () => {
     setStatus('idle');
   };
 
-  const handleResend = () => {
-    if (resendIn > 0) return;
+  /** Asks Supabase for a fresh code; the timer only restarts if one was actually sent. */
+  const handleResend = async () => {
+    if (resendIn > 0 || status !== 'idle') return;
     setOtp(Array(OTP_LENGTH).fill(''));
+    attemptedCode.current = null;
     setError(null);
+    setStatus('sending');
+    const outcome = await sendPhoneOtp(toE164(dial.code, phone));
+    setStatus('idle');
+    if (!outcome.ok) {
+      setError(outcome.message ?? 'Could not send a new code. Try again.');
+      return;
+    }
     setResendIn(RESEND_SECONDS);
     otpRefs.current[0]?.focus();
   };
-
-
 
   const isOwner = loginRole === 'owner';
   const busy = status !== 'idle';
@@ -335,114 +348,100 @@ export const LoginPage: React.FC = () => {
     return onVerifyStep ? 'Verify & continue' : 'Send verification code';
   };
 
+
+  const inputBase =
+    'w-full min-h-[52px] rounded-control border bg-white px-4 text-base text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-brand-700 focus:border-brand-700';
+
+  const primaryBtn =
+    'w-full min-h-[52px] inline-flex items-center justify-center gap-2 rounded-control bg-brand-700 hover:bg-brand-800 active:bg-brand-900 text-white font-semibold text-base transition-colors disabled:opacity-50 disabled:cursor-not-allowed';
+
   return (
-    <div className="auth-root">
-      <div className="auth-shell">
-        {/* ── Left: editorial panel ─────────────────────────────────────── */}
-        <aside className="auth-panel">
-          <div className="auth-panel__ring" aria-hidden="true" />
-
-          <h2 className="auth-panel__headline">
-            Every second on the roadside
-            <br />
-            feels longer than it is.
+    <div className="min-h-screen bg-white lg:grid lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
+      {/* Brand panel (desktop only) */}
+      <aside className="hidden lg:flex flex-col justify-between bg-brand-900 text-white p-12">
+        <Logo tone="light" />
+        <div>
+          <h2 className="text-4xl font-bold tracking-tight leading-tight max-w-md">
+            Help for the breakdown you did not plan for.
           </h2>
+          <ul className="mt-8 space-y-5 max-w-md">
+            {[
+              { icon: MapPin, text: 'Share your location and what went wrong in under a minute.' },
+              { icon: Gauge, text: 'Matched to a partner on distance, rating and reliability.' },
+              { icon: ShieldCheck, text: 'Verified partners only. Your number is shared once matched.' },
+            ].map(({ icon: Icon, text }) => (
+              <li key={text} className="flex gap-3 text-brand-100">
+                <Icon className="w-5 h-5 mt-0.5 shrink-0 text-brand-200" aria-hidden="true" />
+                <span>{text}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <p className="text-sm text-brand-200">In immediate danger? Call 112.</p>
+      </aside>
 
-          <p className="auth-panel__subhead">
-            Verified partners, dispatched in minutes &mdash; not &ldquo;eventually.&rdquo;
-          </p>
+      {/* Form */}
+      <main className="flex flex-col min-h-screen px-5 sm:px-10">
+        <div className="flex items-center justify-between h-16">
+          <Link to="/" aria-label="Sahayak home" className="lg:invisible">
+            <Logo />
+          </Link>
+          <Link
+            to="/"
+            className="inline-flex items-center gap-1.5 min-h-[44px] text-sm font-medium text-ink-soft hover:text-ink"
+          >
+            <ArrowLeft className="w-4 h-4" aria-hidden="true" />
+            <span>Back to site</span>
+          </Link>
+        </div>
 
-          {/* Static product preview card, cropped by the panel edge */}
-          <div className="auth-preview" aria-hidden="true">
-            <div className="auth-preview__screen">
-              <span className="auth-preview__status">
-                <span className="auth-preview__dot" />
-                Partner en route
-              </span>
-
-              <p className="auth-preview__label">Roadside assistance dispatch</p>
-
-              <div className="auth-preview__track">
-                <i />
-              </div>
-
-              <div className="auth-preview__partner">
-                <span className="auth-preview__avatar">SP</span>
-                <div>
-                  <div className="auth-preview__name">Verified Service Partner</div>
-                  <div className="auth-preview__meta">Roadside Breakdown Specialist</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </aside>
-
-        {/* ── Right: form panel ─────────────────────────────────────────── */}
-        <main className="auth-form-panel">
-          <div className="auth-topbar">
-            <Link to="/" className="auth-wordmark">
-              <span className="auth-wordmark__text">Sahayak</span>
-            </Link>
-
-            <Link to="/" className="auth-toplink">
-              <ArrowLeft className="w-[13px] h-[13px]" />
-              <span>Back to site</span>
-            </Link>
-          </div>
-
-          <div className="auth-body">
+        <div className="flex-1 flex items-center">
+          <div className="w-full max-w-md mx-auto py-8">
             {!onVerifyStep ? (
               <div>
-                <h1 className="auth-title">
-                  {isOwner ? 'Get roadside help' : 'Partner dispatch console'}
+                <h1 className="text-3xl font-bold tracking-tight">
+                  {isOwner ? 'Get roadside help' : 'Partner sign in'}
                 </h1>
-                <p className="auth-desc">
+                <p className="mt-2 text-ink-soft">
                   {isOwner
                     ? 'Sign in to request help or manage your vehicles.'
-                    : 'Sign in to accept jobs and set your dispatch preferences.'}
+                    : 'Sign in to go on shift, accept jobs and manage your services.'}
                 </p>
 
-                {/* Context first — who you are changes where you land. Text
-                    only: glyphs inside a segmented control add noise, not
-                    meaning, when both options are two plain words. */}
                 <div
-                  className={`auth-roles ${loginRole === 'partner' ? 'auth-roles--partner' : ''}`}
+                  className="mt-6 grid grid-cols-2 gap-1 p-1 rounded-control bg-slate-100"
                   role="radiogroup"
                   aria-label="Choose account type"
                 >
-                  <span className="auth-roles__thumb" aria-hidden="true" />
-                  <button
-                    type="button"
-                    role="radio"
-                    aria-checked={isOwner}
-                    onClick={() => handleRoleChange('owner')}
-                    className={`auth-role ${isOwner ? 'auth-role--active' : ''}`}
-                  >
-                    Vehicle Owner
-                  </button>
-                  <button
-                    type="button"
-                    role="radio"
-                    aria-checked={!isOwner}
-                    onClick={() => handleRoleChange('partner')}
-                    className={`auth-role ${!isOwner ? 'auth-role--active' : ''}`}
-                  >
-                    Service Partner
-                  </button>
+                  {(['owner', 'partner'] as const).map((r) => {
+                    const active = loginRole === r;
+                    return (
+                      <button
+                        key={r}
+                        type="button"
+                        role="radio"
+                        aria-checked={active}
+                        onClick={() => handleRoleChange(r)}
+                        className={`min-h-[44px] rounded-[10px] text-sm font-semibold transition-colors ${
+                          active ? 'bg-white text-ink shadow-card' : 'text-ink-soft hover:text-ink'
+                        }`}
+                      >
+                        {r === 'owner' ? 'Vehicle Owner' : 'Service Partner'}
+                      </button>
+                    );
+                  })}
                 </div>
 
-                <form onSubmit={handleSendCode}>
-                  <label htmlFor="auth-phone" className="auth-label">
+                <form onSubmit={handleSendCode} className="mt-6">
+                  <label htmlFor="auth-phone" className="block text-sm font-semibold mb-2">
                     Mobile number
                   </label>
-                  <div
-                    className={`auth-field ${error && !phoneComplete ? 'auth-field--invalid' : ''}`}
-                  >
-                    <div className="auth-dial">
-                      {dial.iso === 'IN' ? <IndiaFlag /> : <Globe className="w-[15px] h-[15px]" />}
-                      <span>{dial.code}</span>
+                  <div className="flex gap-2">
+                    <div className="relative w-[104px] shrink-0">
                       <select
-                        className="auth-dial__select"
+                        className={`${inputBase} appearance-none pr-2 ${
+                          error && !phoneComplete ? 'border-emergency-600' : 'border-line'
+                        }`}
                         aria-label="Country calling code"
                         value={dial.code}
                         onChange={(e) => {
@@ -455,17 +454,16 @@ export const LoginPage: React.FC = () => {
                       >
                         {DIAL_CODES.map((d) => (
                           <option key={d.code} value={d.code}>
-                            {d.label} ({d.code})
+                            {d.code} {d.label}
                           </option>
                         ))}
                       </select>
                     </div>
-
-                    <span className="auth-field__rule" aria-hidden="true" />
-
                     <input
                       id="auth-phone"
-                      className="auth-field__input"
+                      className={`${inputBase} tnum ${
+                        error && !phoneComplete ? 'border-emergency-600' : 'border-line'
+                      }`}
                       type="tel"
                       inputMode="numeric"
                       autoComplete="tel-national"
@@ -478,84 +476,83 @@ export const LoginPage: React.FC = () => {
                       placeholder={dial.iso === 'IN' ? '98765 43210' : 'Mobile number'}
                       autoFocus
                     />
-
                   </div>
 
-                  <div className="mt-2 mb-2">
+                  {/* QA shortcut: dev server only, never in a production bundle. */}
+                  {import.meta.env.DEV && (
                     <button
                       type="button"
                       onClick={() => setPhone(isOwner ? '9000000901' : '9000000902')}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors"
+                      className="mt-2 inline-flex items-center min-h-[32px] px-3 text-xs font-medium rounded-full bg-amber-50 text-status-warning border border-amber-200"
                     >
-                      <span>✨ Use test number: {isOwner ? '9000000901' : '9000000902'} (Code: 123456)</span>
+                      Dev: use test number {isOwner ? '9000000901' : '9000000902'} (code 123456)
                     </button>
-                  </div>
+                  )}
 
-                  <p className="auth-trust-line">
+                  <p className="mt-3 text-sm text-ink-muted">
                     No password needed. We&rsquo;ll text you a 6-digit code.
                   </p>
 
                   {error && (
-                    <div className="auth-error" role="alert">
-                      <AlertCircle className="w-4 h-4 flex-shrink-0 mt-px" />
+                    <div
+                      className="mt-4 flex gap-2 rounded-control bg-emergency-50 border border-emergency-100 p-3 text-sm text-emergency-700"
+                      role="alert"
+                    >
+                      <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
                       <span>{error}</span>
                     </div>
                   )}
 
-                  <button
-                    type="submit"
-                    disabled={!phoneComplete || busy}
-                    className={`auth-submit ${busy ? 'auth-submit--busy' : ''}`}
-                  >
-                    {status === 'sent' && <Check className="w-[17px] h-[17px]" />}
+                  <button type="submit" disabled={!phoneComplete || busy} className={`${primaryBtn} mt-5`}>
+                    {status === 'sent' && <Check className="w-5 h-5" aria-hidden="true" />}
                     <span>{submitLabel()}</span>
                   </button>
                 </form>
               </div>
             ) : (
               <div>
-                <h1 className="auth-title">Enter your code</h1>
-                <p className="auth-desc">
+                <h1 className="text-3xl font-bold tracking-tight">Enter your code</h1>
+                <p className="mt-2 text-ink-soft">
                   We sent a {OTP_LENGTH}-digit verification code by SMS. It expires in 10 minutes.
                 </p>
 
-                {/* Always show which number this code went to */}
-                <div className="auth-identity">
-                  <span className="auth-identity__num">
+                <div className="mt-5 flex items-center justify-between rounded-control bg-slate-50 border border-line px-4 py-3">
+                  <span className="font-semibold tnum">
                     {dial.code} {formatNumber(phone)}
                   </span>
                   <button
                     type="button"
-                    className="auth-identity__change"
+                    className="min-h-[44px] px-2 text-sm font-semibold text-brand-700 hover:underline"
                     onClick={handleEditNumber}
                   >
                     Change
                   </button>
                 </div>
 
-                {/* Visual only — the group below already carries the real name. */}
-                <span className="auth-label" aria-hidden="true">
+                <span className="block mt-6 mb-2 text-sm font-semibold" aria-hidden="true">
                   Verification code
                 </span>
                 <div
-                  className={`auth-otp ${otpError ? 'auth-otp--error' : ''}`}
+                  className="grid grid-cols-6 gap-2"
                   role="group"
                   aria-label={`${OTP_LENGTH} digit verification code`}
                 >
                   {otp.map((digit, index) => (
                     <input
-                      // Fixed-length positional inputs — index is the stable identity.
+                      // Fixed-length positional inputs: the index is the stable identity.
                       key={`otp-${index}`}
                       ref={(el) => {
                         otpRefs.current[index] = el;
                       }}
-                      className={[
-                        'auth-otp__box',
-                        digit ? 'auth-otp__box--filled' : '',
-                        index === nextOtpIndex ? 'auth-otp__box--next' : '',
-                      ]
-                        .filter(Boolean)
-                        .join(' ')}
+                      className={`h-14 w-full text-center text-xl font-semibold tnum rounded-control border bg-white focus:outline-none focus:ring-2 focus:ring-brand-700 focus:border-brand-700 ${
+                        otpError
+                          ? 'border-emergency-600'
+                          : digit
+                            ? 'border-brand-700'
+                            : index === nextOtpIndex
+                              ? 'border-brand-500'
+                              : 'border-line'
+                      }`}
                       type="text"
                       inputMode="numeric"
                       autoComplete={index === 0 ? 'one-time-code' : 'off'}
@@ -570,23 +567,30 @@ export const LoginPage: React.FC = () => {
                   ))}
                 </div>
 
-                <div className="auth-helper">
-                  <button type="button" className="auth-linkbtn" onClick={handleEditNumber}>
+                <div className="mt-3 flex items-center justify-between text-sm">
+                  <button
+                    type="button"
+                    className="min-h-[44px] font-semibold text-brand-700 hover:underline"
+                    onClick={handleEditNumber}
+                  >
                     Wrong number?
                   </button>
                   <button
                     type="button"
-                    className="auth-linkbtn"
+                    className="min-h-[44px] font-semibold text-brand-700 hover:underline disabled:text-ink-muted disabled:no-underline"
                     onClick={handleResend}
-                    disabled={resendIn > 0}
+                    disabled={resendIn > 0 || busy}
                   >
                     {resendIn > 0 ? `Resend in ${resendIn}s` : 'Resend code'}
                   </button>
                 </div>
 
                 {error && (
-                  <div className="auth-error" role="alert">
-                    <AlertCircle className="w-4 h-4 flex-shrink-0 mt-px" />
+                  <div
+                    className="mt-3 flex gap-2 rounded-control bg-emergency-50 border border-emergency-100 p-3 text-sm text-emergency-700"
+                    role="alert"
+                  >
+                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
                     <span>{error}</span>
                   </div>
                 )}
@@ -595,40 +599,47 @@ export const LoginPage: React.FC = () => {
                   type="button"
                   onClick={() => handleVerify(otpValue)}
                   disabled={busy}
-                  className={`auth-submit ${busy ? 'auth-submit--busy' : ''}`}
+                  className={`${primaryBtn} mt-5`}
                 >
                   <span>{submitLabel()}</span>
                 </button>
               </div>
             )}
 
-            <p className="auth-emergency-link">
-              <Link to="/owner/request">Stranded right now? Skip sign-in</Link>
-            </p>
-
-
-
-            {isOwner ? (
-              <p className="auth-partner-cta">
-                New vehicle owner?
-                <Link to="/owner/signup">Create an account</Link>
+            <div className="mt-8 pt-6 border-t border-line space-y-3 text-sm text-center">
+              <p>
+                <Link
+                  to="/owner/request"
+                  className="inline-flex items-center min-h-[44px] font-semibold text-emergency-700 hover:underline"
+                >
+                  Stranded right now? Skip sign-in
+                </Link>
               </p>
-            ) : (
-              <p className="auth-partner-cta">
-                New to the network?
-                <Link to="/partner/signup">Register as a partner</Link>
-              </p>
-            )}
+              {isOwner ? (
+                <p className="text-ink-soft">
+                  New vehicle owner?{' '}
+                  <Link to="/owner/signup" className="font-semibold text-brand-700 hover:underline">
+                    Create an account
+                  </Link>
+                </p>
+              ) : (
+                <p className="text-ink-soft">
+                  New to the network?{' '}
+                  <Link to="/partner/signup" className="font-semibold text-brand-700 hover:underline">
+                    Register as a partner
+                  </Link>
+                </p>
+              )}
+            </div>
           </div>
+        </div>
 
-          <div className="auth-foot">
-            <p className="auth-legal">
-              By continuing you agree to Sahayak's <a href="#terms">Terms of Service</a> and{' '}
-              <a href="#privacy">Privacy Policy</a>.
-            </p>
-          </div>
-        </main>
-      </div>
+        <p className="py-5 text-xs text-ink-muted text-center">
+          By continuing you agree to Sahayak&rsquo;s{' '}
+          <Link to="/terms" className="underline hover:text-ink">terms of service</Link> and{' '}
+          <Link to="/privacy" className="underline hover:text-ink">privacy policy</Link>.
+        </p>
+      </main>
     </div>
   );
 };

@@ -177,16 +177,22 @@ export interface PartnerOperationalDetails {
   toolsEquipped: string[];
 }
 
+/**
+ * Operational details are NOT collected by any backend endpoint, so they start
+ * empty and the UI shows them only when present. Earlier versions defaulted these
+ * to "East Bengaluru", "Up to 3.5 Tonnes" and a 20 km radius, which the dashboard
+ * then displayed as if the partner had said so.
+ */
 export const DEFAULT_OPERATIONAL_DETAILS: PartnerOperationalDetails = {
-  operatingZone: 'East Bengaluru',
+  operatingZone: '',
   availabilityMode: '24_7',
-  teamSize: 1,
+  teamSize: 0,
 
   towTruckType: 'flatbed_truck',
   towRegistrationNumber: '',
-  towCapacity: 'Up to 3.5 Tonnes',
+  towCapacity: '',
   winchEquipped: false,
-  towCoverageRadiusKm: 20,
+  towCoverageRadiusKm: 0,
 
   mechanicUnitType: 'mobile_van',
   workshopName: '',
@@ -214,24 +220,34 @@ export const DEFAULT_PARTNER_PROFILE: PartnerProfile = {
   name: '',
   phone: '',
   category: 'mechanical',
-  isAvailable: true,
-  services: [
-    { id: 1, code: 'flat_tyre', name: 'Flat-Tyre Support', active: true },
-    { id: 2, code: 'battery_jumpstart', name: 'Battery Jumpstart', active: true },
-    { id: 3, code: 'minor_repair', name: 'On-Site Minor Repair', active: false },
-  ],
+  isAvailable: false,
+  services: [],
   vehicles: [],
-  verificationItems: [
-    { id: 'doc_aadhaar', label: 'Aadhaar Card', type: 'document', tier: 'tier_1_identity', status: 'complete' },
-    { id: 'doc_pan', label: 'PAN Card', type: 'document', tier: 'tier_1_identity', status: 'complete' },
-    { id: 'doc_dl', label: 'Driving Licence', type: 'document', tier: 'tier_1_identity', status: 'complete' },
-    { id: 'svc_flat_tyre', label: 'Flat-Tyre Support', type: 'service', tier: 'tier_2_capabilities', status: 'complete' },
-    { id: 'svc_battery_jumpstart', label: 'Battery Jumpstart', type: 'service', tier: 'tier_2_capabilities', status: 'complete' },
-    { id: 'svc_minor_repair', label: 'On-Site Minor Repair', type: 'service', tier: 'tier_2_capabilities', status: 'complete' },
-  ],
+  verificationItems: [],
   extraDetails: DEFAULT_OPERATIONAL_DETAILS,
   sampleJobCompleted: false,
 };
+
+/**
+ * Map the partner's server-side verification_status onto the per-item display
+ * state. The server holds one decision for the whole account, so every item
+ * mirrors it; undefined while the status has not loaded.
+ */
+export function itemStateFromServer(status: string | undefined): VerificationState | undefined {
+  if (status === 'verified') return 'complete';
+  if (status === 'pending') return 'in_progress';
+  if (status === 'rejected' || status === 'suspended') return 'requirements_due';
+  return undefined;
+}
+
+/** Short label for the account-level badge, from the server status. */
+export function verificationBadgeLabel(status: string | undefined): string {
+  if (status === 'verified') return 'Verified';
+  if (status === 'rejected') return 'Verification rejected';
+  if (status === 'suspended') return 'Suspended';
+  if (status === 'pending') return 'Verification pending';
+  return 'Checking status…';
+}
 
 function normalizeVerificationStatus(rawStatus: string): VerificationState {
   if (rawStatus === 'approved') return 'complete';
@@ -412,6 +428,9 @@ export interface PartnerEarnings {
 }
 
 export interface PartnerTrustStats {
+  partnerId: string;
+  /** Server truth: 'pending' | 'verified' | 'rejected' | 'suspended'. */
+  verificationStatus: string;
   acceptanceRatePct: number;
   ratingAvg: number;
   ratingCount: number;

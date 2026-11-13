@@ -148,6 +148,9 @@ class PartnerServiceItem(BaseModel):
     service_id: int
     code: str
     name: str
+    # Same projection as GET /services.base_price. The partner app shows what
+    # a job of this kind is worth without keeping its own price table.
+    base_price: Optional[Decimal] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -265,6 +268,29 @@ class PartnerOfferItem(BaseModel):
     estimated_arrival_min: Optional[int] = None
     assignment_rank: Optional[int] = None
     job: PartnerOfferJob
+
+
+class PartnerEarningsResponse(BaseModel):
+    """Completed-job payouts for the partner's dashboard.
+
+    Three windows rather than one parameterised window: the mobile dashboard
+    renders "today" and "this week" side by side, and the activity tab needs
+    lifetime. One response means one round trip on a screen that is opened
+    every shift.
+
+    `amount` is the sum of jobs.price_final, not price_estimate: an estimate
+    is what the owner was quoted, and paying a partner against a quote they
+    never agreed to would be a different (and wrong) number.
+    """
+
+    partner_id: uuid.UUID
+    currency: str = "INR"
+    today_amount: Decimal = Decimal("0.00")
+    today_jobs: int = 0
+    week_amount: Decimal = Decimal("0.00")
+    week_jobs: int = 0
+    lifetime_amount: Decimal = Decimal("0.00")
+    lifetime_jobs: int = 0
 
 
 class PartnerStatsResponse(BaseModel):

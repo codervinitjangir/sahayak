@@ -512,8 +512,12 @@ async def main() -> None:
         job_mid, worker_mid = await create_and_accept(c, owner_token, partners, by_id, "midjob")
         mid_token = partners[worker_mid]["token"]
         for target in ("partner_en_route", "in_progress"):
-            r = await c.post(f"/api/v1/jobs/{job_mid}/status",
-                             json={"status": target}, headers=hdr(mid_token))
+            if target == "in_progress":  # POST /start only, with the owner's code
+                r = await c.post(f"/api/v1/jobs/{job_mid}/start",
+                                 json={"start_code": one("SELECT start_code FROM jobs WHERE id = %(i)s", {"i": job_mid})["start_code"]}, headers=hdr(mid_token))
+            else:
+                r = await c.post(f"/api/v1/jobs/{job_mid}/status",
+                                 json={"status": target}, headers=hdr(mid_token))
             if r.status_code != 200:
                 raise SystemExit(f"could not walk job to {target}: {r.status_code} {r.text[:300]}")
 

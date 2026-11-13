@@ -1,7 +1,6 @@
-// ─── Sahayak — Button Component ───────────────────────────────────────────────
 import React from "react";
 import {
-  TouchableOpacity,
+  Pressable,
   Text,
   StyleSheet,
   ActivityIndicator,
@@ -11,7 +10,15 @@ import {
 } from "react-native";
 import { Colors, Typography, Spacing, Radius, Shadows } from "../../constants/theme";
 
-type ButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "outline" | "brand";
+// "brand" and "secondary" are kept as aliases so older call sites keep compiling.
+type ButtonVariant =
+  | "primary"
+  | "secondary"
+  | "ghost"
+  | "danger"
+  | "outline"
+  | "brand"
+  | "emergency";
 type ButtonSize = "sm" | "md" | "lg";
 
 interface ButtonProps {
@@ -26,51 +33,25 @@ interface ButtonProps {
   fullWidth?: boolean;
   style?: ViewStyle;
   textStyle?: TextStyle;
+  accessibilityLabel?: string;
 }
 
+// Every size meets the 48dp touch target except `sm`, which is for secondary
+// inline actions and still clears WCAG 2.2's 24px minimum with room to spare.
 const sizeConfig: Record<ButtonSize, { height: number; fontSize: number; px: number }> = {
-  sm: { height: 40, fontSize: Typography.fontSize.sm, px: Spacing.base },
-  md: { height: 50, fontSize: Typography.fontSize.base, px: Spacing.lg },
+  sm: { height: 44, fontSize: Typography.fontSize.sm, px: Spacing.base },
+  md: { height: 48, fontSize: Typography.fontSize.base, px: Spacing.lg },
   lg: { height: 56, fontSize: Typography.fontSize.md, px: Spacing.xl },
 };
 
 const variantStyles = {
-  brand: {
-    bg: Colors.primary,       // Blinkit Yellow CTA
-    text: Colors.secondary,   // Black text on yellow
-    border: "transparent",
-    shadow: false,
-  },
-  primary: {
-    bg: Colors.secondary,     // Blinkit Black CTA
-    text: Colors.textWhite,
-    border: "transparent",
-    shadow: false,
-  },
-  secondary: {
-    bg: Colors.secondary,
-    text: Colors.textWhite,
-    border: "transparent",
-    shadow: false,
-  },
-  ghost: {
-    bg: "transparent",
-    text: Colors.textSecondary,
-    border: "transparent",
-    shadow: false,
-  },
-  danger: {
-    bg: Colors.error,
-    text: Colors.textWhite,
-    border: "transparent",
-    shadow: false,
-  },
-  outline: {
-    bg: "transparent",
-    text: Colors.secondary,
-    border: Colors.secondary,
-    shadow: false,
-  },
+  primary: { bg: Colors.primary, pressed: Colors.primaryDark, text: Colors.onPrimary, border: "transparent", shadow: true },
+  brand: { bg: Colors.primary, pressed: Colors.primaryDark, text: Colors.onPrimary, border: "transparent", shadow: true },
+  secondary: { bg: Colors.surfaceWhite, pressed: Colors.borderLight, text: Colors.textPrimary, border: Colors.border, shadow: false },
+  ghost: { bg: "transparent", pressed: Colors.borderLight, text: Colors.textSecondary, border: "transparent", shadow: false },
+  danger: { bg: Colors.error, pressed: "#991B1B", text: Colors.textWhite, border: "transparent", shadow: false },
+  emergency: { bg: Colors.emergency, pressed: Colors.error, text: Colors.textWhite, border: "transparent", shadow: false },
+  outline: { bg: "transparent", pressed: Colors.primaryMuted, text: Colors.primary, border: Colors.primary, shadow: false },
 };
 
 export default function Button({
@@ -85,23 +66,26 @@ export default function Button({
   fullWidth = true,
   style,
   textStyle,
+  accessibilityLabel,
 }: ButtonProps) {
   const sz = sizeConfig[size];
   const vr = variantStyles[variant];
   const isDisabled = disabled || loading;
 
   return (
-    <TouchableOpacity
+    <Pressable
       onPress={onPress}
       disabled={isDisabled}
-      activeOpacity={0.82}
-      style={[
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel ?? label}
+      accessibilityState={{ disabled: isDisabled, busy: loading }}
+      style={({ pressed }) => [
         styles.base,
         {
-          height: sz.height,
-          backgroundColor: vr.bg,
+          minHeight: sz.height,
+          backgroundColor: pressed && !isDisabled ? vr.pressed : vr.bg,
           borderColor: vr.border,
-          borderWidth: variant === "outline" ? 1.5 : 0,
+          borderWidth: vr.border === "transparent" ? 0 : 1.5,
           paddingHorizontal: sz.px,
           width: fullWidth ? "100%" : undefined,
           opacity: isDisabled ? 0.55 : 1,
@@ -111,33 +95,17 @@ export default function Button({
       ]}
     >
       {loading ? (
-        <ActivityIndicator
-          size="small"
-          color={variant === "primary" ? Colors.textWhite : Colors.primary}
-        />
+        <ActivityIndicator size="small" color={vr.text} />
       ) : (
         <View style={styles.inner}>
-          {icon && iconPosition === "left" && (
-            <View style={styles.iconLeft}>{icon}</View>
-          )}
-          <Text
-            style={[
-              styles.label,
-              {
-                fontSize: sz.fontSize,
-                color: vr.text,
-              },
-              textStyle,
-            ]}
-          >
+          {icon && iconPosition === "left" && <View style={styles.iconLeft}>{icon}</View>}
+          <Text style={[styles.label, { fontSize: sz.fontSize, color: vr.text }, textStyle]}>
             {label}
           </Text>
-          {icon && iconPosition === "right" && (
-            <View style={styles.iconRight}>{icon}</View>
-          )}
+          {icon && iconPosition === "right" && <View style={styles.iconRight}>{icon}</View>}
         </View>
       )}
-    </TouchableOpacity>
+    </Pressable>
   );
 }
 
@@ -154,11 +122,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   label: {
-    fontFamily: Typography.fontFamily.bold,
-    fontWeight: "700",
-    letterSpacing: -0.2,
+    fontFamily: Typography.fontFamily.semiBold,
   },
   iconLeft: { marginRight: Spacing.sm },
   iconRight: { marginLeft: Spacing.sm },
 });
-

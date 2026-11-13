@@ -65,6 +65,9 @@ function renderWithProviders(ui: React.ReactElement) {
   );
 }
 
+/** There is no default pin: an owner must set a location before anything is dispatched. */
+const pickArea = () => fireEvent.click(screen.getByRole('button', { name: 'MG Road Metro' }));
+
 describe('RequestHelpPage Component', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -84,14 +87,15 @@ describe('RequestHelpPage Component', () => {
 
     expect(screen.getByText(/Request Roadside Help/i)).toBeInTheDocument();
     expect(screen.getByText(/Where is your vehicle stranded\?/i)).toBeInTheDocument();
-    expect(screen.getByText(/Select Service Needed/i)).toBeInTheDocument();
-    expect(screen.getByText(/Select Vehicle/i)).toBeInTheDocument();
+    expect(screen.getByText(/What do you need\?/i)).toBeInTheDocument();
+    expect(screen.getByText(/Which vehicle\?/i)).toBeInTheDocument();
   });
 
   it('displays validation error if service is not selected before dispatching', async () => {
     renderWithProviders(<RequestHelpPage />);
+    pickArea();
 
-    const dispatchBtn = screen.getByRole('button', { name: /Dispatch Verified Partner/i });
+    const dispatchBtn = screen.getByRole('button', { name: /Request help now/i });
     fireEvent.click(dispatchBtn);
 
     await waitFor(() => {
@@ -108,8 +112,9 @@ describe('RequestHelpPage Component', () => {
     renderWithProviders(<RequestHelpPage />);
 
     await waitFor(() => expect(screen.getByText('Flat-Tyre Support')).toBeInTheDocument());
+    pickArea();
     fireEvent.click(screen.getByText('Flat-Tyre Support'));
-    fireEvent.click(screen.getByRole('button', { name: /Dispatch Verified Partner/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Request help now/i }));
 
     await waitFor(() => expect(window.location.pathname).toBe('/login'));
     expect(jobsService.createJob).not.toHaveBeenCalled();
@@ -124,7 +129,7 @@ describe('RequestHelpPage Component', () => {
       vehicle_number: 'KA-01-MJ-4521',
       service_id: 1,
       status: 'matching',
-      pickup_location: { lat: 12.9716, lng: 77.5946, address: 'Bengaluru Central, Karnataka' },
+      pickup_location: { lat: 12.9756, lng: 77.6066, address: 'MG Road Boulevard, Bengaluru' },
       requested_at: '2026-09-15T11:00:00Z',
     });
 
@@ -135,6 +140,7 @@ describe('RequestHelpPage Component', () => {
       expect(screen.getByText('Flat-Tyre Support')).toBeInTheDocument();
     });
 
+    pickArea();
     const flatTyreOption = screen.getByText('Flat-Tyre Support');
     fireEvent.click(flatTyreOption);
 
@@ -143,7 +149,7 @@ describe('RequestHelpPage Component', () => {
     fireEvent.change(notesInput, { target: { value: 'Punctured by a nail on 100ft road' } });
 
     // Click dispatch
-    const dispatchBtn = screen.getByRole('button', { name: /Dispatch Verified Partner/i });
+    const dispatchBtn = screen.getByRole('button', { name: /Request help now/i });
     fireEvent.click(dispatchBtn);
 
     await waitFor(() => {
@@ -152,8 +158,8 @@ describe('RequestHelpPage Component', () => {
 
     const [calledPayload, calledIdempotencyKey] = vi.mocked(jobsService.createJob).mock.calls[0];
     expect(calledPayload.service_code).toBe('flat_tyre');
-    expect(calledPayload.pickup_lat).toBe(12.9716);
-    expect(calledPayload.pickup_lng).toBe(77.5946);
+    expect(calledPayload.pickup_lat).toBe(12.9756);
+    expect(calledPayload.pickup_lng).toBe(77.6066);
     expect((calledPayload as unknown as Record<string, unknown>).user_id).toBeUndefined();
     expect(calledPayload.vehicle_id).toBe('veh-123');
     expect(calledPayload.issue_description).toBe('Punctured by a nail on 100ft road');
@@ -171,9 +177,10 @@ describe('RequestHelpPage Component', () => {
     await waitFor(() => {
       expect(screen.getByText('Flat-Tyre Support')).toBeInTheDocument();
     });
+    pickArea();
     fireEvent.click(screen.getByText('Flat-Tyre Support'));
 
-    const dispatchBtn = screen.getByRole('button', { name: /Dispatch Verified Partner/i });
+    const dispatchBtn = screen.getByRole('button', { name: /Request help now/i });
 
     fireEvent.click(dispatchBtn);
     await waitFor(() => {
@@ -201,7 +208,7 @@ describe('RequestHelpPage Component', () => {
         vehicle_number: 'KA-01-MJ-4521',
         service_id: 1,
         status: 'matching',
-        pickup_location: { lat: 12.9716, lng: 77.5946, address: 'Bengaluru Central, Karnataka' },
+        pickup_location: { lat: 12.9756, lng: 77.6066, address: 'MG Road Boulevard, Bengaluru' },
         requested_at: '2026-09-15T11:00:00Z',
       });
 
@@ -210,9 +217,10 @@ describe('RequestHelpPage Component', () => {
     await waitFor(() => {
       expect(screen.getByText('Flat-Tyre Support')).toBeInTheDocument();
     });
+    pickArea();
     fireEvent.click(screen.getByText('Flat-Tyre Support'));
 
-    const dispatchBtn = screen.getByRole('button', { name: /Dispatch Verified Partner/i });
+    const dispatchBtn = screen.getByRole('button', { name: /Request help now/i });
 
     // Attempt 1 fails, attempt 2 succeeds — both are the same logical request.
     fireEvent.click(dispatchBtn);
@@ -239,13 +247,65 @@ describe('RequestHelpPage Component', () => {
     await waitFor(() => {
       expect(screen.getByText('Flat-Tyre Support')).toBeInTheDocument();
     });
+    pickArea();
     fireEvent.click(screen.getByText('Flat-Tyre Support'));
 
-    fireEvent.click(screen.getByRole('button', { name: /Dispatch Verified Partner/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Request help now/i }));
 
     await waitFor(() => {
       expect(screen.getByText(/Please add a saved vehicle before requesting assistance/i)).toBeInTheDocument();
     });
     expect(jobsService.createJob).not.toHaveBeenCalled();
+  });
+
+  it('refuses to dispatch until a pickup location has been set', async () => {
+    renderWithProviders(<RequestHelpPage />);
+    await waitFor(() => expect(screen.getByText('Flat-Tyre Support')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Flat-Tyre Support'));
+
+    fireEvent.click(screen.getByRole('button', { name: /Request help now/i }));
+
+    expect(await screen.findByText(/Please pinpoint your emergency pickup location/i)).toBeInTheDocument();
+    expect(jobsService.createJob).not.toHaveBeenCalled();
+  });
+
+  it('typing a landmark never moves the pin or invents coordinates', async () => {
+    vi.mocked(jobsService.createJob).mockResolvedValue({
+      id: 'job-1',
+      user_id: 'usr-1',
+      vehicle_id: 'veh-123',
+      vehicle_number: 'KA-01-MJ-4521',
+      service_id: 1,
+      status: 'matching',
+      pickup_location: { lat: 12.9756, lng: 77.6066, address: 'x' },
+      requested_at: '2026-09-15T11:00:00Z',
+    });
+    renderWithProviders(<RequestHelpPage />);
+    await waitFor(() => expect(screen.getByText('Flat-Tyre Support')).toBeInTheDocument());
+
+    // Typing an address with no pin set must not count as a location.
+    fireEvent.change(screen.getByLabelText(/Landmark or address/i), { target: { value: 'Near the blue petrol pump' } });
+    fireEvent.click(screen.getByText('Flat-Tyre Support'));
+    fireEvent.click(screen.getByRole('button', { name: /Request help now/i }));
+    expect(await screen.findByText(/Please pinpoint your emergency pickup location/i)).toBeInTheDocument();
+    expect(jobsService.createJob).not.toHaveBeenCalled();
+
+    // With a real pin, the landmark rides along as the address text.
+    pickArea();
+    fireEvent.click(screen.getByRole('button', { name: /Request help now/i }));
+    await waitFor(() => expect(jobsService.createJob).toHaveBeenCalledTimes(1));
+    const [payload] = vi.mocked(jobsService.createJob).mock.calls[0];
+    expect(payload.pickup_lat).toBe(12.9756);
+    expect(payload.pickup_address_text).toBe('Near the blue petrol pump');
+  });
+
+  it('says so, and offers a retry, when the service list cannot be loaded', async () => {
+    vi.mocked(jobsService.listServices).mockRejectedValue(new Error('network'));
+    renderWithProviders(<RequestHelpPage />);
+
+    expect(await screen.findByText(/could not load the list of services/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument();
+    // No invented fallback catalogue: nothing here can be dispatched.
+    expect(screen.queryByText(/Flatbed Towing/i)).not.toBeInTheDocument();
   });
 });

@@ -70,7 +70,7 @@ export const JobTimeline: React.FC<JobTimelineProps> = ({
             />
           ))}
         </div>
-        <p className="mt-2 flex items-center gap-2 text-xs font-semibold text-[#181818]">
+        <p className="mt-2 flex items-center gap-2 text-xs font-semibold text-[#0F172A]">
           <current.Icon className="w-3.5 h-3.5 text-emerald-600" aria-hidden="true" />
           <span>
             Step {activeIndex + 1} of {STEPS.length} · {current.label}
@@ -95,7 +95,7 @@ export const JobTimeline: React.FC<JobTimelineProps> = ({
                   isDone
                     ? 'bg-emerald-600 border-emerald-600 text-white'
                     : isCurrent
-                      ? 'bg-white border-[#181818] text-[#181818] ring-1 ring-[#181818]'
+                      ? 'bg-white border-[#0F172A] text-[#0F172A] ring-1 ring-[#0F172A]'
                       : 'bg-white border-neutral-200 text-neutral-400'
                 }`}
               >
@@ -109,15 +109,15 @@ export const JobTimeline: React.FC<JobTimelineProps> = ({
             <div className="pb-4 min-w-0">
               <p
                 className={`text-sm font-semibold ${
-                  isCurrent ? 'text-[#181818]' : isDone ? 'text-neutral-700' : 'text-neutral-400'
+                  isCurrent ? 'text-[#0F172A]' : isDone ? 'text-neutral-700' : 'text-neutral-400'
                 }`}
               >
                 {step.label}
                 {isCurrent && (
-                  <span className="ml-2 text-[10px] font-bold uppercase tracking-wider text-accent">Now</span>
+                  <span className="ml-2 text-xs font-bold uppercase tracking-wider text-accent">Now</span>
                 )}
               </p>
-              {time && <p className="text-[11px] text-neutral-500 font-mono">{time}</p>}
+              {time && <p className="text-xs text-neutral-500 font-mono">{time}</p>}
             </div>
           </li>
         );

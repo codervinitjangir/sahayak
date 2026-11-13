@@ -47,7 +47,7 @@ export const Timeline: React.FC<TimelineProps> = ({ items, className = '' }) => 
               <div className="flex items-center justify-between gap-2">
                 <p className="text-xs font-bold text-ink">{item.title}</p>
                 {item.timestamp && (
-                  <time className="text-[10px] font-mono text-ink-muted shrink-0">
+                  <time className="text-xs font-mono text-ink-muted shrink-0">
                     {item.timestamp}
                   </time>
                 )}

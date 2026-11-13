@@ -724,8 +724,15 @@ async def make_in_progress_job(c, owner_token, partner_token, partner_id, tag) -
         raise SystemExit(f"accept for job {tag} failed: {r.status_code} {r.text[:300]}")
 
     for target in ("partner_en_route", "in_progress"):
-        r = await c.post(f"/api/v1/jobs/{job_id}/status", json={"status": target},
-                         headers=hdr(partner_token))
+        # in_progress is reached only through POST /jobs/{id}/start with the owner's
+        # code (POST /status refuses it); the harness reads the code from the row.
+        if target == "in_progress":
+            code = one("SELECT start_code FROM jobs WHERE id = %(i)s", {"i": job_id})["start_code"]
+            r = await c.post(f"/api/v1/jobs/{job_id}/start", json={"start_code": code},
+                             headers=hdr(partner_token))
+        else:
+            r = await c.post(f"/api/v1/jobs/{job_id}/status", json={"status": target},
+                             headers=hdr(partner_token))
         if r.status_code != 200:
             raise SystemExit(
                 f"job {tag} could not reach {target}: {r.status_code} {r.text[:300]}"

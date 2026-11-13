@@ -138,6 +138,8 @@ Persist payment intent/status simulation without moving money.
 
 A student MVP does not have the regulatory/operational foundation for payment aggregation.
 
+**Addendum, 2026-11-12 (what was actually built):** Only the data layer exists: the `payments` table, its SQLAlchemy model and Pydantic schemas. There is no payment route, service or repository, so `POST /payments/{job_id}/simulate` (PRD BR-09, a "Should") was never implemented, and no code writes a `payments` row. This is deliberate at the freeze: it would touch the money path, which requires full regression, and weeks 11-12 are viva prep with no new features. The product flow instead states the payment position directly: the job-complete screen shows "Cash to roadside partner". No gateway (Razorpay, UPI or otherwise) is integrated, test mode included, because even a test-mode gateway needs order creation, signature verification, webhooks and a checkout UI on both clients, and would imply a settlement path this project cannot lawfully operate. If the stub is built later, it extends this ADR rather than superseding it.
+
 ---
 
 # ADR-008: Partner Load is Counted Through `jobs.status`, Not Assignment Status

@@ -35,3 +35,14 @@ async def list_services(db: AsyncSession) -> Sequence[tuple[Service, ServiceCate
         .order_by(ServiceCategory.name.nulls_last(), Service.name)
     )
     return result.all()
+
+
+async def get_service_by_id(db: AsyncSession, service_id: int) -> Service | None:
+    """Fetch one service row by primary key, or None.
+
+    The job read path stores `service_id` but clients speak `service_code`, so
+    the detail response joins the two without making the client hold a lookup
+    table of its own.
+    """
+    result = await db.execute(select(Service).where(Service.id == service_id))
+    return result.scalar_one_or_none()

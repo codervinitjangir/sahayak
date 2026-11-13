@@ -58,7 +58,7 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, className = ''
       classes: 'bg-red-50 text-red-800 border-red-300',
     },
     no_match_found: {
-      label: 'Operator Intervening',
+      label: 'No Partner Found',
       icon: AlertTriangle,
       classes: 'bg-amber-100 text-amber-900 border-amber-400',
     },

@@ -1,4 +1,6 @@
-import { BrowserRouter, Link, useLocation } from 'react-router-dom';
+import { BrowserRouter, Link, NavLink, useLocation } from 'react-router-dom';
+import { Home, LifeBuoy, LogOut } from 'lucide-react';
+import { Logo } from '../components/Logo';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from './AuthProvider';
 import { AppRoutes } from './routes';
@@ -14,69 +16,70 @@ const queryClient = new QueryClient({
 
 import { NotificationsDropdown } from '../components/NotificationsDropdown';
 
+const OWNER_NAV = [
+  { to: '/owner', label: 'Home', icon: Home, end: true },
+  { to: '/owner/request', label: 'Request help', icon: LifeBuoy, end: false },
+];
+
 const Navbar: React.FC = () => {
   const { user, logout } = useAuth();
-
-  // Extract clean display names
-  const rawName = user?.name || '';
-  const match = rawName.match(/^(.*?)(?:\s*\((.*?)\))?$/);
-  const mainName = match && match[1] ? match[1] : rawName;
-  const subName = match && match[2] ? match[2] : '';
-  const initial = mainName ? mainName.charAt(0).toUpperCase() : 'U';
+  const initial = (user?.name || 'U').trim().charAt(0).toUpperCase();
 
   return (
-    <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-neutral-200/80">
-      <div className="w-full px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between">
-        {/* Left: Brand + Owner navigation links */}
-        <div className="flex items-center gap-6">
-          <Link
-            to="/"
-            className="font-bold text-lg tracking-tight text-[#181818] hover:opacity-80 transition-opacity"
-          >
-            Sahayak
+    <header className="sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-line">
+      <div className="max-w-6xl mx-auto w-full px-4 sm:px-6 h-16 flex items-center justify-between">
+        <div className="flex items-center gap-8">
+          <Link to="/" aria-label="Sahayak home">
+            <Logo />
           </Link>
-          <nav className="hidden sm:flex items-center gap-4 text-xs font-semibold text-slate-600">
-            <Link to="/owner" className="hover:text-slate-900 transition-colors">
-              Overview
-            </Link>
-            <Link to="/owner/request" className="hover:text-slate-900 transition-colors">
-              Request Help
-            </Link>
+          <nav aria-label="Primary" className="hidden sm:flex items-center gap-1">
+            {OWNER_NAV.map(({ to, label, end }) => (
+              <NavLink
+                key={to}
+                to={to}
+                end={end}
+                className={({ isActive }) =>
+                  `inline-flex items-center min-h-[44px] px-3 rounded-control text-sm font-semibold transition-colors ${
+                    isActive ? 'bg-brand-50 text-brand-800' : 'text-ink-soft hover:text-ink hover:bg-slate-50'
+                  }`
+                }
+              >
+                {label}
+              </NavLink>
+            ))}
           </nav>
         </div>
 
-        {/* Right: Owner Notifications Feed + User Profile */}
-        <div className="flex items-center gap-3 sm:gap-4">
-          {/* Owner notifications feed */}
+        <div className="flex items-center gap-2 sm:gap-3">
           <NotificationsDropdown />
-
-          {/* User Profile Pill or Sign In Link */}
           {user ? (
-            <div className="flex items-center gap-2.5 pl-3 border-l border-neutral-200">
-              <div className="w-7 h-7 rounded-full bg-[#181818] text-white flex items-center justify-center font-bold text-[11px] shadow-2xs">
+            <div className="flex items-center gap-3 pl-3 border-l border-line">
+              <span
+                className="w-9 h-9 rounded-full bg-brand-700 text-white flex items-center justify-center font-semibold text-sm"
+                aria-hidden="true"
+              >
                 {initial}
-              </div>
-              <div className="hidden sm:block text-left text-xs leading-tight">
-                <div className="font-bold text-[#181818] tracking-tight">{mainName}</div>
-                <div className="text-[10px] text-neutral-500 font-mono">
-                  {subName ? `${subName} · ` : ''}{user?.phone}
-                </div>
+              </span>
+              <div className="hidden md:block text-left leading-tight">
+                <div className="text-sm font-semibold">{user.name}</div>
+                <div className="text-xs text-ink-muted tnum">{user.phone}</div>
               </div>
               <button
                 type="button"
                 onClick={logout}
-                className="text-[11px] font-semibold text-slate-500 hover:text-slate-800 ml-1 cursor-pointer"
-                title="Sign out"
+                className="inline-flex items-center gap-1.5 min-h-[44px] px-2 text-sm font-semibold text-ink-soft hover:text-ink"
               >
-                Sign out
+                <LogOut className="w-4 h-4" aria-hidden="true" />
+                <span className="hidden sm:inline">Sign out</span>
+                <span className="sr-only sm:hidden">Sign out</span>
               </button>
             </div>
           ) : (
             <Link
               to="/login"
-              className="text-xs font-bold text-[#0F766E] hover:text-[#0D645D] px-3 py-1.5 rounded-lg border border-[#0F766E]/30 hover:bg-[#0F766E]/5 transition-all"
+              className="inline-flex items-center min-h-[44px] px-4 rounded-control border border-brand-700/30 text-sm font-semibold text-brand-700 hover:bg-brand-50"
             >
-              Sign In
+              Sign in
             </Link>
           )}
         </div>
@@ -85,11 +88,38 @@ const Navbar: React.FC = () => {
   );
 };
 
+/** Bottom tab bar for phones; the top nav takes over from 640px. */
+const MobileTabBar: React.FC = () => (
+  <nav
+    aria-label="Primary"
+    className="sm:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-line safe-bottom"
+  >
+    <ul className="grid grid-cols-2">
+      {OWNER_NAV.map(({ to, label, icon: Icon, end }) => (
+        <li key={to}>
+          <NavLink
+            to={to}
+            end={end}
+            className={({ isActive }) =>
+              `flex flex-col items-center justify-center gap-1 min-h-[56px] text-xs font-semibold ${
+                isActive ? 'text-brand-700' : 'text-ink-muted'
+              }`
+            }
+          >
+            <Icon className="w-5 h-5" aria-hidden="true" />
+            {label}
+          </NavLink>
+        </li>
+      ))}
+    </ul>
+  </nav>
+);
+
 const AppContent: React.FC = () => {
   const location = useLocation();
   const isLanding = location.pathname === '/';
-  const isLogin = location.pathname === '/login';
-  const isPartnerPage = location.pathname.startsWith('/partner');
+  const isLogin = location.pathname === '/login' || location.pathname === '/terms' || location.pathname === '/privacy';
+  const isPartnerPage = location.pathname.startsWith('/partner') || location.pathname.startsWith('/admin');
 
   if (isLanding || isLogin || isPartnerPage) {
     return (
@@ -100,11 +130,12 @@ const AppContent: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-canvas text-[#181818]">
+    <div className="min-h-screen flex flex-col bg-canvas text-ink">
       <Navbar />
-      <main className={`flex-1 ${isPartnerPage ? 'overflow-hidden' : 'pb-16'}`}>
+      <main className="flex-1 pb-24 sm:pb-16">
         <AppRoutes />
       </main>
+      <MobileTabBar />
     </div>
   );
 };

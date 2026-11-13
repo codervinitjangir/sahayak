@@ -35,7 +35,10 @@ interface JobState {
 
 export const useJobStore = create<JobState>((set) => ({
   activeJob: null,
-  startCode: "4821",
+  // No default code. The code is generated per job by the backend and only the
+  // owner may read it; a store-level literal would show the same "4821" on
+  // every job and teach the owner a code that does not open anything.
+  startCode: "",
   recentJobs: [],
   draftServiceType: null,
   draftVehicleId: null,

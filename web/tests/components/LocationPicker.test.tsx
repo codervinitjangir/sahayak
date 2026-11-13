@@ -36,7 +36,7 @@ describe('LocationPicker', () => {
     const onChange = vi.fn();
 
     render(<LocationPicker location={SEEDED_LOCATION} onChange={onChange} />);
-    fireEvent.click(screen.getByRole('button', { name: /Use My Current GPS Location/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Use my current location/i }));
 
     await waitFor(() => expect(onChange).toHaveBeenCalledTimes(1));
 
@@ -57,7 +57,7 @@ describe('LocationPicker', () => {
     const onChange = vi.fn();
 
     render(<LocationPicker location={SEEDED_LOCATION} onChange={onChange} />);
-    fireEvent.click(screen.getByRole('button', { name: /Use My Current GPS Location/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Use my current location/i }));
 
     await waitFor(() => {
       expect(screen.getByRole('alert')).toHaveTextContent(/Location permission denied/i);

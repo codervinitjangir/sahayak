@@ -70,3 +70,9 @@ export const SERVICE_TYPE = {
   TOWING: "towing",
   GENERAL: "general",
 } as const;
+
+/**
+ * Public website origin (no trailing slash), used for the Terms and Privacy
+ * pages. Optional: when unset, the app simply does not offer those links.
+ */
+export const WEB_URL: string = (process.env.EXPO_PUBLIC_WEB_URL ?? "").replace(/\/+$/, "");

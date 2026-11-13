@@ -412,11 +412,18 @@ async def walk_to(c, job_id: str, label: str, final_status: str,
                   price: float = 500) -> None:
     chain = ["partner_en_route", "in_progress", "completed"]
     for step in chain[:chain.index(final_status) + 1]:
-        body: dict = {"status": step}
-        if step == "completed":
-            body["price_final"] = price
-        r = await c.post(f"/api/v1/jobs/{job_id}/status", json=body,
-                         headers=hdr(partners[label]["token"]))
+        # in_progress is reached only through POST /jobs/{id}/start with the owner's
+        # code (POST /status refuses it); the harness reads the code from the row.
+        if step == "in_progress":
+            code = one("SELECT start_code FROM jobs WHERE id = %(i)s", {"i": job_id})["start_code"]
+            r = await c.post(f"/api/v1/jobs/{job_id}/start", json={"start_code": code},
+                             headers=hdr(partners[label]["token"]))
+        else:
+            body: dict = {"status": step}
+            if step == "completed":
+                body["price_final"] = price
+            r = await c.post(f"/api/v1/jobs/{job_id}/status", json=body,
+                             headers=hdr(partners[label]["token"]))
         if r.status_code != 200:
             raise SystemExit(f"{job_id} → {step} failed: {r.status_code} {r.text[:300]}")
 
@@ -999,7 +1006,7 @@ async def main() -> None:                          # noqa: C901 - one linear scr
                 for k, v in node.items():
                     if isinstance(v, (dict, list)):
                         found += all_rates(v, f"{path}.{k}")
-                    elif "rate" in k and isinstance(v, (int, float)):
+                    elif (k == "rate" or k.endswith("_rate")) and isinstance(v, (int, float)):
                         found.append((f"{path}.{k}", v))
             elif isinstance(node, list):
                 for i, v in enumerate(node):

@@ -7,24 +7,18 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "splash": {
-      "backgroundColor": "#38CF5A"
+      "backgroundColor": "#0F766E"
     },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.sahayak.app",
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "Sahayak needs your location to find nearby service partners.",
-        "NSLocationAlwaysUsageDescription": "Sahayak uses your location to track service partner arrival.",
-        "NSCameraUsageDescription": "Sahayak needs camera access to upload vehicle photos.",
-        "NSPhotoLibraryUsageDescription": "Sahayak needs photo library access to upload vehicle photos."
-      },
-      "config": {
-        "googleMapsApiKey": "AIzaSyBkhF8T0ev-w4kYDgVvk7IxIAMH6m3YEvM"
+        "NSLocationWhenInUseUsageDescription": "Sahayak uses your location to place your pickup pin and to match you with nearby partners."
       }
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#38CF5A",
+        "backgroundColor": "#0F766E",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -33,16 +27,8 @@
       "package": "com.sahayak.app",
       "permissions": [
         "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION",
-        "CAMERA",
-        "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE"
-      ],
-      "config": {
-        "googleMaps": {
-          "apiKey": "AIzaSyBkhF8T0ev-w4kYDgVvk7IxIAMH6m3YEvM"
-        }
-      }
+        "ACCESS_COARSE_LOCATION"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -52,10 +38,19 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Sahayak needs your location to find nearby service partners."
+          "locationWhenInUsePermission": "Sahayak uses your location to place your pickup pin and to match you with nearby partners.",
+          "isAndroidBackgroundLocationEnabled": false
         }
       ],
-      "expo-splash-screen"
-    ]
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#0F766E",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 160
+        }
+      ]
+    ],
+    "description": "Emergency roadside assistance"
   }
 }

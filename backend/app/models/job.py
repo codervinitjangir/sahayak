@@ -4,7 +4,7 @@ from typing import Optional, List
 from decimal import Decimal
 from sqlalchemy import (
     String, DateTime, Numeric, Integer, SmallInteger, ForeignKey,
-    CheckConstraint, func, Text, Boolean
+    CheckConstraint, UniqueConstraint, func, Text, Boolean
 )
 from sqlalchemy.dialects.postgresql import UUID, ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -31,6 +31,16 @@ class Job(Base):
     status: Mapped[str] = mapped_column(
         String(20), default="requested", nullable=False
     )
+    # Four digits the owner reads out to the assigned partner before work
+    # starts. Server-generated, never accepted from a client, and only
+    # returned to the job's owner. The partner verifies it through
+    # POST /jobs/{id}/start; knowing it is what proves the mechanic is
+    # standing in front of the right vehicle.
+    start_code: Mapped[Optional[str]] = mapped_column(String(4), nullable=True)
+    # Client-generated retry token for POST /jobs. Scoped to the owner, so two
+    # customers who happen to pick the same UUID (or the same test constant)
+    # cannot collide. Null on older rows and on requests that sent no header.
+    idempotency_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     pickup_location: Mapped[object] = mapped_column(
         Geography(geometry_type="POINT", srid=4326), nullable=False
     )
@@ -64,6 +74,12 @@ class Job(Base):
             "status IN ('requested','matching','assigned','partner_en_route',"
             "'in_progress','completed','cancelled','no_match_found')",
             name="check_job_status"
+        ),
+        # One retry token creates at most one job per owner. A partial unique
+        # index in migration 009 enforces the same rule for rows created before
+        # this model existed; this declaration keeps fresh test schemas honest.
+        UniqueConstraint(
+            "user_id", "idempotency_key", name="uq_jobs_user_idempotency_key"
         ),
     )
 

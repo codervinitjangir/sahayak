@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, ArrowLeft, Car, MapPin, Phone, Wrench } from 'lucide-react';
@@ -7,6 +7,7 @@ import { Button } from '../../components/ui/Button';
 import { JobTimeline } from '../../components/JobTimeline';
 import { NEXT_TRANSITION, useJobStatusTransition } from '../../features/partners/useOffers';
 import { partnerService } from '../../services/partner.service';
+import { ApiError } from '../../services/api';
 import './partner.css';
 
 /**
@@ -35,13 +36,49 @@ export const ActiveJobPage: React.FC = () => {
   const job = jobQuery.data;
   const next = job ? NEXT_TRANSITION[job.status] : undefined;
 
+  // The owner reads the 4-digit code out on arrival; the backend checks it.
+  const [startCode, setStartCode] = useState('');
+  // Final amount charged. Prefilled from the backend's upfront estimate.
+  const [priceFinal, setPriceFinal] = useState('');
+  useEffect(() => {
+    if (job?.status === 'in_progress' && priceFinal === '' && job.price_estimate != null) {
+      setPriceFinal(String(Number(job.price_estimate)));
+    }
+  }, [job?.status, job?.price_estimate, priceFinal]);
+
+  const priceValue = Number(priceFinal);
+  const needsCode = job?.status === 'partner_en_route';
+  const needsPrice = job?.status === 'in_progress';
+  const inputInvalid =
+    (needsCode && !/^\d{4}$/.test(startCode)) ||
+    (needsPrice && (priceFinal.trim() === '' || !Number.isFinite(priceValue) || priceValue < 0));
+
   const handleAdvance = async () => {
-    if (!job || !next) return;
-    const updated = await transition.mutateAsync({ jobId: job.id, status: next.next });
-    // A completed job is no longer "active" — the dashboard is where the next
-    // one arrives, so send the partner straight back there.
-    if (updated.status === 'completed') navigate('/partner/dashboard');
+    if (!job || !next || inputInvalid) return;
+    try {
+      const updated = await transition.mutateAsync({
+        jobId: job.id,
+        status: next.next,
+        startCode: needsCode ? startCode : undefined,
+        priceFinal: needsPrice ? priceValue : undefined,
+      });
+      setStartCode('');
+      void jobQuery.refetch();
+      // A completed job is no longer "active" — the dashboard is where the next
+      // one arrives, so send the partner straight back there.
+      if (updated.status === 'completed') navigate('/partner/dashboard');
+    } catch {
+      // Rendered from transition.error below.
+    }
   };
+
+  const transitionError = transition.error
+    ? transition.error instanceof ApiError
+      ? transition.error.code === 'INVALID_START_CODE'
+        ? 'That code does not match. Ask the owner to read the 4-digit code on their screen again.'
+        : transition.error.message
+      : 'Could not update the job. Check your connection and try again.'
+    : null;
 
   return (
     <div className="min-h-full bg-bg overflow-y-auto">
@@ -78,7 +115,7 @@ export const ActiveJobPage: React.FC = () => {
           <div className="mt-3 grid gap-3 lg:mt-4 lg:gap-4 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
             <div className="grid gap-3 lg:gap-4 lg:content-start">
               <Card aria-label="Job details">
-              <CardHeader eyebrow="Active job" title={job.service?.name || 'Roadside assistance'} />
+              <CardHeader eyebrow="Active job" title={job.service?.name || job.service_name || 'Roadside assistance'} />
 
               <dl className="mt-3 space-y-3">
                 <div className="flex items-start gap-3">
@@ -109,15 +146,18 @@ export const ActiveJobPage: React.FC = () => {
                   </div>
                 )}
 
-                {job.partner?.phone && (
+                {(job.owner_name || job.owner_phone) && (
                   <div className="flex items-start gap-3">
                     <Phone className="w-4 h-4 mt-1 shrink-0 text-slate-400" aria-hidden="true" />
                     <div className="min-w-0">
-                      <dt className="text-xs font-bold uppercase tracking-wider text-slate-500">Contact</dt>
+                      <dt className="text-xs font-bold uppercase tracking-wider text-slate-500">Owner</dt>
                       <dd className="text-base text-slate-900">
-                        <a href={`tel:${job.partner.phone}`} className="text-brand-700 font-semibold">
-                          {job.partner.phone}
-                        </a>
+                        {job.owner_name && <span className="block">{job.owner_name}</span>}
+                        {job.owner_phone && (
+                          <a href={`tel:${job.owner_phone}`} className="text-brand-700 font-semibold">
+                            {job.owner_phone}
+                          </a>
+                        )}
                       </dd>
                     </div>
                   </div>
@@ -125,14 +165,54 @@ export const ActiveJobPage: React.FC = () => {
               </dl>
             </Card>
 
-            {transition.isError && (
+            {transitionError && (
               <p
-                role="status"
+                role="alert"
                 className="flex items-center gap-2 bg-amber-50 border border-status-warning/30 rounded-xl px-4 py-3 text-sm font-semibold text-status-warning"
               >
                 <AlertTriangle className="w-4 h-4 shrink-0" aria-hidden="true" />
-                Could not update the job. Check your connection and try again.
+                {transitionError}
               </p>
+            )}
+
+            {needsCode && (
+              <Card aria-label="Start code">
+                <label htmlFor="start-code" className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                  Owner's 4-digit start code
+                </label>
+                <input
+                  id="start-code"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={4}
+                  value={startCode}
+                  onChange={(e) => setStartCode(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                  className="mt-2 w-full min-h-[48px] rounded-xl border border-slate-300 px-4 text-2xl tracking-[0.5em] font-bold text-slate-900 focus:ring-2 focus:ring-teal-600 focus:outline-none"
+                  placeholder="••••"
+                />
+                <p className="mt-2 text-sm text-slate-500">Ask the owner for the code shown on their tracking screen. Work starts only after it matches.</p>
+              </Card>
+            )}
+
+            {needsPrice && (
+              <Card aria-label="Final price">
+                <label htmlFor="price-final" className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                  Final amount charged (₹)
+                </label>
+                <input
+                  id="price-final"
+                  type="number"
+                  inputMode="decimal"
+                  min={0}
+                  step="1"
+                  value={priceFinal}
+                  onChange={(e) => setPriceFinal(e.target.value)}
+                  className="mt-2 w-full min-h-[48px] rounded-xl border border-slate-300 px-4 text-lg font-bold text-slate-900 focus:ring-2 focus:ring-teal-600 focus:outline-none"
+                />
+                {job.price_estimate != null && (
+                  <p className="mt-2 text-sm text-slate-500">Upfront estimate given to the owner: ₹{Number(job.price_estimate)}</p>
+                )}
+              </Card>
             )}
 
             {next ? (
@@ -140,7 +220,7 @@ export const ActiveJobPage: React.FC = () => {
                 variant="primary"
                 size="lg"
                 className="w-full"
-                disabled={transition.isPending}
+                disabled={transition.isPending || inputInvalid}
                 onClick={handleAdvance}
               >
                 {next.label}

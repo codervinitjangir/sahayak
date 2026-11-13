@@ -29,16 +29,16 @@ export const VehicleSelector: React.FC<VehicleSelectorProps> = ({
 
   if (vehicles.length === 0) {
     return (
-      <div className="p-6 text-center border-2 border-dashed border-slate-300 rounded-xl bg-slate-50">
+      <div className="p-6 text-center border-2 border-dashed border-slate-300 rounded-card bg-slate-50">
         <Car className="w-8 h-8 mx-auto text-slate-400 mb-2" aria-hidden="true" />
-        <p className="text-sm text-slate-600 font-medium">No saved vehicles found.</p>
+        <p className="text-ink-soft font-medium">You have not added a vehicle yet.</p>
         {onAddNewVehicle && (
           <button
             type="button"
             onClick={onAddNewVehicle}
-            className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold text-brand-700 bg-brand-50 hover:bg-brand-100 rounded-lg touch-target"
+            className="mt-3 inline-flex items-center gap-1.5 min-h-[48px] px-4 text-sm font-semibold text-brand-700 bg-brand-50 hover:bg-brand-100 rounded-control"
           >
-            <Plus className="w-4 h-4" /> Add your vehicle
+            <Plus className="w-4 h-4" /> Add a vehicle
           </button>
         )}
       </div>
@@ -65,10 +65,10 @@ export const VehicleSelector: React.FC<VehicleSelectorProps> = ({
                   onSelectVehicle(v);
                 }
               }}
-              className={`relative p-3.5 rounded-xl border-2 transition-all cursor-pointer touch-target flex items-center justify-between ${
+              className={`relative p-3.5 rounded-card border-2 transition-colors cursor-pointer min-h-[72px] flex items-center justify-between ${
                 isSelected
-                  ? 'border-brand-700 bg-brand-50/70 shadow-sm ring-1 ring-brand-700'
-                  : 'border-slate-200 bg-white hover:border-slate-300'
+                  ? 'border-brand-700 bg-brand-50'
+                  : 'border-line bg-white hover:border-slate-300'
               }`}
             >
               <div className="flex items-center gap-3">
@@ -81,7 +81,7 @@ export const VehicleSelector: React.FC<VehicleSelectorProps> = ({
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="font-bold text-slate-900 text-base">
+                    <span className="font-bold text-ink text-base">
                       {v.make} {v.model}
                     </span>
                   </div>
@@ -107,7 +107,7 @@ export const VehicleSelector: React.FC<VehicleSelectorProps> = ({
         <button
           type="button"
           onClick={onAddNewVehicle}
-          className="inline-flex items-center gap-1.5 text-sm font-medium text-brand-700 hover:text-brand-800 p-1"
+          className="inline-flex items-center gap-1.5 min-h-[44px] text-sm font-semibold text-brand-700 hover:text-brand-800 px-1"
         >
           <Plus className="w-4 h-4" /> Add another vehicle
         </button>

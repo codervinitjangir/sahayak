@@ -1,6 +1,8 @@
 // ─── Sahayak — Partner Job Done Screen ───────────────────────────────────────
-// Figma: partner-job-done — success, earnings summary, rating earned
-import React, { useRef, useEffect, useState } from "react";
+// The completion receipt for the mechanic. It reads the job back from the
+// backend so the amount shown is the price_final that was actually saved, not
+// a number passed through navigation or remembered locally.
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -8,24 +10,81 @@ import {
   ScrollView,
   Animated,
   StatusBar,
+  ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useRoute } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import type { RouteProp } from "@react-navigation/native";
 
 import { Colors, Typography, Spacing, Radius, Shadows } from "../../../constants/theme";
 import Button from "../../../components/ui/Button";
 import Card from "../../../components/ui/Card";
-import RatingStars from "../../../components/ui/RatingStars";
+import { jobsApi } from "../../../services/api/jobs";
+import type { BackendJob } from "../../../services/api/jobs";
+import { partnerApi } from "../../../services/api/partner";
+import type { MobilePartnerEarnings } from "../../../services/api/partner";
+import { useAuthStore } from "../../../store/authStore";
 import type { PartnerStackParamList } from "../../../types";
+import { inr } from "../partnerFormat";
 
 type Nav = NativeStackNavigationProp<PartnerStackParamList, "PartnerJobDone">;
+type Route = RouteProp<PartnerStackParamList, "PartnerJobDone">;
+
+const formatCompletedAt = (value?: string | null): string | null => {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleString("en-IN", {
+    day: "numeric",
+    month: "short",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+};
 
 export default function PartnerJobDoneScreen() {
   const nav = useNavigation<Nav>();
+  const route = useRoute<Route>();
+  const jobId = route.params?.jobId;
+  const partnerName = useAuthStore((s) => s.user?.name);
+
   const scaleAnim = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  const [job, setJob] = useState<BackendJob | null>(null);
+  const [earnings, setEarnings] = useState<MobilePartnerEarnings | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    if (!jobId) {
+      setLoading(false);
+      setLoadError("No job was selected, so there is no receipt to show.");
+      return;
+    }
+    setLoading(true);
+    setLoadError(null);
+    try {
+      setJob(await jobsApi.getJob(jobId));
+    } catch {
+      setLoadError(
+        "Sahayak could not load this completed job. The work is still saved; check your connection and retry."
+      );
+    }
+    try {
+      setEarnings(await partnerApi.getEarnings());
+    } catch {
+      // The receipt is the job itself; today's running total is extra context.
+      setEarnings(null);
+    }
+    setLoading(false);
+  }, [jobId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   useEffect(() => {
     Animated.sequence([
@@ -41,95 +100,122 @@ export default function PartnerJobDoneScreen() {
         useNativeDriver: true,
       }),
     ]).start();
-  }, []);
+  }, [fadeAnim, scaleAnim]);
+
+  const firstName = partnerName?.trim().split(/\s+/)[0];
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
-      <StatusBar barStyle="dark-content" backgroundColor={Colors.surface} />
+      <StatusBar barStyle="dark-content" />
 
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        {/* ── Success Splash ── */}
         <View style={styles.splash}>
           <Animated.View
             style={[styles.successCircle, { transform: [{ scale: scaleAnim }] }]}
           >
             <Ionicons name="checkmark" size={48} color={Colors.textWhite} />
           </Animated.View>
-          <Text style={styles.successTitle}>Job Complete!</Text>
-          <Text style={styles.successSubtitle}>Great work, Ravi! 🎉</Text>
+          <Text style={styles.successTitle}>Job complete</Text>
+          <Text style={styles.successSubtitle}>
+            {firstName ? `Great work, ${firstName}.` : "Great work."}
+          </Text>
         </View>
 
-        {/* ── Earnings Card ── */}
-        <Animated.View style={{ opacity: fadeAnim }}>
-          <Card style={styles.earningsCard} bg={Colors.secondary}>
-            <Text style={styles.earningsLabel}>You earned</Text>
-            <Text style={styles.earningsAmount}>₹299</Text>
-            <Text style={styles.earningsNote}>Jump Start Service · Today</Text>
-            <View style={styles.earningsStats}>
-              <View style={styles.earnStat}>
-                <Text style={styles.earnStatVal}>5</Text>
-                <Text style={styles.earnStatLbl}>Jobs Today</Text>
+        {loading ? (
+          <View style={styles.stateCard}>
+            <ActivityIndicator size="small" color={Colors.brand700} />
+            <Text style={styles.stateText}>Loading the saved receipt…</Text>
+          </View>
+        ) : loadError ? (
+          <View style={styles.stateCard}>
+            <Ionicons name="cloud-offline-outline" size={28} color={Colors.textSecondary} />
+            <Text style={styles.stateText}>{loadError}</Text>
+            <Button
+              label="Retry"
+              onPress={() => void load()}
+              variant="primary"
+              fullWidth
+              style={{ marginTop: Spacing.sm }}
+            />
+          </View>
+        ) : job ? (
+          <Animated.View style={{ opacity: fadeAnim }}>
+            <Card style={styles.earningsCard} bg={Colors.secondary}>
+              <Text style={styles.earningsLabel}>Final amount recorded</Text>
+              <Text style={styles.earningsAmount}>{inr(job.price_final)}</Text>
+              <Text style={styles.earningsNote}>
+                {job.service_name ?? job.service_code ?? "Roadside rescue"}
+                {formatCompletedAt(job.completed_at)
+                  ? ` · ${formatCompletedAt(job.completed_at)}`
+                  : ""}
+              </Text>
+              <View style={styles.earningsStats}>
+                <View style={styles.earnStat}>
+                  <Text style={styles.earnStatVal}>
+                    {earnings ? String(earnings.today_jobs) : "—"}
+                  </Text>
+                  <Text style={styles.earnStatLbl}>Jobs today</Text>
+                </View>
+                <View style={styles.earnDivider} />
+                <View style={styles.earnStat}>
+                  <Text style={styles.earnStatVal}>
+                    {earnings ? inr(earnings.today_amount) : "—"}
+                  </Text>
+                  <Text style={styles.earnStatLbl}>Today's total</Text>
+                </View>
               </View>
-              <View style={styles.earnDivider} />
-              <View style={styles.earnStat}>
-                <Text style={styles.earnStatVal}>₹1,748</Text>
-                <Text style={styles.earnStatLbl}>Today's Total</Text>
-              </View>
-              <View style={styles.earnDivider} />
-              <View style={styles.earnStat}>
-                <Text style={styles.earnStatVal}>4.9⭐</Text>
-                <Text style={styles.earnStatLbl}>Rating</Text>
-              </View>
-            </View>
-          </Card>
+            </Card>
 
-          {/* ── Customer Review ── */}
-          <Card style={styles.reviewCard}>
-            <Text style={styles.sectionTitle}>Customer gave you</Text>
-            <View style={styles.reviewRow}>
-              <RatingStars value={5} size={28} readonly />
-              <Text style={styles.reviewStarLabel}>5 Stars!</Text>
-            </View>
-            <Text style={styles.reviewQuote}>
-              "Very professional and fast. Fixed the issue quickly. Highly recommended!"
-            </Text>
-          </Card>
+            <Card style={styles.breakdownCard}>
+              <Text style={styles.sectionTitle}>Job receipt</Text>
 
-          {/* ── Cost Breakdown ── */}
-          <Card style={styles.breakdownCard}>
-            <Text style={styles.sectionTitle}>Earnings Breakdown</Text>
-            {[
-              { label: "Service Charge", amount: 299 },
-              { label: "Tip from Customer", amount: 50 },
-              { label: "Platform Commission (0%)", amount: 0, note: "FREE" },
-            ].map((row) => (
-              <View key={row.label} style={styles.costRow}>
-                <Text style={styles.costLabel}>{row.label}</Text>
-                {row.note ? (
-                  <Text style={styles.costFree}>{row.note}</Text>
-                ) : (
-                  <Text style={styles.costAmount}>₹{row.amount}</Text>
-                )}
+              <View style={styles.costRow}>
+                <Text style={styles.costLabel}>Customer</Text>
+                <Text style={styles.costValue}>
+                  {job.owner_name ?? "Not provided"}
+                </Text>
               </View>
-            ))}
-            <View style={styles.divider} />
-            <View style={styles.costRow}>
-              <Text style={styles.totalLabel}>Total Earned</Text>
-              <Text style={styles.totalAmount}>₹349</Text>
-            </View>
-          </Card>
-        </Animated.View>
+              <View style={styles.costRow}>
+                <Text style={styles.costLabel}>Pickup</Text>
+                <Text style={styles.costValue} numberOfLines={2}>
+                  {job.pickup_address_text}
+                </Text>
+              </View>
+              <View style={styles.costRow}>
+                <Text style={styles.costLabel}>Vehicle</Text>
+                <Text style={styles.costValue}>
+                  {job.vehicle_number ?? "Not provided"}
+                </Text>
+              </View>
+              <View style={styles.costRow}>
+                <Text style={styles.costLabel}>Final amount</Text>
+                <Text style={styles.costValue}>{inr(job.price_final)}</Text>
+              </View>
+
+              <View style={styles.divider} />
+
+              <View style={styles.costRow}>
+                <Text style={styles.totalLabel}>Final amount</Text>
+                <Text style={styles.totalAmount}>{inr(job.price_final)}</Text>
+              </View>
+
+              <Text style={styles.payoutNote}>
+                This is the amount saved against the job. Payouts are settled by
+                Sahayak operations; there is no in-app withdrawal.
+              </Text>
+            </Card>
+          </Animated.View>
+        ) : null}
 
         <View style={{ height: 100 }} />
       </ScrollView>
 
-      {/* ── Done Panel ── */}
       <View style={[styles.donePanel, Shadows.sheet as object]}>
         <Button
-          label="Back to Dashboard"
+          label="Back to dashboard"
           onPress={() => nav.popToTop()}
           variant="primary"
         />
@@ -170,6 +256,20 @@ const styles = StyleSheet.create({
     fontFamily: Typography.fontFamily.regular,
   },
 
+  stateCard: {
+    alignItems: "center",
+    padding: Spacing.lg,
+    marginHorizontal: Spacing.lg,
+    gap: 6,
+  },
+  stateText: {
+    fontSize: Typography.fontSize.sm,
+    fontFamily: Typography.fontFamily.regular,
+    color: Colors.textSecondary,
+    textAlign: "center",
+    lineHeight: 20,
+  },
+
   earningsCard: {
     marginHorizontal: Spacing.lg,
     marginBottom: Spacing.sm,
@@ -192,6 +292,7 @@ const styles = StyleSheet.create({
     color: "rgba(255,255,255,0.6)",
     fontFamily: Typography.fontFamily.regular,
     marginBottom: Spacing.base,
+    textAlign: "center",
   },
   earningsStats: {
     flexDirection: "row",
@@ -213,7 +314,7 @@ const styles = StyleSheet.create({
   },
   earnDivider: { width: 1, backgroundColor: "rgba(255,255,255,0.15)" },
 
-  reviewCard: {
+  breakdownCard: {
     marginHorizontal: Spacing.lg,
     marginBottom: Spacing.sm,
     gap: 10,
@@ -223,53 +324,23 @@ const styles = StyleSheet.create({
     fontFamily: Typography.fontFamily.bold,
     color: Colors.textPrimary,
   },
-  reviewRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  reviewStarLabel: {
-    fontSize: Typography.fontSize["2xl"],
-    fontFamily: Typography.fontFamily.bold,
-    color: Colors.primary,
-  },
-  reviewQuote: {
-    fontSize: Typography.fontSize.sm,
-    fontFamily: Typography.fontFamily.regular,
-    color: Colors.textSecondary,
-    fontStyle: "italic",
-    lineHeight: 22,
-    backgroundColor: Colors.surface,
-    padding: Spacing.md,
-    borderRadius: Radius.md,
-    borderLeftWidth: 3,
-    borderLeftColor: Colors.primary,
-  },
-
-  breakdownCard: {
-    marginHorizontal: Spacing.lg,
-    marginBottom: Spacing.sm,
-    gap: 10,
-  },
   costRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
+    alignItems: "flex-start",
+    gap: 16,
   },
   costLabel: {
     fontSize: Typography.fontSize.sm,
     color: Colors.textSecondary,
     fontFamily: Typography.fontFamily.regular,
   },
-  costAmount: {
+  costValue: {
+    flex: 1,
     fontSize: Typography.fontSize.sm,
     fontFamily: Typography.fontFamily.medium,
     color: Colors.textPrimary,
-  },
-  costFree: {
-    fontSize: Typography.fontSize.sm,
-    fontFamily: Typography.fontFamily.semiBold,
-    color: Colors.success,
+    textAlign: "right",
   },
   divider: { height: 1, backgroundColor: Colors.border, marginVertical: 4 },
   totalLabel: {
@@ -281,6 +352,12 @@ const styles = StyleSheet.create({
     fontSize: Typography.fontSize["2xl"],
     fontFamily: Typography.fontFamily.bold,
     color: Colors.success,
+  },
+  payoutNote: {
+    fontSize: Typography.fontSize.xs,
+    fontFamily: Typography.fontFamily.regular,
+    color: Colors.textMuted,
+    lineHeight: 16,
   },
 
   donePanel: {
@@ -296,4 +373,3 @@ const styles = StyleSheet.create({
     borderTopRightRadius: Radius["2xl"],
   },
 });
-

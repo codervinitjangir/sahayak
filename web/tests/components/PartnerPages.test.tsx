@@ -10,14 +10,13 @@ import { Preferences } from '../../src/pages/partner/Preferences';
 import { PartnerDashboard } from '../../src/pages/partner/PartnerDashboard';
 import { LoginPage } from '../../src/pages/auth/LoginPage';
 import { AuthProvider } from '../../src/app/AuthProvider';
-import { DEFAULT_PARTNER_PROFILE, saveStoredPartnerProfile, PartnerProfile } from '../../src/types/partner';
+import { DEFAULT_PARTNER_PROFILE, saveStoredPartnerProfile } from '../../src/types/partner';
+import { partnerService } from '../../src/services/partner.service';
+import { jobsService } from '../../src/services/jobs.service';
 
 /**
- * Step 0 of the partner wizard is a real phone OTP as of 2026-10-06 — it used to
- * flip a flag and accept any six digits, which is how a mechanic could reach the
- * end of signup with no Supabase account and a profile nobody could ever sign in
- * to. Supabase is mocked here so these tests keep covering the wizard's steps
- * without putting an SMS in the loop.
+ * Step 0 of the partner wizard is a real phone OTP. Supabase is mocked so these
+ * tests cover the wizard's steps without putting an SMS in the loop.
  */
 const sendPhoneOtp = vi.fn(async () => ({ ok: true }));
 const verifyPhoneOtp = vi.fn(async () => ({ ok: true, accessToken: 'partner-access-token' }));
@@ -36,7 +35,7 @@ vi.mock('../../src/services/supabase', () => ({
   signOut: async () => undefined,
 }));
 
-/** By default: verified, but no Sahayak profile yet — so the wizard continues. */
+/** By default: verified, but no Sahayak profile yet, so the wizard continues. */
 const resolveIdentity = vi.fn(async () => ({ kind: 'needs-signup' as const }));
 
 vi.mock('../../src/services/identity.service', async () => {
@@ -49,23 +48,51 @@ vi.mock('../../src/services/identity.service', async () => {
   };
 });
 
+const CATALOGUE = [
+  { id: 1, category_id: 1, code: 'flatbed_towing', name: 'Flatbed towing', requires_vehicle_equipment: true, category: { id: 1, code: 'towing', name: 'Towing' } },
+  { id: 4, category_id: 2, code: 'flat_tyre', name: 'Flat tyre', requires_vehicle_equipment: false, category: { id: 2, code: 'mechanical', name: 'On-site repair' } },
+  { id: 3, category_id: 2, code: 'battery_jumpstart', name: 'Battery jumpstart', requires_vehicle_equipment: false, category: { id: 2, code: 'mechanical', name: 'On-site repair' } },
+];
+
+const STATS = {
+  partnerId: 'ptr-1',
+  verificationStatus: 'pending',
+  acceptanceRatePct: 80,
+  ratingAvg: 4.5,
+  ratingCount: 10,
+  lifetimeJobs: 12,
+};
+
+function withProviders(ui: React.ReactElement) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return {
+    queryClient,
+    ...render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>{ui}</MemoryRouter>
+      </QueryClientProvider>
+    ),
+  };
+}
+
 describe('Partner Flow', () => {
   beforeEach(() => {
     localStorage.clear();
+    vi.restoreAllMocks();
     vi.clearAllMocks();
     sendPhoneOtp.mockResolvedValue({ ok: true });
     verifyPhoneOtp.mockResolvedValue({ ok: true, accessToken: 'partner-access-token' });
     resolveIdentity.mockResolvedValue({ kind: 'needs-signup' });
+    vi.spyOn(jobsService, 'listServices').mockResolvedValue(CATALOGUE);
+    vi.spyOn(partnerService, 'getTrustStats').mockResolvedValue(STATS);
+    vi.spyOn(partnerService, 'getMyServices').mockResolvedValue([{ service_id: 4, code: 'flat_tyre', name: 'Flat tyre' }]);
   });
 
-  /**
-   * Walks step 0: type the number, request a code, enter six digits, verify.
-   * Both halves now await a network round trip, so each needs to be wrapped.
-   */
+  /** Walks step 0: type the number, request a code, enter six digits, verify. */
   const completeOtpStep = async () => {
     await userEvent.type(screen.getByPlaceholderText('98765 43210'), '9876543210');
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /Send OTP/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Send code/i }));
     });
     await waitFor(() => expect(screen.getByText(/Verify your number/i)).toBeInTheDocument());
 
@@ -74,66 +101,42 @@ describe('Partner Flow', () => {
       await userEvent.type(otpInputs[i], '1');
     }
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /Verify & Continue/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Verify & continue/i }));
     });
-  };
-
-  /** The console shell is data-connected (the sidebar shows the shift summary),
-   *  so anything that renders it needs the provider the real app has at root. */
-  const renderInConsole = (ui: React.ReactElement) => {
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    return render(
-      <QueryClientProvider client={queryClient}>
-        <MemoryRouter>{ui}</MemoryRouter>
-      </QueryClientProvider>
-    );
   };
 
   describe('PartnerSignup', () => {
-    it('renders step 0 phone input and allows sending OTP', async () => {
-      render(
-        <MemoryRouter>
-          <PartnerSignup />
-        </MemoryRouter>
-      );
+    it('renders the phone step and requests a real code', async () => {
+      withProviders(<PartnerSignup />);
 
-      expect(screen.getByText(/Partner Sign In \/ Sign Up/i)).toBeInTheDocument();
-      const phoneInput = screen.getByPlaceholderText('98765 43210');
-      const sendOtpBtn = screen.getByRole('button', { name: /Send OTP/i });
+      expect(screen.getByRole('heading', { name: /Register as a partner/i })).toBeInTheDocument();
+      const send = screen.getByRole('button', { name: /Send code/i });
+      expect(send).toBeDisabled();
 
-      // Initially disabled for short numbers
-      expect(sendOtpBtn).toBeDisabled();
-
-      await userEvent.type(phoneInput, '9876543210');
-      expect(sendOtpBtn).not.toBeDisabled();
-
+      await userEvent.type(screen.getByPlaceholderText('98765 43210'), '9876543210');
+      expect(send).not.toBeDisabled();
       await act(async () => {
-        fireEvent.click(sendOtpBtn);
+        fireEvent.click(send);
       });
 
-      // A code was actually requested, for this number, in E.164.
       expect(sendPhoneOtp).toHaveBeenCalledWith('+919876543210');
-
-      // Now on OTP entry screen
       expect(screen.getByText(/Verify your number/i)).toBeInTheDocument();
-      expect(screen.getByText(/Resend OTP in/i)).toBeInTheDocument();
+      expect(screen.getByText(/Resend in/i)).toBeInTheDocument();
+    });
+
+    it('offers no sample-data shortcuts', () => {
+      withProviders(<PartnerSignup />);
+      expect(screen.queryByText(/fill sample|autofill/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/1800/)).not.toBeInTheDocument();
     });
 
     it('stays on the number step when the code could not be sent', async () => {
-      sendPhoneOtp.mockResolvedValue({
-        ok: false,
-        message: 'Phone sign-in is turned off for this project.',
-      } as never);
-
-      render(
-        <MemoryRouter>
-          <PartnerSignup />
-        </MemoryRouter>
-      );
+      sendPhoneOtp.mockResolvedValue({ ok: false, message: 'Phone sign-in is turned off for this project.' } as never);
+      withProviders(<PartnerSignup />);
 
       await userEvent.type(screen.getByPlaceholderText('98765 43210'), '9876543210');
       await act(async () => {
-        fireEvent.click(screen.getByRole('button', { name: /Send OTP/i }));
+        fireEvent.click(screen.getByRole('button', { name: /Send code/i }));
       });
 
       expect(screen.queryByText(/Verify your number/i)).not.toBeInTheDocument();
@@ -141,424 +144,262 @@ describe('Partner Flow', () => {
     });
 
     it('sends an already-registered mechanic to the console instead of through signup', async () => {
-      // The common case, not the exception: ops register most partners by phone
-      // before the mechanic ever opens the app, so the first thing this screen sees
-      // is usually an account that already resolves to a partner profile.
-      resolveIdentity.mockResolvedValue({
-        kind: 'registered',
-        identity: { role: 'partner', id: 'ptr-1' },
-      } as never);
-
-      render(
-        <MemoryRouter>
-          <PartnerSignup />
-        </MemoryRouter>
-      );
+      resolveIdentity.mockResolvedValue({ kind: 'registered', identity: { role: 'partner', id: 'ptr-1' } } as never);
+      withProviders(<PartnerSignup />);
 
       await completeOtpStep();
 
-      // Not pushed into the document-upload step.
-      expect(screen.queryByText(/Upload Identity Documents/i)).not.toBeInTheDocument();
+      expect(screen.queryByRole('heading', { name: /About you/i })).not.toBeInTheDocument();
     });
 
-    it('advances through reordered steps with Tier 1 Documents gating Category', async () => {
-      render(
-        <MemoryRouter>
-          <PartnerSignup />
-        </MemoryRouter>
-      );
+    it('collects a name and category, then real services, and registers the partner', async () => {
+      const register = vi.spyOn(partnerService, 'registerPartner').mockResolvedValue({ id: 'ptr-new' } as never);
+      const link = vi.spyOn(partnerService, 'linkAuth').mockResolvedValue({} as never);
+      const update = vi.spyOn(partnerService, 'updateServices').mockResolvedValue({ partner_id: 'ptr-new', services: [] });
 
+      withProviders(<PartnerSignup />);
       await completeOtpStep();
 
-      // 3. Step 1: Tier 1 Identity Documents (Prerequisite)
-      expect(screen.getByText(/Upload Identity Documents/i)).toBeInTheDocument();
-      expect(screen.getByText(/Tier 1 · Hard Prerequisite/i)).toBeInTheDocument();
-      expect(screen.getByText('Aadhaar Card')).toBeInTheDocument();
-      expect(screen.getByText('PAN Card')).toBeInTheDocument();
-      expect(screen.getByText('Driving Licence')).toBeInTheDocument();
+      // No document upload step exists.
+      expect(await screen.findByRole('heading', { name: /About you/i })).toBeInTheDocument();
+      expect(screen.queryByText(/Aadhaar|Upload Identity/i)).not.toBeInTheDocument();
 
-      // Continue button should be disabled until all 3 are uploaded
-      const continueBtn = screen.getByRole('button', { name: /Continue/i });
-      expect(continueBtn).toBeDisabled();
+      const next = screen.getByRole('button', { name: /^Continue$/i });
+      expect(next).toBeDisabled();
+      await userEvent.type(screen.getByLabelText(/Your name or business name/i), 'Ravi Kumar');
+      fireEvent.click(screen.getByRole('radio', { name: /Mechanical/i }));
+      expect(next).not.toBeDisabled();
+      fireEvent.click(next);
 
-      // Autofill sample docs
-      fireEvent.click(screen.getByRole('button', { name: /Autofill sample docs/i }));
-      expect(continueBtn).not.toBeDisabled();
-      fireEvent.click(continueBtn);
+      // Services come from the live catalogue.
+      expect(await screen.findByText('Flat tyre')).toBeInTheDocument();
+      expect(screen.getByText('Flatbed towing')).toBeInTheDocument();
+      expect(screen.getByText(/Needs equipment verified by Sahayak/i)).toBeInTheDocument();
 
-      // 4. Step 2: Capability & Category Selection (Unlocked by Tier 1)
-      expect(screen.getByText(/Select Your Service Capability/i)).toBeInTheDocument();
-      expect(screen.getByText('Towing')).toBeInTheDocument();
-      expect(screen.getByText('Mechanical')).toBeInTheDocument();
-      expect(screen.getByText('Both (Tow & Mechanic)')).toBeInTheDocument();
-      expect(screen.getByText('Fuel Delivery')).toBeInTheDocument();
+      const registerBtn = screen.getByRole('button', { name: /^Register$/i });
+      expect(registerBtn).toBeDisabled();
+      fireEvent.click(screen.getByLabelText(/Flat tyre/i));
+      fireEvent.click(registerBtn);
 
-      // Select Mechanical
-      fireEvent.click(screen.getByText('Mechanical'));
-      fireEvent.click(screen.getByRole('button', { name: /Continue/i }));
-
-      // 5. Step 3: Offered Services
-      expect(screen.getByText(/Offered Services/i)).toBeInTheDocument();
-      expect(screen.getByText('Flat-Tyre Support')).toBeInTheDocument();
-      expect(screen.getByText('Battery Jumpstart')).toBeInTheDocument();
-      expect(screen.getByText('On-Site Minor Repair')).toBeInTheDocument();
+      await waitFor(() => expect(register).toHaveBeenCalledTimes(1));
+      expect(register.mock.calls[0][0]).toMatchObject({ name: 'Ravi Kumar', phone: '+919876543210', primary_category_code: 'mechanical' });
+      await waitFor(() => expect(link).toHaveBeenCalledWith('ptr-new'));
+      expect(update).toHaveBeenCalledWith('ptr-new', ['flat_tyre']);
+      expect(await screen.findByText(/You are registered/i)).toBeInTheDocument();
+      expect(screen.getByText(/verifies every partner before they can receive jobs/i)).toBeInTheDocument();
     });
 
-    it('renders both towing and mechanical service groups when Both is selected', async () => {
-      render(
-        <MemoryRouter>
-          <PartnerSignup />
-        </MemoryRouter>
-      );
-
+    it('says so and does not claim success when registration fails', async () => {
+      vi.spyOn(partnerService, 'registerPartner').mockRejectedValue(new Error('Phone already registered'));
+      withProviders(<PartnerSignup />);
       await completeOtpStep();
 
-      // Complete Tier 1 Documents
-      fireEvent.click(screen.getByRole('button', { name: /Autofill sample docs/i }));
-      fireEvent.click(screen.getByRole('button', { name: /Continue/i }));
+      await userEvent.type(await screen.findByLabelText(/Your name or business name/i), 'Ravi Kumar');
+      fireEvent.click(screen.getByRole('radio', { name: /Mechanical/i }));
+      fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
+      fireEvent.click(await screen.findByLabelText(/Flat tyre/i));
+      fireEvent.click(screen.getByRole('button', { name: /^Register$/i }));
 
-      // Select Both (Tow & Mechanic)
-      fireEvent.click(screen.getByText('Both (Tow & Mechanic)'));
-      fireEvent.click(screen.getByRole('button', { name: /Continue/i }));
-
-      // Both service categories should be rendered
-      expect(screen.getByText('Towing Services')).toBeInTheDocument();
-      expect(screen.getByText('Mechanical & On-Site Services')).toBeInTheDocument();
-      expect(screen.getByText('Flatbed Towing')).toBeInTheDocument();
-      expect(screen.getByText('Flat-Tyre Support')).toBeInTheDocument();
+      expect(await screen.findByText(/Could not complete registration: Phone already registered/i)).toBeInTheDocument();
+      expect(screen.queryByText(/You are registered/i)).not.toBeInTheDocument();
     });
   });
 
   describe('VerificationStatus', () => {
-    it('renders Two-Tier grouping (Tier 1 Identity & Tier 2 Capabilities)', () => {
-      saveStoredPartnerProfile(DEFAULT_PARTNER_PROFILE);
-
-      renderInConsole(<VerificationStatus />);
+    it('shows the real account status from the backend, with no document checklist', async () => {
+      withProviders(<VerificationStatus />);
 
       expect(screen.getByText('Verification Status')).toBeInTheDocument();
-      expect(screen.getByText('Identity Verification')).toBeInTheDocument();
-      expect(screen.getByText('Services & Equipment')).toBeInTheDocument();
-      expect(screen.getByText('Aadhaar Card')).toBeInTheDocument();
+      expect(await screen.findByRole('heading', { name: 'Verification pending' })).toBeInTheDocument();
+      expect(screen.getByText(/verifies every partner before they can receive jobs/i)).toBeInTheDocument();
+      expect(screen.queryByText(/Aadhaar|PAN Card|Driving Licence|Re-upload|Tier/i)).not.toBeInTheDocument();
+      // Linked services come from the backend too.
+      expect(await screen.findByText('Flat tyre')).toBeInTheDocument();
     });
 
-    it('displays status change toast notification on document re-upload', async () => {
-      const profileWithRequirementsDue: PartnerProfile = {
-        ...DEFAULT_PARTNER_PROFILE,
-        verificationItems: [
-          {
-            id: 'doc_aadhaar',
-            label: 'Aadhaar Card',
-            type: 'document',
-            tier: 'tier_1_identity',
-            status: 'requirements_due',
-            requirementsDueReason: 'Document blurred',
-          },
-        ],
-      };
-      saveStoredPartnerProfile(profileWithRequirementsDue);
-
-      renderInConsole(<VerificationStatus />);
-
-      const reuploadBtn = screen.getByRole('button', { name: /Re-upload Aadhaar Card/i });
-      fireEvent.click(reuploadBtn);
-
-      // Toast should appear with status update notification
-      expect(screen.getByRole('complementary', { name: /Status notification/i })).toBeInTheDocument();
+    it.each([
+      ['verified', 'You are verified'],
+      ['rejected', 'Verification was not approved'],
+      ['suspended', 'Your account is suspended'],
+    ])('describes a %s account', async (status, title) => {
+      vi.spyOn(partnerService, 'getTrustStats').mockResolvedValue({ ...STATS, verificationStatus: status });
+      withProviders(<VerificationStatus />);
+      expect(await screen.findByRole('heading', { name: title })).toBeInTheDocument();
     });
 
-    it('shows locked Tier 2 capabilities when Tier 1 is incomplete', () => {
-      const incompleteTier1Profile: PartnerProfile = {
-        ...DEFAULT_PARTNER_PROFILE,
-        verificationItems: [
-          { id: 'doc_aadhaar', label: 'Aadhaar Card', type: 'document', tier: 'tier_1_identity', status: 'in_progress' },
-          { id: 'doc_pan', label: 'PAN Card', type: 'document', tier: 'tier_1_identity', status: 'not_started' },
-          { id: 'doc_dl', label: 'Driving Licence', type: 'document', tier: 'tier_1_identity', status: 'not_started' },
-          { id: 'svc_flat_tyre', label: 'Flat-Tyre Support', type: 'service', tier: 'tier_2_capabilities', status: 'not_started' },
-        ],
-      };
-      saveStoredPartnerProfile(incompleteTier1Profile);
-
-      renderInConsole(<VerificationStatus />);
-
-      expect(screen.getByText(/Identity verification required:/i)).toBeInTheDocument();
-      expect(screen.getByText(/Complete identity verification first before Tier 2 capabilities unlock/i)).toBeInTheDocument();
+    it('reports a failed load instead of guessing a status', async () => {
+      vi.spyOn(partnerService, 'getTrustStats').mockRejectedValue(new Error('down'));
+      withProviders(<VerificationStatus />);
+      expect(await screen.findByText(/could not load your verification status/i)).toBeInTheDocument();
+      expect(screen.queryByText(/You are verified/i)).not.toBeInTheDocument();
     });
   });
 
   describe('Preferences', () => {
+    it('lists the live catalogue with the partner\'s linked services ticked', async () => {
+      withProviders(<Preferences />);
 
-
-    it('renders STEP 1 OF 3 with thin segmented progress bar and desktop proof stats panel', () => {
-      saveStoredPartnerProfile(DEFAULT_PARTNER_PROFILE);
-
-      render(
-        <MemoryRouter>
-          <Preferences />
-        </MemoryRouter>
-      );
-
-      // Segmented progress header
-      expect(screen.getByText(/STEP 1 OF 3/i)).toBeInTheDocument();
-
-      // Step 1 title & category options
-      expect(screen.getByText('Service Category')).toBeInTheDocument();
-      expect(screen.getByText('Towing')).toBeInTheDocument();
-      expect(screen.getByText('Mechanical')).toBeInTheDocument();
-      expect(screen.getByText('Both (Tow & Mechanic)')).toBeInTheDocument();
-
-      // Right-side proof & trust panel (WeWorkRemotely layout)
-      expect(
-        screen.getByText(/Thousands of roadside rescue requests dispatched across Bengaluru daily\./i)
-      ).toBeInTheDocument();
-      expect(screen.getByText('500+')).toBeInTheDocument();
-      expect(screen.getByText('₹8,400')).toBeInTheDocument();
-      expect(screen.getByText('15 Mins')).toBeInTheDocument();
+      expect(await screen.findByText('Flatbed towing')).toBeInTheDocument();
+      await waitFor(() => expect(screen.getByLabelText(/Flat tyre/i)).toBeChecked());
+      expect(screen.getByLabelText(/Battery jumpstart/i)).not.toBeChecked();
+      expect(screen.getByText(/Needs equipment verified by Sahayak/i)).toBeInTheDocument();
     });
 
-    it('shows inline "Identity Verification Required" warning when Tier 1 is incomplete', () => {
-      const incompleteProfile: PartnerProfile = {
-        ...DEFAULT_PARTNER_PROFILE,
-        verificationItems: [
-          { id: 'doc_aadhaar', label: 'Aadhaar Card', type: 'document', tier: 'tier_1_identity', status: 'in_progress' },
-          { id: 'doc_pan', label: 'PAN Card', type: 'document', tier: 'tier_1_identity', status: 'not_started' },
-          { id: 'doc_dl', label: 'Driving Licence', type: 'document', tier: 'tier_1_identity', status: 'not_started' },
-        ],
-      };
-      saveStoredPartnerProfile(incompleteProfile);
-
-      render(
-        <MemoryRouter>
-          <Preferences />
-        </MemoryRouter>
-      );
-
-      expect(screen.getByText(/Identity Verification Required/i)).toBeInTheDocument();
-      expect(screen.getByText(/Upload Tier 1 Documents →/i)).toBeInTheDocument();
+    it('invents no marketing statistics', async () => {
+      const { container } = withProviders(<Preferences />);
+      await screen.findByText('Flatbed towing');
+      const text = container.textContent ?? '';
+      expect(text).not.toMatch(/500\+|₹\s?\d|15 Mins|Thousands of/i);
     });
 
-    it('advances step-wise from Step 1 to Step 2 to Step 3 and saves preferences', async () => {
-      saveStoredPartnerProfile(DEFAULT_PARTNER_PROFILE);
+    it('saves the full set of selected service codes for this partner', async () => {
+      const update = vi.spyOn(partnerService, 'updateServices').mockResolvedValue({ partner_id: 'ptr-1', services: [] });
+      withProviders(<Preferences />);
 
-      render(
-        <MemoryRouter>
-          <Preferences />
-        </MemoryRouter>
-      );
+      await waitFor(() => expect(screen.getByLabelText(/Flat tyre/i)).toBeChecked());
+      const save = screen.getByRole('button', { name: /Save services/i });
+      expect(save).toBeDisabled(); // nothing changed yet
 
-      // ── Step 1: Select Both
-      fireEvent.click(screen.getByText('Both (Tow & Mechanic)'));
-      fireEvent.click(screen.getByRole('button', { name: /Next: Configure Services/i }));
+      fireEvent.click(screen.getByLabelText(/Battery jumpstart/i));
+      expect(save).not.toBeDisabled();
+      fireEvent.click(save);
 
-      // ── Step 2: Offered Services
-      expect(screen.getByText(/STEP 2 OF 3/i)).toBeInTheDocument();
-      expect(screen.getByText('Offered Services')).toBeInTheDocument();
-
-      // Toggle flatbed tow
-      const flatbedRow = screen.getByText('Flatbed Towing');
-      fireEvent.click(flatbedRow);
-
-      fireEvent.click(screen.getByRole('button', { name: /Next: Vehicle & Equipment/i }));
-
-      // ── Step 3: Vehicles & Equipment
-      expect(screen.getByText(/STEP 3 OF 3/i)).toBeInTheDocument();
-      expect(screen.getByText('Vehicles & Equipment')).toBeInTheDocument();
-      expect(screen.getByText('Example: KA 01 AB 1234')).toBeInTheDocument();
-
-      // Enter registration
-      const regInput = screen.getByPlaceholderText('KA 01 AB 1234');
-      await userEvent.type(regInput, 'KA 05 MN 9988');
-
-      // Click Save
-      fireEvent.click(screen.getByRole('button', { name: /Save & Update Preferences/i }));
-
-      // Feedback banner
-      expect(
-        screen.getByText(/Preferences saved and capabilities submitted for verification!/i)
-      ).toBeInTheDocument();
+      await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
+      expect(update.mock.calls[0][0]).toBe('ptr-1');
+      expect([...update.mock.calls[0][1]].sort()).toEqual(['battery_jumpstart', 'flat_tyre']);
+      expect(await screen.findByText(/Services saved/i)).toBeInTheDocument();
     });
 
-    it('toggles master availability between On Duty and Off Duty', () => {
-      saveStoredPartnerProfile(DEFAULT_PARTNER_PROFILE);
+    it('shows the failure when saving does not reach the backend', async () => {
+      vi.spyOn(partnerService, 'updateServices').mockRejectedValue(new Error('Equipment not verified'));
+      withProviders(<Preferences />);
+      await waitFor(() => expect(screen.getByLabelText(/Flat tyre/i)).toBeChecked());
 
-      render(
-        <MemoryRouter>
-          <Preferences />
-        </MemoryRouter>
-      );
+      fireEvent.click(screen.getByLabelText(/Battery jumpstart/i));
+      fireEvent.click(screen.getByRole('button', { name: /Save services/i }));
 
-      const availSwitch = screen.getByRole('switch', { name: /Toggle availability/i });
+      expect(await screen.findByText(/Equipment not verified/i)).toBeInTheDocument();
+      expect(screen.queryByText(/Services saved/i)).not.toBeInTheDocument();
+    });
+
+    it('toggles duty between On Duty and Off Duty', () => {
+      saveStoredPartnerProfile({ ...DEFAULT_PARTNER_PROFILE, isAvailable: true });
+      withProviders(<Preferences />);
+
+      const availSwitch = screen.getByRole('switch', { name: /Go on duty/i });
       expect(availSwitch).toHaveAttribute('aria-checked', 'true');
-      expect(screen.getByText('On Duty')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'On Duty' })).toBeInTheDocument();
 
       fireEvent.click(availSwitch);
       expect(availSwitch).toHaveAttribute('aria-checked', 'false');
-      expect(screen.getByText('Off Duty')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Off Duty' })).toBeInTheDocument();
     });
   });
 
   describe('PartnerDashboard', () => {
-    it('renders the idle state with the specified single plain sentence and no marketing filler', () => {
-      saveStoredPartnerProfile(DEFAULT_PARTNER_PROFILE);
-      const queryClient = new QueryClient({
-        defaultOptions: { queries: { retry: false } },
-      });
-
-      render(
+    const renderDashboard = (setup?: (qc: QueryClient) => void) => {
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      setup?.(queryClient);
+      return render(
         <QueryClientProvider client={queryClient}>
           <MemoryRouter>
             <PartnerDashboard />
           </MemoryRouter>
         </QueryClientProvider>
       );
+    };
 
-      // Hero sentence
+    it('renders the idle state with one plain sentence and no marketing filler', () => {
+      saveStoredPartnerProfile({ ...DEFAULT_PARTNER_PROFILE, isAvailable: true });
+      renderDashboard((qc) => {
+        qc.setQueryData(['partner', 'active-job'], null);
+        qc.setQueryData(['partner', 'offer'], null);
+      });
+
       expect(screen.getByText("You're available. Waiting for the next job.")).toBeInTheDocument();
-      // Ensure verbose marketing copy is gone
       expect(screen.queryByText(/You are in the dispatch pool/i)).not.toBeInTheDocument();
-      expect(screen.queryByText(/Matched for/i)).not.toBeInTheDocument();
-
-      // Check Command bar
       expect(screen.getByText('On Duty')).toBeInTheDocument();
-
-      // Check tabular numbers presence
-      expect(screen.getByText(/checks cleared/i)).toBeInTheDocument();
     });
 
-    it('shows earnings trend indicator when switching to This Week tab', async () => {
-      saveStoredPartnerProfile(DEFAULT_PARTNER_PROFILE);
-      const queryClient = new QueryClient({
-        defaultOptions: { queries: { retry: false } },
-      });
-      queryClient.setQueryData(['partner', 'earnings', 'week'], {
-        window: 'week',
-        jobsCompleted: 12,
-        amountEarned: 55000,
-        previousAmountEarned: 47900,
-      });
+    it('never shows invented operational details', () => {
+      saveStoredPartnerProfile({ ...DEFAULT_PARTNER_PROFILE, name: 'Ravi Kumar', isAvailable: true });
+      const { container } = renderDashboard();
+      const text = container.textContent ?? '';
+      expect(text).not.toMatch(/East Bengaluru|Indiranagar Hub|3\.5 Tonnes|Live \(1m ago\)|on the roster/i);
+    });
 
-      render(
-        <QueryClientProvider client={queryClient}>
-          <MemoryRouter>
-            <PartnerDashboard />
-          </MemoryRouter>
-        </QueryClientProvider>
+    it('shows earnings trend when switching to This Week', async () => {
+      saveStoredPartnerProfile(DEFAULT_PARTNER_PROFILE);
+      renderDashboard((qc) =>
+        qc.setQueryData(['partner', 'earnings', 'week'], {
+          window: 'week',
+          jobsCompleted: 12,
+          amountEarned: 55000,
+          previousAmountEarned: 47900,
+        })
       );
 
-      // Switch to This Week
       fireEvent.click(screen.getByRole('button', { name: 'This Week' }));
-
-      // Expect trend indicator once earnings data settles
-      await waitFor(() => {
-        expect(screen.getByText('+14.8%')).toBeInTheDocument();
-      });
+      await waitFor(() => expect(screen.getByText('+14.8%')).toBeInTheDocument());
       expect(screen.getByText('vs last week')).toBeInTheDocument();
     });
 
-    describe('State-Exclusivity: exactly one map overlay renders per state', () => {
-      it('renders ONLY map-overlay-off-duty when partner is off duty', () => {
+    describe('exactly one overlay renders per state', () => {
+      it('off duty', () => {
         saveStoredPartnerProfile({ ...DEFAULT_PARTNER_PROFILE, isAvailable: false });
-        const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-
-        render(
-          <QueryClientProvider client={queryClient}>
-            <MemoryRouter>
-              <PartnerDashboard />
-            </MemoryRouter>
-          </QueryClientProvider>
-        );
-
+        renderDashboard();
         expect(screen.getByTestId('map-overlay-off-duty')).toBeInTheDocument();
         expect(screen.queryByTestId('map-overlay-idle')).not.toBeInTheDocument();
         expect(screen.queryByTestId('map-overlay-pending-offer')).not.toBeInTheDocument();
         expect(screen.queryByTestId('map-overlay-active-job')).not.toBeInTheDocument();
       });
 
-      it('renders ONLY map-overlay-idle when on duty with no active job or offer', () => {
+      it('on duty with nothing to do', () => {
         saveStoredPartnerProfile({ ...DEFAULT_PARTNER_PROFILE, isAvailable: true });
-        const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-        queryClient.setQueryData(['partner', 'active-job'], null);
-        queryClient.setQueryData(['partner', 'offer'], null);
-
-        render(
-          <QueryClientProvider client={queryClient}>
-            <MemoryRouter>
-              <PartnerDashboard />
-            </MemoryRouter>
-          </QueryClientProvider>
-        );
-
+        renderDashboard((qc) => {
+          qc.setQueryData(['partner', 'active-job'], null);
+          qc.setQueryData(['partner', 'offer'], null);
+        });
         expect(screen.getByTestId('map-overlay-idle')).toBeInTheDocument();
         expect(screen.queryByTestId('map-overlay-off-duty')).not.toBeInTheDocument();
-        expect(screen.queryByTestId('map-overlay-pending-offer')).not.toBeInTheDocument();
-        expect(screen.queryByTestId('map-overlay-active-job')).not.toBeInTheDocument();
       });
 
-      it('renders ONLY map-overlay-pending-offer when an incoming offer arrives', () => {
+      it('an incoming offer', () => {
         saveStoredPartnerProfile({ ...DEFAULT_PARTNER_PROFILE, isAvailable: true });
-        const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-        queryClient.setQueryData(['partner', 'active-job'], null);
-        queryClient.setQueryData(['partner', 'offer'], {
-          id: 'offer-test-1',
-          serviceName: 'Flat-Tyre Support',
-          vehicleNumber: 'KA-05-NB-1290',
-          payoutEstimate: 850,
-          pickupAddressText: '100ft Road, Indiranagar',
-          distanceAtOfferM: 2400,
-          offeredAt: new Date().toISOString(),
+        renderDashboard((qc) => {
+          qc.setQueryData(['partner', 'active-job'], null);
+          qc.setQueryData(['partner', 'offer'], {
+            id: 'offer-test-1',
+            serviceName: 'Flat-Tyre Support',
+            vehicleNumber: 'KA-05-NB-1290',
+            pickupAddressText: '100ft Road, Indiranagar',
+            distanceAtOfferM: 2400,
+            offeredAt: new Date().toISOString(),
+          });
         });
-
-        render(
-          <QueryClientProvider client={queryClient}>
-            <MemoryRouter>
-              <PartnerDashboard />
-            </MemoryRouter>
-          </QueryClientProvider>
-        );
-
         expect(screen.getByTestId('map-overlay-pending-offer')).toBeInTheDocument();
-        expect(screen.queryByTestId('map-overlay-off-duty')).not.toBeInTheDocument();
         expect(screen.queryByTestId('map-overlay-idle')).not.toBeInTheDocument();
-        expect(screen.queryByTestId('map-overlay-active-job')).not.toBeInTheDocument();
       });
 
-      it('renders ONLY map-overlay-active-job when partner has an active job in progress', () => {
+      it('an active job', () => {
         saveStoredPartnerProfile({ ...DEFAULT_PARTNER_PROFILE, isAvailable: true });
-        const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-        queryClient.setQueryData(['partner', 'active-job'], {
-          id: 'job-test-1',
-          status: 'assigned',
-          service: { name: 'Battery Jumpstart' },
-          vehicle_number: 'KA-01-AB-1234',
-          pickup_address_text: 'Indiranagar, Bengaluru',
-          pickup_location: { latitude: 12.97, longitude: 77.59, address: 'Indiranagar' },
-        });
-
-        render(
-          <QueryClientProvider client={queryClient}>
-            <MemoryRouter>
-              <PartnerDashboard />
-            </MemoryRouter>
-          </QueryClientProvider>
+        renderDashboard((qc) =>
+          qc.setQueryData(['partner', 'active-job'], {
+            id: 'job-test-1',
+            status: 'assigned',
+            service: { name: 'Battery Jumpstart' },
+            vehicle_number: 'KA-01-AB-1234',
+            pickup_address_text: 'Indiranagar, Bengaluru',
+          })
         );
-
         expect(screen.getByTestId('map-overlay-active-job')).toBeInTheDocument();
-        expect(screen.queryByTestId('map-overlay-off-duty')).not.toBeInTheDocument();
-        expect(screen.queryByTestId('map-overlay-idle')).not.toBeInTheDocument();
         expect(screen.queryByTestId('map-overlay-pending-offer')).not.toBeInTheDocument();
       });
     });
 
-    it('renders all four purpose-built cards in the coordinated right-column bento stack', () => {
+    it('renders the four dashboard cards', () => {
       saveStoredPartnerProfile(DEFAULT_PARTNER_PROFILE);
-      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-
-      render(
-        <QueryClientProvider client={queryClient}>
-          <MemoryRouter>
-            <PartnerDashboard />
-          </MemoryRouter>
-        </QueryClientProvider>
-      );
+      renderDashboard();
 
       expect(screen.getByLabelText(/Earnings and performance/i)).toBeInTheDocument();
       expect(screen.getByLabelText(/Service Capabilities/i)).toBeInTheDocument();
@@ -568,7 +409,6 @@ describe('Partner Flow', () => {
   });
 
   describe('LoginPage', () => {
-
     it('renders the role switcher and swaps context between Owner and Partner sign in', () => {
       render(
         <AuthProvider>
@@ -578,13 +418,11 @@ describe('Partner Flow', () => {
         </AuthProvider>
       );
 
-      // Default: Owner
       expect(screen.getByText('Get roadside help')).toBeInTheDocument();
       expect(screen.getByPlaceholderText('98765 43210')).toBeInTheDocument();
 
-      // Switch to Partner
       fireEvent.click(screen.getByRole('radio', { name: /Service Partner/i }));
-      expect(screen.getByText('Partner dispatch console')).toBeInTheDocument();
+      expect(screen.getByText('Partner sign in')).toBeInTheDocument();
       expect(screen.getByText(/New to the network\?/i)).toBeInTheDocument();
       expect(screen.getByText(/Register as a partner/i)).toBeInTheDocument();
     });

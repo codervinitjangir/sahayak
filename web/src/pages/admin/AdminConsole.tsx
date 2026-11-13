@@ -42,9 +42,8 @@ const TABS: { id: TabId; label: string; blurb: string; Icon: React.ElementType }
  * The Admin Operations Console.
  *
  * Fully unified with the Partner Console design language:
- * - Partner-shell sidebar layout with warm paper styling (#F6F1E6 / #FBF8F1)
- * - Fraunces typographic brand identity
- * - Citilink active navigation pills (.citisum-active-pill)
+ * - Partner-shell sidebar layout with neutral canvas and white surfaces
+ * - Active navigation pills (.nav-active-pill)
  * - Scoped global time window filter above all reporting panels
  */
 export const AdminConsole: React.FC = () => {
@@ -67,22 +66,22 @@ export const AdminConsole: React.FC = () => {
       <aside aria-label="Admin Navigation Sidebar" className="partner-sidebar">
         <div>
           {/* Brand Header */}
-          <div className="mb-6 pb-4 border-b border-[#E7E0D2]">
+          <div className="mb-6 pb-4 border-b border-[#EEF2F6]">
             <Link to="/admin" className="block group focus:outline-none">
-              <span className="font-['Fraunces'] font-semibold text-xl tracking-tight text-[#1B1712] block leading-tight group-hover:text-[#0F766E] transition-colors">
+              <span className="font-semibold text-xl tracking-tight text-[#0F172A] block leading-tight group-hover:text-[#0F766E] transition-colors">
                 Sahayak
               </span>
-              <span className="text-[10px] font-bold text-[#0F766E] tracking-wider uppercase block mt-0.5">
+              <span className="text-xs font-bold text-[#0F766E] tracking-wider uppercase block mt-0.5">
                 Operations & Analytics
               </span>
             </Link>
           </div>
 
           {/* Section: Analytics Panels */}
-          <div className="text-[10px] font-bold tracking-wider text-[#9A917F] uppercase px-3 mt-4 mb-2">
+          <div className="partner-sidebar__label text-xs font-bold tracking-wider text-[#64748B] uppercase px-3 mt-4 mb-2">
             ANALYTICS REPORT
           </div>
-          <nav className="space-y-1 w-full">
+          <nav className="partner-sidebar__nav space-y-1 w-full">
             {TABS.map(({ id, label, Icon }) => {
               const isActive = active === id;
               return (
@@ -93,8 +92,8 @@ export const AdminConsole: React.FC = () => {
                   onClick={() => navigate(`/admin/${id}`)}
                   className={`w-full text-left flex items-center gap-3 px-3.5 py-2.5 text-xs font-semibold cursor-pointer transition-all ${
                     isActive
-                      ? 'citisum-active-pill'
-                      : 'text-[#5B5346] hover:text-[#1B1712] rounded-[10px] hover:bg-[#F6F1E6]/70'
+                      ? 'nav-active-pill'
+                      : 'text-[#475569] hover:text-[#0F172A] rounded-[10px] hover:bg-[#F6F8FA]/70'
                   }`}
                 >
                   <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-[#0F766E]'}`} />
@@ -105,55 +104,53 @@ export const AdminConsole: React.FC = () => {
           </nav>
 
           {/* Section: Platform Shortcuts */}
-          <div className="text-[10px] font-bold tracking-wider text-[#9A917F] uppercase px-3 mt-6 mb-2">
+          <div className="partner-sidebar__label text-xs font-bold tracking-wider text-[#64748B] uppercase px-3 mt-6 mb-2">
             PLATFORM SHORTCUTS
           </div>
-          <nav className="space-y-1 w-full">
+          <nav className="partner-sidebar__nav space-y-1 w-full">
             <Link
               to="/partner/dashboard"
-              className="w-full text-left flex items-center gap-3 px-3.5 py-2.5 text-xs font-semibold text-[#5B5346] hover:text-[#1B1712] rounded-[10px] hover:bg-[#F6F1E6]/70 transition-all"
+              className="w-full text-left flex items-center gap-3 px-3.5 py-2.5 text-xs font-semibold text-[#475569] hover:text-[#0F172A] rounded-[10px] hover:bg-[#F6F8FA]/70 transition-all"
             >
-              <Wrench className="w-4 h-4 text-[#5B5346] shrink-0" />
+              <Wrench className="w-4 h-4 text-[#475569] shrink-0" />
               <span>Partner Console</span>
             </Link>
             <Link
               to="/owner/request"
-              className="w-full text-left flex items-center gap-3 px-3.5 py-2.5 text-xs font-semibold text-[#5B5346] hover:text-[#1B1712] rounded-[10px] hover:bg-[#F6F1E6]/70 transition-all"
+              className="w-full text-left flex items-center gap-3 px-3.5 py-2.5 text-xs font-semibold text-[#475569] hover:text-[#0F172A] rounded-[10px] hover:bg-[#F6F8FA]/70 transition-all"
             >
-              <LifeBuoy className="w-4 h-4 text-[#5B5346] shrink-0" />
+              <LifeBuoy className="w-4 h-4 text-[#475569] shrink-0" />
               <span>Request Help</span>
             </Link>
             <Link
               to="/"
-              className="w-full text-left flex items-center gap-3 px-3.5 py-2.5 text-xs font-semibold text-[#5B5346] hover:text-[#1B1712] rounded-[10px] hover:bg-[#F6F1E6]/70 transition-all"
+              className="w-full text-left flex items-center gap-3 px-3.5 py-2.5 text-xs font-semibold text-[#475569] hover:text-[#0F172A] rounded-[10px] hover:bg-[#F6F8FA]/70 transition-all"
             >
-              <Globe className="w-4 h-4 text-[#5B5346] shrink-0" />
+              <Globe className="w-4 h-4 text-[#475569] shrink-0" />
               <span>Public Landing</span>
             </Link>
           </nav>
         </div>
 
         {/* Bottom Profile Badge & Sign out */}
-        <div className="pt-4 border-t border-[#E7E0D2] flex items-center justify-between gap-3">
+        <div className="pt-4 border-t border-[#EEF2F6] flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="w-8 h-8 rounded-full bg-[#0F766E] text-white flex items-center justify-center text-xs font-bold shrink-0">
-              OP
+              A
             </div>
             <div className="min-w-0">
-              <div className="text-xs font-bold text-[#1B1712] truncate">Operations Lead</div>
-              <div className="text-[10px] font-medium text-[#0F766E] flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                Admin Access
-              </div>
+              <div className="text-sm font-semibold text-[#0F172A] truncate">Operations</div>
+              <div className="text-xs font-medium text-[#475569]">Admin access</div>
             </div>
           </div>
           <button
             type="button"
             onClick={logout}
             title="Sign out"
-            className="text-xs font-medium text-[#9A917F] hover:text-[#B91C1C] transition-colors p-1"
+            aria-label="Sign out"
+            className="min-w-[44px] min-h-[44px] inline-flex items-center justify-center text-[#64748B] hover:text-[#B91C1C] transition-colors"
           >
-            <LogOut className="w-4 h-4" />
+            <LogOut className="w-4 h-4" aria-hidden="true" />
           </button>
         </div>
       </aside>
@@ -161,20 +158,17 @@ export const AdminConsole: React.FC = () => {
       {/* ── Main Canvas ── */}
       <main className="partner-main-canvas flex flex-col">
         {/* Executive Header & Filter Bar */}
-        <div className="w-full flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 pb-4 border-b border-[#E7E0D2]">
+        <div className="w-full flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 pb-4 border-b border-[#EEF2F6]">
           <div>
             <div className="flex items-center gap-2 mb-1.5">
-              <span className="px-2 py-0.5 rounded-[6px] text-[10px] font-bold bg-[#E6F4F1] text-[#0F766E] uppercase tracking-wider">
+              <span className="px-2 py-0.5 rounded-[6px] text-xs font-bold bg-[#E6F4F1] text-[#0F766E] uppercase tracking-wider">
                 Live Ops Console
               </span>
-              <span className="text-xs text-[#9A917F]">
-                PostGIS Engine · Supabase Auth
-              </span>
             </div>
-            <h1 className="font-['Fraunces'] text-2xl font-bold tracking-tight text-[#1B1712]">
+            <h1 className="text-2xl font-bold tracking-tight text-[#0F172A]">
               Analytics
             </h1>
-            <p className="mt-0.5 text-xs text-[#5B5346] max-w-2xl leading-relaxed">
+            <p className="mt-0.5 text-xs text-[#475569] max-w-2xl leading-relaxed">
               Read-only. Every figure carries its own caveats — the amber panel on each tab is part
               of the report, not a warning about it.
             </p>
@@ -185,7 +179,7 @@ export const AdminConsole: React.FC = () => {
             <div
               role="group"
               aria-label="Time window"
-              className="flex items-center gap-1 bg-white p-1 rounded-[12px] border border-[#E7E0D2] shadow-2xs"
+              className="flex items-center gap-1 bg-white p-1 rounded-[12px] border border-[#EEF2F6] shadow-2xs"
             >
               {WINDOW_PRESETS.map((p) => (
                 <button
@@ -196,7 +190,7 @@ export const AdminConsole: React.FC = () => {
                   className={`rounded-[8px] px-3 py-1.5 text-xs font-semibold transition-all ${
                     preset === p.id
                       ? 'bg-[#0F766E] text-white shadow-2xs'
-                      : 'text-[#5B5346] hover:text-[#1B1712] hover:bg-[#F6F1E6]'
+                      : 'text-[#475569] hover:text-[#0F172A] hover:bg-[#F6F8FA]'
                   }`}
                 >
                   {p.label}
@@ -208,7 +202,7 @@ export const AdminConsole: React.FC = () => {
               type="button"
               onClick={() => query.refetch()}
               disabled={query.isFetching}
-              className="flex items-center gap-1.5 rounded-[12px] border border-[#E7E0D2] bg-white hover:bg-[#FBF8F1] px-3.5 py-2 text-xs font-semibold text-[#1B1712] transition-colors shadow-2xs disabled:opacity-50"
+              className="flex items-center gap-1.5 rounded-[12px] border border-[#EEF2F6] bg-white hover:bg-[#FFFFFF] px-3.5 py-2 text-xs font-semibold text-[#0F172A] transition-colors shadow-2xs disabled:opacity-50"
             >
               <RefreshCw
                 className={`h-3.5 w-3.5 text-[#0F766E] ${query.isFetching ? 'animate-spin' : ''}`}
@@ -220,7 +214,7 @@ export const AdminConsole: React.FC = () => {
         </div>
 
         {/* Subnav Tabs & Scope Status */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 border-b border-[#E7E0D2] pb-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 border-b border-[#EEF2F6] pb-3">
           <nav aria-label="Reports" className="flex items-center gap-2">
             {TABS.map((t) => (
               <button
@@ -231,8 +225,8 @@ export const AdminConsole: React.FC = () => {
                 title={t.blurb}
                 className={`px-3.5 py-1.5 text-xs font-semibold rounded-[8px] transition-all ${
                   active === t.id
-                    ? 'bg-[#1B1712] text-white shadow-2xs'
-                    : 'text-[#5B5346] hover:text-[#1B1712] hover:bg-[#F6F1E6]'
+                    ? 'bg-[#0F172A] text-white shadow-2xs'
+                    : 'text-[#475569] hover:text-[#0F172A] hover:bg-[#F6F8FA]'
                 }`}
               >
                 {t.label}
@@ -261,7 +255,7 @@ export const AdminConsole: React.FC = () => {
         ) : (
           <div className="py-24 text-center">
             <RefreshCw className="w-6 h-6 text-[#0F766E] animate-spin mx-auto mb-3" />
-            <p className="text-sm font-semibold text-[#5B5346]">Loading report…</p>
+            <p className="text-sm font-semibold text-[#475569]">Loading report…</p>
           </div>
         )}
       </main>
@@ -276,14 +270,14 @@ const WindowCaption: React.FC<{
   lastJob: string | null;
 }> = ({ from, firstJob, lastJob }) => {
   if (!firstJob && !lastJob) {
-    return <p className="text-xs text-[#9A917F]">No jobs in this window</p>;
+    return <p className="text-xs text-[#64748B]">No jobs in this window</p>;
   }
   const fmt = (iso: string | null) =>
     iso ? new Date(iso).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : '—';
   return (
-    <p className="text-xs text-[#5B5346]">
+    <p className="text-xs text-[#475569]">
       Data from {fmt(firstJob)} to {fmt(lastJob)}
-      {from && <span className="text-[#9A917F]"> · asked from {fmt(from)}</span>}
+      {from && <span className="text-[#64748B]"> · asked from {fmt(from)}</span>}
     </p>
   );
 };
@@ -314,7 +308,7 @@ const AnalyticsError: React.FC<{ error: unknown }> = ({ error }) => {
             {apiError?.code && (
               <>
                 {' '}
-                <code className="rounded bg-[#FEF3C7] px-1 py-0.5 font-mono text-[10px] font-bold text-[#92400E]">
+                <code className="rounded bg-[#FEF3C7] px-1 py-0.5 font-mono text-xs font-bold text-[#92400E]">
                   {apiError.code}
                 </code>
               </>

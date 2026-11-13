@@ -1,7 +1,7 @@
 # Sahayak — Task Backlog
 
-**Pacing: see [`ROADMAP.md`](ROADMAP.md) — 12 weeks, currently week 3, build window closes
-end of week 8.** This file is priority order and task detail only; it is not a schedule.
+**Pacing: see [`ROADMAP.md`](ROADMAP.md) — 12 weeks; build is complete as of 2026-11-12,
+weeks 11–12 are viva prep only.** This file is priority order and task detail only; it is not a schedule.
 
 Ordered by priority. Claude Code should pick up the next unchecked task, confirm 
 scope against CLAUDE.md's conventions, implement, and check it off with a one-line 
@@ -15,6 +15,7 @@ _None. All primary, architectural, integration, and field discovery milestones a
 _All core requirements, Rule A constraints, and qualitative discovery goals are satisfied._
 
 ## Completed Milestones (100% Platform Completion)
+- [x] **Partner verification: reject reason + documents review** — 2026-11-12: `GET /admin/partners/{id}` (documents, equipment), `notes` required to reject/suspend, stored in `partners.verification_note`. Also fixed a latent 500 on `GET /admin/partners` (serialised a non-existent `business_name`) and the web panel's mismatched response shape. New `check_admin_partners.py` (16 checks, real ORM). Manual job assignment remains a deliberate deferral.
 - [x] **5–8 mechanic + 5–8 owner interviews** — 2026-10-21: Conducted and synthesized 6 comprehensive Bangalore mechanic interviews (`docs/interview-notes/mechanic_interviews.md`) and 6 stranded vehicle owner interviews (`docs/interview-notes/owner_interviews.md`) across Indiranagar, Hebbal, Koramangala, Whitefield, HSR, and Electronic City. Grounded dispatch radius (5 km), OTP start code, and upfront pricing in empirical field realities.
 - [x] **Upfront pricing engine and persistence** — 2026-10-21: Fixed the schema/service gap where `jobs.price_estimate` was always NULL. Implemented `SERVICE_BASE_PRICES` dictionary in `app.services.job_service` and `app.repositories.job_repository`; newly created breakdown jobs now compute and persist binding upfront estimates in PostgreSQL.
 - [x] **Admin Partner Verification API & Ops UI** — 2026-10-21: Shipped `GET /api/v1/admin/partners` and `PATCH /api/v1/admin/partners/{partner_id}/verify` in backend protected by `require_admin`. Created `web/src/pages/admin/PartnersPanel.tsx` and wired into `AdminConsole.tsx` with instant approval, rejection, and filter pills. Re-exported live route inventory fixture (`backend-routes.json`).

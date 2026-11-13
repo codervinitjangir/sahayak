@@ -33,7 +33,7 @@ export const ErrorState: React.FC<ErrorStateProps> = ({
           <div className="flex items-center gap-2 flex-wrap">
             <h4 className="text-sm font-bold text-emergency-900">{title}</h4>
             {code && (
-              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emergency-200/60 text-emergency-900 font-semibold">
+              <span className="text-xs font-mono px-1.5 py-0.5 rounded bg-emergency-200/60 text-emergency-900 font-semibold">
                 {code}
               </span>
             )}
@@ -41,7 +41,7 @@ export const ErrorState: React.FC<ErrorStateProps> = ({
           <p className="text-xs text-emergency-800 leading-relaxed">{message}</p>
 
           {requestId && (
-            <p className="text-[10px] font-mono text-ink-muted">
+            <p className="text-xs font-mono text-ink-muted">
               Request ID: {requestId}
             </p>
           )}

@@ -90,8 +90,15 @@ export interface Job {
   drop_lng?: number;
   issue_description?: string;
   issue_photo_urls?: string[];
-  price_estimate?: number;
-  price_final?: number;
+  /** Decimal on the wire — arrives as a string; parse before arithmetic. */
+  price_estimate?: number | string | null;
+  price_final?: number | string | null;
+  service_name?: string | null;
+  /** Released to the assigned partner only (ADR-017). */
+  owner_name?: string | null;
+  owner_phone?: string | null;
+  /** Owner-only: the 4-digit code the owner reads out to the partner on arrival. */
+  start_code?: string | null;
   requested_at: string;
   completed_at?: string;
   cancelled_at?: string;

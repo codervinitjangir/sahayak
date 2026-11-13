@@ -5,7 +5,7 @@ export interface MobileVehicle {
   user_id: string;
   make: string;
   model: string;
-  year: number;
+  year?: number;
   vehicle_number: string;
   vehicle_type: "two_wheeler" | "four_wheeler";
   created_at: string;
@@ -14,12 +14,14 @@ export interface MobileVehicle {
 export interface CreateVehiclePayload {
   make: string;
   model: string;
-  year: number;
   vehicle_number: string;
   vehicle_type: "two_wheeler" | "four_wheeler";
 }
 
 export const vehiclesApi = {
+  /** As listVehicles, but a failed request throws instead of looking like an empty garage. */
+  fetchVehicles: () => apiClient.get<MobileVehicle[]>("/vehicles").then((r) => r.data),
+
   /** List all vehicles owned by current user (GET /api/v1/vehicles) */
   listVehicles: () =>
     apiClient

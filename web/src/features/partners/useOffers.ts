@@ -27,7 +27,7 @@ function offerErrorMessage(error: unknown): string {
 /** The one transition the primary button may make, per current status. */
 export const NEXT_TRANSITION: Partial<Record<JobStatus, { next: JobStatus; label: string }>> = {
   assigned: { next: 'partner_en_route', label: 'Mark en route' },
-  partner_en_route: { next: 'in_progress', label: 'Mark arrived / start job' },
+  partner_en_route: { next: 'in_progress', label: 'Verify code & start job' },
   in_progress: { next: 'completed', label: 'Mark complete' },
 };
 
@@ -145,8 +145,26 @@ export function useJobStatusTransition() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ jobId, status }: { jobId: string; status: JobStatus }) =>
-      partnerService.updateJobStatus(jobId, status),
+    mutationFn: ({
+      jobId,
+      status,
+      priceFinal,
+      startCode,
+    }: {
+      jobId: string;
+      status: JobStatus;
+      /** Required by the backend on a completion (400 PRICE_FINAL_REQUIRED otherwise). */
+      priceFinal?: number;
+      /** in_progress is reached only through POST /jobs/{id}/start with the owner's code. */
+      startCode?: string;
+    }) =>
+      status === 'in_progress'
+        ? partnerService.startJob(jobId, startCode ?? '')
+        : partnerService.updateJobStatus(
+            jobId,
+            status,
+            status === 'completed' ? { price_final: priceFinal } : undefined
+          ),
     onSuccess: (transition) => {
       // A completed job is no longer the active one.
       queryClient.setQueryData(
@@ -157,5 +175,16 @@ export function useJobStatusTransition() {
       queryClient.invalidateQueries({ queryKey: PARTNER_EARNINGS_KEY });
       queryClient.invalidateQueries({ queryKey: PARTNER_STATS_KEY });
     },
+  });
+}
+
+export const PARTNER_SERVICES_KEY = ['partner', 'services'];
+
+/** The services the backend has linked to this partner. */
+export function usePartnerServices() {
+  return useQuery({
+    queryKey: PARTNER_SERVICES_KEY,
+    queryFn: () => partnerService.getMyServices(),
+    staleTime: 30_000,
   });
 }

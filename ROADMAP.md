@@ -20,14 +20,14 @@ conventions and task detail, not for pacing.
 
 ## 100% Target State Scorecard (All Week 10 Deliverables Shipped)
 
-1. **Backend Completeness (413/413 Tests Passing):**
+1. **Backend Completeness (443 unit + 804 live checks passing):**
    - Core weighted dispatch, 15s radial cascade, Redis GEO, PostGIS spatial queries.
    - Idempotent OTP verification, ratings, notifications, active partner job persistence.
    - Admin analytics engine (`/admin/analytics/{overview,dispatch,matching}`) with metric hygiene.
    - Admin partner verification API (`GET /admin/partners`, `PATCH /admin/partners/{id}/verify`).
    - Upfront pricing engine (`SERVICE_BASE_PRICES`) writing binding estimates to PostgreSQL.
 
-2. **Web Frontend (115/115 Tests Passing, Rule A Compliant):**
+2. **Web Frontend (116/116 Tests Passing, Rule A Compliant):**
    - Public Landing page, Emergency Request Help flow, Owner Job Tracking with live ratings.
    - Complete Partner Console (Dashboard, Active Job execution, Shift availability toggle with location reporting, History, Settings).
    - Admin Operations Console with 4 tabs: Overview, Dispatch, Matching, and Partner Verification.

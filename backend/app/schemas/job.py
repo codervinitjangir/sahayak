@@ -143,13 +143,28 @@ class JobDetailResponse(BaseModel):
     id: uuid.UUID
     status: str
     service_id: int
+    service_code: Optional[str] = None
+    service_name: Optional[str] = None
+    vehicle_id: Optional[uuid.UUID] = None
     vehicle_number: Optional[str] = None
     pickup_address_text: Optional[str] = None
+    # Released only to the owner and the assigned partner, on the same gate as
+    # the partner contact details below. An offered-but-not-accepted partner
+    # still gets only the address text.
+    pickup_lat: Optional[float] = None
+    pickup_lng: Optional[float] = None
     issue_description: Optional[str] = None
     price_estimate: Optional[Decimal] = None
     price_final: Optional[Decimal] = None
     requested_at: datetime
     completed_at: Optional[datetime] = None
+    # The owner's contact details, for the assigned partner. Owner callers
+    # already know them; bystanders get None.
+    owner_name: Optional[str] = None
+    owner_phone: Optional[str] = None
+    # Owner-only. The partner must never receive the code through a read; they
+    # verify it by submitting it to POST /jobs/{id}/start.
+    start_code: Optional[str] = None
     current_assignment: Optional[CurrentAssignmentResponse] = None
     timeline: list[JobTimelineEntry] = Field(default_factory=list)
 
@@ -205,6 +220,19 @@ class AssignmentRespondResponse(BaseModel):
     job_status: str
     responded_at: Optional[datetime] = None
     next_assignment_id: Optional[uuid.UUID] = None
+
+
+class JobStartRequest(BaseModel):
+    """Inbound payload for POST /jobs/{job_id}/start.
+
+    The 4-digit code the owner reads out. This is a separate route from
+    /status because it is the one transition that carries a proof: a partner
+    can only move a job to in_progress by demonstrating they are on scene.
+    Letting /status reach in_progress without the code would make the code
+    advisory, which is the same as not having one.
+    """
+
+    start_code: str = Field(..., min_length=4, max_length=4, pattern=r"^\d{4}$")
 
 
 class JobStatusTransitionRequest(BaseModel):

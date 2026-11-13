@@ -20,7 +20,7 @@ matching error envelope by app/middlewares/error_handlers.py.
 import uuid
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Header, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api import API_V1_PREFIX
@@ -33,6 +33,7 @@ from app.schemas.job import (
     JobCreateRequest,
     JobDetailResponse,
     JobResponse,
+    JobStartRequest,
     JobStatusTransitionRequest,
     JobStatusTransitionResponse,
 )
@@ -74,6 +75,16 @@ router = APIRouter(
 )
 async def create_job(
     payload: JobCreateRequest,
+    idempotency_key: Optional[str] = Header(
+        None,
+        alias="Idempotency-Key",
+        min_length=8,
+        max_length=64,
+        description=(
+            "Client-generated retry token. Re-sending the same key returns the "
+            "job the first attempt created instead of dispatching again."
+        ),
+    ),
     identity: Identity = Depends(require_user),
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[JobResponse]:
@@ -92,8 +103,15 @@ async def create_job(
     'no_match_found' if nobody eligible was within the search radius. Both are
     201s: the job was created either way, and 'no_match_found' is an answer the
     driver needs, not a failure to record their request.
+
+    Send an `Idempotency-Key` header (8–64 characters; a UUID is ideal). The
+    emergency button is exactly the place a flaky connection produces a retry,
+    and without the key that retry dispatches a second mechanic to the same
+    breakdown. With it, the second request returns the first job.
     """
-    job = await job_service.create_job(db, payload, identity.local_id)
+    job = await job_service.create_job(
+        db, payload, identity.local_id, idempotency_key=idempotency_key
+    )
     return envelope(job)
 
 
@@ -187,8 +205,10 @@ async def transition_job_status(
     Partner-only, and only the partner whose job_assignments row for this job
     reads 'accepted' — identity.local_id must match it.
 
-    Legal moves are `assigned → partner_en_route → in_progress → completed`,
-    plus `cancelled` from any of those. 'completed' and 'cancelled' are
+    Legal moves are `assigned → partner_en_route`, `in_progress → completed`,
+    plus `cancelled` from any active status. `partner_en_route → in_progress`
+    is POST /jobs/{job_id}/start only; asking for it here is
+    400 INVALID_START_CODE. 'completed' and 'cancelled' are
     terminal. Anything else is 409 INVALID_STATUS_TRANSITION.
 
     price_final is required on a completion (400 PRICE_FINAL_REQUIRED without
@@ -209,8 +229,40 @@ async def transition_job_status(
     partner who is not the one assigned, and 404 JOB_NOT_FOUND for an unknown
     id.
     """
-    result = await job_service.transition_job_status(
+    result = await job_service.request_status_transition(
         db, job_id, payload, identity.local_id
+    )
+    return envelope(result)
+
+
+@router.post(
+    "/{job_id}/start",
+    response_model=ApiResponse[JobStatusTransitionResponse],
+    status_code=status.HTTP_200_OK,
+    summary="Verify the owner's start code and begin work",
+)
+async def start_job(
+    job_id: uuid.UUID,
+    payload: JobStartRequest,
+    identity: Identity = Depends(require_partner),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[JobStatusTransitionResponse]:
+    """Move an accepted job to in_progress after checking the 4-digit code.
+
+    Partner-only, and only the partner whose accepted assignment names them.
+    The code is generated server-side at job creation and returned only to the
+    owner, so a partner cannot learn it by reading the job.
+
+    400 INVALID_START_CODE for a wrong code (or a job created before codes
+    existed), 403 FORBIDDEN for a partner who is not assigned, 404 for an
+    unknown job, and 409 INVALID_STATUS_TRANSITION if the job is not in
+    partner_en_route.
+
+    Kept separate from POST /jobs/{job_id}/status because that route can reach
+    in_progress without proof of presence, which would make the code advisory.
+    """
+    result = await job_service.start_job(
+        db, job_id, payload.start_code, identity.local_id
     )
     return envelope(result)
 

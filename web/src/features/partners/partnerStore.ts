@@ -56,7 +56,8 @@ function freshState(lastLocationAt: string | null): PartnerStoreState {
   };
 }
 
-let state: PartnerStoreState = freshState(new Date().toISOString());
+// No fix until the browser has actually produced one and the backend accepted it.
+let state: PartnerStoreState = freshState(null);
 let announcementSeq = 0;
 
 const listeners = new Set<() => void>();
@@ -165,8 +166,8 @@ export function updatePartnerProfile(
 
 export function setPartnerAvailability(isAvailable: boolean): void {
   updatePartnerProfile((prev) => (prev.isAvailable === isAvailable ? prev : { ...prev, isAvailable }));
-  // Going on duty is when the app starts reporting position again.
-  if (isAvailable) recordLocationFix();
+  // The fix timestamp is set by usePartnerAvailability once a real GPS reading
+  // has been accepted by the backend — never merely by flipping the switch.
 }
 
 export function recordLocationFix(at: string = new Date().toISOString()): void {
@@ -193,7 +194,7 @@ export function dismissAnnouncement(): void {
  */
 export function resetPartnerStore(options?: { lastLocationAt?: string | null }): void {
   announcementSeq = 0;
-  emit(freshState(options && 'lastLocationAt' in options ? (options.lastLocationAt ?? null) : new Date().toISOString()));
+  emit(freshState(options && 'lastLocationAt' in options ? (options.lastLocationAt ?? null) : null));
 }
 
 /**

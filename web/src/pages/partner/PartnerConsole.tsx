@@ -1,12 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 
 import { PartnerDashboard, PartnerSidebar, CONSOLE_NAV, type ConsoleView } from './PartnerDashboard';
 import { Preferences } from './Preferences';
 import { VerificationStatus } from './VerificationStatus';
 import { ConsoleSettingsView } from './ConsoleSettings';
 import { usePartnerAvailability } from '../../features/partners/usePartnerAvailability';
-import { usePartnerProfile } from '../../features/partners/partnerStore';
+import { updatePartnerProfile, usePartnerProfile } from '../../features/partners/partnerStore';
+import { usePartnerTrustStats } from '../../features/partners/useOffers';
+import { ApiError } from '../../services/api';
+import { partnerService } from '../../services/partner.service';
 import { PartnerTopBar } from './components/PartnerTopBar';
 import './partner.css';
 
@@ -34,7 +37,69 @@ export const PartnerConsole: React.FC = () => {
   }, [pathname]);
 
   const profile = usePartnerProfile();
-  const { isAvailable } = usePartnerAvailability();
+  const { isAvailable, setAvailable } = usePartnerAvailability();
+
+  // GET /partners/me/stats is the cheapest call that proves this token belongs
+  // to a partner. Until it succeeds nothing partner-specific is shown, so an
+  // owner or a signed-out visitor never sees an "on duty / verified" console.
+  const stats = usePartnerTrustStats();
+
+  // Keep the stored id in step with the server (availability and location
+  // calls are addressed by it), and re-assert a remembered on-duty state so the
+  // switch never says "on duty" while dispatch thinks otherwise.
+  const synced = useRef(false);
+  useEffect(() => {
+    const partnerId = stats.data?.partnerId;
+    if (!partnerId || synced.current) return;
+    synced.current = true;
+    if (profile.id !== partnerId) updatePartnerProfile((prev) => ({ ...prev, id: partnerId }));
+    if (profile.isAvailable) {
+      partnerService.setAvailability(true, partnerId).catch(() => setAvailable(false));
+    }
+  }, [stats.data?.partnerId, profile.id, profile.isAvailable, setAvailable]);
+
+  if (stats.isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#F6F8FA]">
+        <p className="text-sm text-[#475569]" role="status">Loading partner console…</p>
+      </div>
+    );
+  }
+
+  if (stats.isError || !stats.data) {
+    const err = stats.error;
+    const notPartner = err instanceof ApiError && [401, 403, 404].includes(err.status);
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#F6F8FA] px-4">
+        <div className="max-w-md w-full bg-white rounded-2xl border border-[#EEF2F6] p-6 text-center" role="alert">
+          <h1 className="text-lg font-bold text-[#0F172A]">
+            {notPartner ? 'This account is not a service partner' : 'Could not load the partner console'}
+          </h1>
+          <p className="mt-2 text-sm text-[#475569]">
+            {notPartner
+              ? 'Sign in with the mobile number you registered as a partner, or register your workshop first.'
+              : 'Check your connection and try again.'}
+          </p>
+          <div className="mt-4 flex flex-col gap-2">
+            {notPartner ? (
+              <>
+                <Link to="/partner/signup" className="min-h-[44px] inline-flex items-center justify-center rounded-xl bg-[#0F766E] text-white font-bold">
+                  Register as a partner
+                </Link>
+                <Link to="/login" className="min-h-[44px] inline-flex items-center justify-center rounded-xl border border-[#EEF2F6] font-bold text-[#0F172A]">
+                  Sign in
+                </Link>
+              </>
+            ) : (
+              <button type="button" onClick={() => void stats.refetch()} className="min-h-[44px] rounded-xl bg-[#0F766E] text-white font-bold">
+                Retry
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="partner-shell">

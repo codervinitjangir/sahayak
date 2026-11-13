@@ -23,6 +23,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.user import User
 
 
+async def get_user_by_id(db: AsyncSession, user_id: uuid.UUID) -> Optional[User]:
+    """Fetch a vehicle owner by primary key, or None when no such row exists.
+
+    Used by the job read path to release the owner's name and phone to the
+    assigned partner. The token only carries the owner's local id; the contact
+    details live on this row.
+    """
+    result = await db.execute(select(User).where(User.id == user_id))
+    return result.scalar_one_or_none()
+
+
 async def get_user_by_phone(db: AsyncSession, phone: str) -> Optional[User]:
     """Look up a vehicle owner by phone number, which is unique in the schema.
 

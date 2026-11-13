@@ -6,6 +6,11 @@ python-dotenv
 pydantic-settings
 psycopg2-binary
 geoalchemy2
+# GeoAlchemy2 can read and write geometry without Shapely, but converting a
+# stored geography back into coordinates (geoalchemy2.shape.to_shape — what the
+# job read path uses to return pickup_lat/lng) needs it. Listed explicitly so a
+# fresh image does not discover the gap only when an owner opens tracking.
+shapely>=2.0
 # [crypto] is not optional here. Supabase signs access tokens with ES256, and
 # PyJWT can only verify elliptic-curve signatures when `cryptography` is
 # present — without it every real token is rejected at runtime, on a box where

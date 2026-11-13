@@ -1,21 +1,22 @@
 import { apiClient } from "./client";
 
 export interface CurrentAssignment {
-  id: string;
-  partner_id: string;
-  partner_name: string;
-  partner_phone: string;
-  partner_rating: number | null;
-  partner_rating_count: number;
   status: string;
-  assigned_at: string;
+  partner_id?: string | null;
+  partner_name?: string | null;
+  partner_phone?: string | null;
+  partner_rating?: number | null;
+  partner_rating_count?: number | null;
+  estimated_arrival_min?: number | null;
 }
 
 export interface BackendJob {
   id: string;
   user_id: string;
-  vehicle_id: string;
-  service_code: string;
+  vehicle_id?: string | null;
+  vehicle_number?: string | null;
+  service_code?: string | null;
+  service_name?: string | null;
   status:
     | "requested"
     | "matching"
@@ -25,14 +26,24 @@ export interface BackendJob {
     | "completed"
     | "cancelled"
     | "no_match_found";
-  pickup_lat: number;
-  pickup_lng: number;
+  pickup_lat?: number | null;
+  pickup_lng?: number | null;
   pickup_address_text: string;
-  notes?: string | null;
+  issue_description?: string | null;
   price_estimate: number;
   price_final?: number | null;
-  created_at: string;
+  created_at?: string;
+  requested_at?: string;
   updated_at?: string;
+  owner_name?: string | null;
+  owner_phone?: string | null;
+  /** History rows only: the partner for an owner, the owner for a partner. */
+  counterpart_name?: string | null;
+  cancelled_at?: string | null;
+  completed_at?: string | null;
+  cancellation_reason?: string | null;
+  /** Owner-only. Partners prove the code through POST /jobs/{id}/start. */
+  start_code?: string | null;
   current_assignment?: CurrentAssignment | null;
   timeline?: Array<{
     status: string;
@@ -41,16 +52,25 @@ export interface BackendJob {
   }>;
 }
 
+export interface BackendPartnerOfferJob {
+  status: string;
+  service_code: string | null;
+  service_name: string | null;
+  vehicle_number: string | null;
+  pickup_address_text: string | null;
+  issue_description: string | null;
+  price_estimate: number | null;
+  requested_at: string;
+}
+
 export interface BackendPartnerOfferItem {
   assignment_id: string;
   job_id: string;
-  service_code: string;
-  pickup_lat: number;
-  pickup_lng: number;
-  pickup_address_text: string;
-  price_estimate: number;
-  distance_km: number;
   offered_at: string;
+  distance_at_offer_m: number | null;
+  estimated_arrival_min: number | null;
+  assignment_rank: number | null;
+  job: BackendPartnerOfferJob;
 }
 
 export interface AssignmentRespondResponse {
@@ -81,7 +101,7 @@ export interface CreateJobPayload {
   pickup_lat: number;
   pickup_lng: number;
   pickup_address_text: string;
-  notes?: string;
+  issue_description?: string;
 }
 
 // ─── Job API calls ────────────────────────────────────────────────────────────
@@ -138,6 +158,18 @@ export const jobsApi = {
       })
       .then((r) => r.data),
 
+  /**
+   * Partner: verify the owner's 4-digit code and begin work
+   * (POST /api/v1/jobs/{jobId}/start)
+   *
+   * Separate from updateJobStatus because that route cannot reach in_progress
+   * without proof of presence. A wrong code is a 400 INVALID_START_CODE.
+   */
+  startJob: (jobId: string, startCode: string) =>
+    apiClient
+      .post<BackendJob>(`/jobs/${jobId}/start`, { start_code: startCode })
+      .then((r) => r.data),
+
   /** Partner: list active incoming offers (GET /api/v1/partners/me/offers) */
   getOffers: () =>
     apiClient
@@ -156,6 +188,17 @@ export const jobsApi = {
   submitRating: (jobId: string, rating: number, comment?: string) =>
     apiClient
       .post(`/jobs/${jobId}/ratings`, { rating, comment: comment || undefined })
+      .then((r) => r.data),
+
+  /**
+   * Same endpoint as listMyJobs but errors reach the caller. A screen that shows
+   * "no requests yet" has to be able to tell an empty history from a failed one.
+   */
+  fetchMyJobs: (limit: number = 50, offset: number = 0) =>
+    apiClient
+      .get<{ items: BackendJob[]; total: number; limit: number; offset: number; has_more: boolean }>(
+        `/jobs?limit=${limit}&offset=${offset}`
+      )
       .then((r) => r.data),
 
   /** List caller's jobs history (GET /api/v1/jobs) */

@@ -43,7 +43,7 @@ export const DispatchPanel: React.FC<{ data: AnalyticsDispatch }> = ({ data }) =
 
   return (
     <div className="space-y-5">
-      <section className="rounded-[16px] border border-[#E7E0D2] bg-white p-6 shadow-2xs">
+      <section className="rounded-[16px] border border-[#EEF2F6] bg-white p-6 shadow-2xs">
         <div className="flex flex-wrap items-end justify-between gap-6">
           <HeroFigure
             label="Acceptance rate (of answered offers)"
@@ -54,14 +54,14 @@ export const DispatchPanel: React.FC<{ data: AnalyticsDispatch }> = ({ data }) =
           />
           <dl className="grid grid-cols-2 gap-x-8 gap-y-2 text-right">
             <div>
-              <dt className="text-xs text-[#5B5346] font-medium">Of all offers sent</dt>
+              <dt className="text-xs text-[#475569] font-medium">Of all offers sent</dt>
               <dd
-                className="text-lg font-bold text-[#1B1712] font-['Fraunces']"
+                className="text-lg font-bold text-[#0F172A]"
                 style={{ fontVariantNumeric: 'tabular-nums' }}
               >
                 {pct(offers.acceptance_rate_of_all)}
               </dd>
-              <dd className="text-[11px] text-[#9A917F]">
+              <dd className="text-xs text-[#64748B]">
                 {compact(offers.unanswered)} never answered
               </dd>
             </div>
@@ -73,7 +73,7 @@ export const DispatchPanel: React.FC<{ data: AnalyticsDispatch }> = ({ data }) =
               >
                 {compact(offers.total)}
               </dd>
-              <dd className="text-[11px] text-slate-400">
+              <dd className="text-xs text-slate-400">
                 to {compact(offers.partners_offered)} partners
               </dd>
             </div>
@@ -187,7 +187,7 @@ export const DispatchPanel: React.FC<{ data: AnalyticsDispatch }> = ({ data }) =
               >
                 {pct(noMatch.rate)}
               </p>
-              <p className="text-[11px] text-slate-400">outage jobs excluded</p>
+              <p className="text-xs text-slate-400">outage jobs excluded</p>
             </div>
             <div>
               <p className="text-xs text-slate-500">Including outages</p>
@@ -197,7 +197,7 @@ export const DispatchPanel: React.FC<{ data: AnalyticsDispatch }> = ({ data }) =
               >
                 {pct(noMatch.rate_including_outages)}
               </p>
-              <p className="text-[11px] text-slate-400">
+              <p className="text-xs text-slate-400">
                 {compact(noMatch.dispatch_unavailable)} outage jobs
               </p>
             </div>

@@ -24,8 +24,9 @@ reach these functions and bypass it by not being an HTTP request.
 import logging
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Sequence
+from zoneinfo import ZoneInfo
 
 from redis.exceptions import RedisError
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -41,6 +42,7 @@ from app.repositories import dispatch_repository, partner_repository
 from app.schemas.job import JobDetailResponse
 from app.schemas.partner import (
     PartnerCreateRequest,
+    PartnerEarningsResponse,
     PartnerServiceItem,
     PartnerServicesResponse,
     PartnerStatsResponse,
@@ -493,5 +495,63 @@ async def get_partner_stats(
     if stats is None:
         raise NotFoundError(ErrorCode.PARTNER_NOT_FOUND, "Partner not found")
     return PartnerStatsResponse(**stats)
+
+
+async def get_partner_services(
+    db: AsyncSession, identity: Identity
+) -> PartnerServicesResponse:
+    """Every service the calling partner currently offers.
+
+    The partner app's fleet/capabilities tab reads this. `/me` rather than a
+    path id for the same reason as the offers list: the token already says who
+    the caller is, and a client that can ask for someone else's coverage has no
+    product reason to.
+
+    `base_price` is projected from the same pricing constant POST /jobs uses,
+    so the app never has to keep a second price table in sync.
+    """
+    services = await partner_repository.get_partner_services(db, identity.local_id)
+    return PartnerServicesResponse(
+        partner_id=identity.local_id,
+        services=[
+            PartnerServiceItem(
+                service_id=service.id,
+                code=service.code,
+                name=service.name,
+                base_price=job_service.SERVICE_BASE_PRICES.get(service.code),
+            )
+            for service in services
+        ],
+    )
+
+
+# Payout windows are reported in the market's timezone, not UTC. A partner in
+# Bengaluru finishing a job at 00:30 IST has done it "today" by their own
+# calendar even though UTC still says yesterday, and a dashboard that disagrees
+# with the driver's clock reads as a bug.
+_PAYOUT_TZ = ZoneInfo("Asia/Kolkata")
+
+
+async def get_partner_earnings(
+    db: AsyncSession, identity: Identity
+) -> PartnerEarningsResponse:
+    """Completed-job payouts for today, this week and lifetime.
+
+    Sums jobs.price_final, not price_estimate: the estimate is the quote the
+    owner saw before work began. Days and weeks are calendar windows in IST,
+    converted to UTC only at the query boundary because every timestamp in the
+    database is stored as UTC.
+    """
+    now_local = datetime.now(timezone.utc).astimezone(_PAYOUT_TZ)
+    today_start_local = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
+    week_start_local = today_start_local - timedelta(days=today_start_local.weekday())
+
+    earnings = await partner_repository.get_partner_earnings(
+        db,
+        identity.local_id,
+        today_start_local.astimezone(timezone.utc),
+        week_start_local.astimezone(timezone.utc),
+    )
+    return PartnerEarningsResponse(**earnings)
 
 

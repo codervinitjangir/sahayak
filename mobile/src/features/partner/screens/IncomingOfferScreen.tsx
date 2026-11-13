@@ -1,12 +1,15 @@
-// ─── Sahayak — Incoming Offer Screen (Partner) ───────────────────────────────
-// Figma: partner-incoming-offer — orange alert header, job details, Accept/Decline
+﻿// â”€â”€â”€ Sahayak â€” Incoming Offer Screen (Partner) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Everything on this screen comes from the offer the dispatch engine actually
+// sent: GET /partners/me/offers items carry { assignment_id, job_id, offered_at,
+// distance_at_offer_m, estimated_arrival_min, job }. There is deliberately no
+// fallback job or made-up pickup when that payload is missing â€” a fabricated
+// address here would send a mechanic to the wrong street.
 import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
-  TouchableOpacity,
   Animated,
   StatusBar,
   Platform,
@@ -15,15 +18,17 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
-import type { NativeStackNavigationProp } from "@react-navigation/native-stack"
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RouteProp } from "@react-navigation/native";
 
-import { Colors, Typography, Spacing, Radius, Shadows, ServiceConfig } from "../../../constants/theme";
+import { Colors, Typography, Spacing, Radius, Shadows } from "../../../constants/theme";
 import Button from "../../../components/ui/Button";
 import Card from "../../../components/ui/Card";
 import { jobsApi } from "../../../services/api/jobs";
-import type { PartnerStackParamList, ServiceType } from "../../../types";
+import type { BackendPartnerOfferItem } from "../../../services/api/jobs";
+import type { PartnerStackParamList } from "../../../types";
 import type { ViewStyle } from "react-native";
+import { inr, metresToKm, serviceMetaFor } from "../partnerFormat";
 
 type Nav = NativeStackNavigationProp<PartnerStackParamList, "IncomingOffer">;
 type Route = RouteProp<PartnerStackParamList, "IncomingOffer">;
@@ -31,48 +36,15 @@ type Route = RouteProp<PartnerStackParamList, "IncomingOffer">;
 export default function IncomingOfferScreen() {
   const nav = useNavigation<Nav>();
   const route = useRoute<Route>();
-  const offerData = route.params?.offerData;
-  const serviceType: ServiceType =
-    (offerData?.service_code
-      ?.replace("flatbed_", "")
-      ?.replace("wheel_lift_", "")
-      ?.replace("battery_jumpstart", "battery")
-      ?.replace("flat_tyre", "tyre")
-      ?.replace("minor_repair", "mechanic")
-      ?.replace("fuel_delivery", "fuel") as ServiceType) || "battery";
-  const svc = ServiceConfig[serviceType] || ServiceConfig.battery;
+  const offer = route.params?.offerData as BackendPartnerOfferItem | undefined;
+  const job = offer?.job;
+  const meta = serviceMetaFor(job?.service_code);
+  const assignmentId = route.params?.assignmentId;
 
-  const job = {
-    id: offerData?.job_id || route.params?.jobId || "job_live",
-    serviceType,
-    pickupLocation: {
-      latitude: offerData?.pickup_lat || 12.9716,
-      longitude: offerData?.pickup_lng || 77.5946,
-      address: offerData?.pickup_address_text || "Bengaluru Breakdown Point",
-    },
-    estimatedPrice: Number(offerData?.price_estimate || 499),
-    notes: "Roadside breakdown assist requested",
-    vehicle: {
-      make: "Customer",
-      model: "Vehicle",
-      year: 2023,
-      licensePlate: "KA-01",
-      type: "four-wheeler" as "two-wheeler" | "four-wheeler",
-      color: "White",
-      fuelType: "Petrol",
-    },
-  };
-
-  const offer = {
-    jobId: job.id,
-    job,
-    estimatedEarning: Number(offerData?.price_estimate || 499),
-    distanceKm: offerData?.distance_km || 2.5,
-    etaMinutes: Math.round((offerData?.distance_km || 2.5) * 3),
-  };
-  const offeredAt = offerData?.offered_at;
+  const offeredAt = offer?.offered_at;
   const [relativeAge, setRelativeAge] = useState<string>("Just now");
   const [accepting, setAccepting] = useState(false);
+  const [declining, setDeclining] = useState(false);
   const slideAnim = useRef(new Animated.Value(50)).current;
 
   useEffect(() => {
@@ -94,29 +66,66 @@ export default function IncomingOfferScreen() {
     return () => clearInterval(interval);
   }, [offeredAt]);
 
+  if (!offer || !job) {
+    return (
+      <SafeAreaView style={styles.safe} edges={["top"]}>
+        <StatusBar barStyle="dark-content" />
+        <View style={styles.missingCard}>
+          <Ionicons name="alert-circle-outline" size={36} color={Colors.textSecondary} />
+          <Text style={styles.missingTitle}>Offer unavailable</Text>
+          <Text style={styles.missingText}>
+            This offer is no longer available in the app. Return to the
+            dashboard and wait for the next dispatch.
+          </Text>
+          <Button
+            label="Back to dashboard"
+            onPress={() => nav.goBack()}
+            variant="primary"
+            size="md"
+            fullWidth
+            style={{ marginTop: 12 }}
+          />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const distanceLabel = metresToKm(offer.distance_at_offer_m);
+  const etaLabel =
+    offer.estimated_arrival_min != null
+      ? `${offer.estimated_arrival_min} min ETA`
+      : null;
+
   const handleAccept = async () => {
+    if (!assignmentId) {
+      Alert.alert(
+        "Offer unavailable",
+        "The assignment reference is missing, so this offer cannot be accepted. Go back and reopen it from the dashboard."
+      );
+      return;
+    }
     setAccepting(true);
-    const assignmentId = route.params?.assignmentId || route.params?.jobId;
     try {
-      if (assignmentId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(assignmentId)) {
-        await jobsApi.respondToAssignment(assignmentId, "accept");
-      }
-      nav.navigate("ActiveJob", { jobId: route.params.jobId });
+      await jobsApi.respondToAssignment(assignmentId, "accept");
+      nav.replace("ActiveJob", { jobId: offer.job_id });
     } catch (err: any) {
       const code = err?.response?.data?.error?.code;
       if (code === "PARTNER_AT_CAPACITY") {
         Alert.alert(
-          "Limit Reached",
-          "You are at your concurrent job limit (2 jobs max). Complete an existing job to accept this one."
+          "Limit reached",
+          "You are at your concurrent job limit. Complete an existing job before accepting another."
         );
       } else if (code === "ASSIGNMENT_ALREADY_ANSWERED") {
         Alert.alert(
-          "Offer Expired",
+          "Offer expired",
           "This job is no longer available or was taken by another technician.",
           [{ text: "OK", onPress: () => nav.goBack() }]
         );
       } else {
-        nav.navigate("ActiveJob", { jobId: route.params.jobId });
+        Alert.alert(
+          "Could not accept",
+          "Sahayak did not confirm this job. You have not been assigned to it. Check your connection and try again."
+        );
       }
     } finally {
       setAccepting(false);
@@ -124,22 +133,35 @@ export default function IncomingOfferScreen() {
   };
 
   const handleDecline = async () => {
-    const assignmentId = route.params?.assignmentId || route.params?.jobId;
-    if (assignmentId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(assignmentId)) {
-      try {
-        await jobsApi.respondToAssignment(assignmentId, "reject", "Partner declined");
-      } catch {
-        // ignore
-      }
+    if (!assignmentId) {
+      nav.goBack();
+      return;
     }
-    nav.goBack();
+    setDeclining(true);
+    try {
+      await jobsApi.respondToAssignment(assignmentId, "reject", "Partner declined");
+      nav.goBack();
+    } catch (err: any) {
+      const code = err?.response?.data?.error?.code;
+      if (code === "ASSIGNMENT_ALREADY_ANSWERED") {
+        // Already answered elsewhere; leaving is correct.
+        nav.goBack();
+      } else {
+        Alert.alert(
+          "Could not decline",
+          "Sahayak could not record your response. The offer may still be open; try again or let it expire."
+        );
+      }
+    } finally {
+      setDeclining(false);
+    }
   };
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
-      <StatusBar barStyle="dark-content" backgroundColor={Colors.surface} />
+      <StatusBar barStyle="dark-content" />
 
-      {/* ── Alert Header (Figma: offer-alert-header — bg #FFFCF0) ── */}
+      {/* â”€â”€ Alert Header (Figma: offer-alert-header â€” bg #F0FDFA) â”€â”€ */}
       <View style={styles.alertHeader}>
         <View style={styles.alertLeft}>
           <View style={styles.alertIconWrap}>
@@ -148,13 +170,13 @@ export default function IncomingOfferScreen() {
           <View>
             <Text style={styles.alertTitle}>New Breakdown Offer!</Text>
             <Text style={styles.alertSubtitle}>
-              {offeredAt ? `Offered ${relativeAge}` : "Live Roadside Dispatch"}
+              {offeredAt ? `Offered ${relativeAge}` : "Live roadside dispatch"}
             </Text>
           </View>
         </View>
         <View style={styles.timerCircle}>
-          <Ionicons name="radio" size={14} color="#0C831F" />
-          <Text style={[styles.timerText, { color: "#0C831F", fontSize: 12 }]}>LIVE</Text>
+          <Ionicons name="radio" size={14} color={Colors.success} />
+          <Text style={[styles.timerText, { color: Colors.success, fontSize: 12 }]}>LIVE</Text>
         </View>
       </View>
 
@@ -163,53 +185,57 @@ export default function IncomingOfferScreen() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        {/* ── Earnings highlight ── */}
+        {/* â”€â”€ Owner's quoted price â”€â”€ */}
         <View style={styles.earningBanner}>
-          <Text style={styles.earningLabel}>You'll earn</Text>
-          <Text style={styles.earningAmount}>₹{offer.estimatedEarning}</Text>
-          <Text style={styles.earningNote}>for this job</Text>
+          <Text style={styles.earningLabel}>Price</Text>
+          <Text style={styles.earningAmount}>
+            {job.price_estimate != null ? inr(job.price_estimate) : "Set on completion"}
+          </Text>
+          <Text style={styles.earningNote}>You enter the final amount when the job is done</Text>
         </View>
 
-        {/* ── Vehicle Info (Figma: section-vehicle) ── */}
+        {/* â”€â”€ Vehicle Info â”€â”€ */}
         <Card style={styles.card}>
           <Text style={styles.cardLabel}>Vehicle</Text>
           <View style={styles.vehicleRow}>
             <View style={styles.vehicleIconWrap}>
-              <Ionicons
-                name={job.vehicle?.type === "two-wheeler" ? "bicycle" : "car-sport"}
-                size={24}
-                color={Colors.secondary}
-              />
+              <Ionicons name="car-sport" size={24} color={Colors.secondary} />
             </View>
             <View>
               <Text style={styles.vehicleName}>
-                {job.vehicle?.make} {job.vehicle?.model} ({job.vehicle?.year})
+                {job.vehicle_number ?? "Registration not provided"}
               </Text>
-              <Text style={styles.vehiclePlate}>{job.vehicle?.licensePlate}</Text>
-              <Text style={styles.vehicleColor}>{job.vehicle?.color} · {job.vehicle?.fuelType}</Text>
+              <Text style={styles.vehiclePlate}>
+                {job.service_name ?? "Service details unavailable"}
+              </Text>
+              {job.issue_description ? (
+                <Text style={styles.vehicleColor}>"{job.issue_description}"</Text>
+              ) : null}
             </View>
           </View>
         </Card>
 
-        {/* ── Service Info (Figma: section-subservice) ── */}
+        {/* â”€â”€ Service Info â”€â”€ */}
         <Card style={styles.card}>
-          <Text style={styles.cardLabel}>Service Required</Text>
+          <Text style={styles.cardLabel}>Service required</Text>
           <View style={styles.serviceRow}>
-            <View style={[styles.serviceIcon, { backgroundColor: svc.bg }]}>
-              <Ionicons name={svc.icon as any} size={20} color={svc.color} />
+            <View style={[styles.serviceIcon, { backgroundColor: meta.bg }]}>
+              <Ionicons name={meta.icon as any} size={20} color={meta.color} />
             </View>
-            <View>
-              <Text style={styles.serviceName}>{svc.label}</Text>
-              {job.notes && (
-                <Text style={styles.serviceNotes}>"{job.notes}"</Text>
-              )}
+            <View style={{ flex: 1 }}>
+              <Text style={styles.serviceName}>
+                {job.service_name ?? meta.label}
+              </Text>
+              <Text style={styles.serviceNotes}>
+                {job.service_code ?? "Service code unavailable"}
+              </Text>
             </View>
           </View>
         </Card>
 
-        {/* ── Route Preview (Figma: section-route-preview) ── */}
+        {/* â”€â”€ Location Details â”€â”€ */}
         <Card style={styles.card}>
-          <Text style={styles.cardLabel}>Location Details</Text>
+          <Text style={styles.cardLabel}>Location details</Text>
           <View style={styles.routeRow}>
             <View style={styles.routeLeft}>
               <View style={[styles.routeDot, { backgroundColor: Colors.primary }]} />
@@ -218,33 +244,41 @@ export default function IncomingOfferScreen() {
             </View>
             <View style={styles.routeRight}>
               <View style={styles.routeItem}>
-                <Text style={styles.routeLabel}>Your Current Location</Text>
-                <Text style={styles.routeAddress}>Indiranagar, Bengaluru</Text>
+                <Text style={styles.routeLabel}>Your current position</Text>
+                <Text style={styles.routeAddress}>
+                  Not included with the offer
+                </Text>
               </View>
               <View style={[styles.routeItem, { marginTop: Spacing.base }]}>
-                <Text style={styles.routeLabel}>Customer Location</Text>
+                <Text style={styles.routeLabel}>Customer location</Text>
                 <Text style={styles.routeAddress}>
-                  {job.pickupLocation.address}
+                  {job.pickup_address_text ?? "Address not provided"}
                 </Text>
               </View>
             </View>
           </View>
-          <View style={styles.routeStats}>
-            <View style={styles.routeStat}>
-              <Ionicons name="navigate-outline" size={14} color={Colors.textSecondary} />
-              <Text style={styles.routeStatText}>{offer.distanceKm} km away</Text>
+          {(distanceLabel || etaLabel) && (
+            <View style={styles.routeStats}>
+              {distanceLabel && (
+                <View style={styles.routeStat}>
+                  <Ionicons name="navigate-outline" size={14} color={Colors.textSecondary} />
+                  <Text style={styles.routeStatText}>{distanceLabel} away at offer time</Text>
+                </View>
+              )}
+              {etaLabel && (
+                <View style={styles.routeStat}>
+                  <Ionicons name="time-outline" size={14} color={Colors.textSecondary} />
+                  <Text style={styles.routeStatText}>{etaLabel}</Text>
+                </View>
+              )}
             </View>
-            <View style={styles.routeStat}>
-              <Ionicons name="time-outline" size={14} color={Colors.textSecondary} />
-              <Text style={styles.routeStatText}>{offer.etaMinutes} min ETA</Text>
-            </View>
-          </View>
+          )}
         </Card>
 
         <View style={{ height: 100 }} />
       </ScrollView>
 
-      {/* ── Action Panel (Figma: bottom-panel + action-button-row) ── */}
+      {/* â”€â”€ Action Panel (Figma: bottom-panel + action-button-row) â”€â”€ */}
       <Animated.View
         style={[
           styles.bottomPanel,
@@ -254,15 +288,16 @@ export default function IncomingOfferScreen() {
       >
         <View style={styles.actionRow}>
           <Button
-            label="Decline"
+            label={declining ? "Decliningâ€¦" : "Decline"}
             onPress={handleDecline}
+            loading={declining}
             variant="ghost"
             style={styles.declineBtn}
             textStyle={{ color: Colors.error }}
             fullWidth={false}
           />
           <Button
-            label={accepting ? "Accepting…" : "Accept Job  ✓"}
+            label={accepting ? "Acceptingâ€¦" : "Accept Job  âœ“"}
             onPress={handleAccept}
             loading={accepting}
             variant="primary"
@@ -279,6 +314,27 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.surface },
   scroll: { flex: 1 },
   content: { padding: Spacing.lg },
+
+  missingCard: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: Spacing.xl,
+    gap: 8,
+  },
+  missingTitle: {
+    fontSize: Typography.fontSize.xl,
+    fontFamily: Typography.fontFamily.bold,
+    color: Colors.textPrimary,
+    marginTop: 4,
+  },
+  missingText: {
+    fontSize: Typography.fontSize.sm,
+    fontFamily: Typography.fontFamily.regular,
+    color: Colors.textSecondary,
+    textAlign: "center",
+    lineHeight: 20,
+  },
 
   timerBarBg: {
     height: 3,

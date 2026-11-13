@@ -157,6 +157,11 @@ export const partnerService = {
     return jobsService.updateJobStatus(jobId, status, extra);
   },
 
+  /** Verify the owner's start code — POST /jobs/{id}/start. */
+  async startJob(jobId: string, startCode: string): Promise<JobStatusTransitionResponse> {
+    return jobsService.startJob(jobId, startCode);
+  },
+
   /**
    * Toggle on/off shift for this partner.
    *
@@ -228,6 +233,15 @@ export const partnerService = {
    *
    * Real path: GET /partners/me/stats (shipped 2026-10-06).
    */
+  /** The services this partner is linked to (GET /partners/me/services). */
+  async getMyServices(): Promise<Array<{ service_id: number; code: string; name: string }>> {
+    const res = await apiClient<{
+      partner_id: string;
+      services: Array<{ service_id: number; code: string; name: string }>;
+    }>('/partners/me/services', { method: 'GET' });
+    return res.data.services ?? [];
+  },
+
   async getTrustStats(): Promise<PartnerTrustStats> {
     const res = await apiClient<{
       partner_id: string;
@@ -242,6 +256,8 @@ export const partnerService = {
 
     const data = res.data;
     return {
+      partnerId: data.partner_id,
+      verificationStatus: data.verification_status,
       acceptanceRatePct: data.acceptance_rate_pct,
       ratingAvg: Number(data.rating_avg) || 0,
       ratingCount: data.rating_count,

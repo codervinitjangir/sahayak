@@ -27,20 +27,48 @@ function windowQuery(params: AnalyticsWindowParams): string {
   return query ? `?${query}` : '';
 }
 
+export type PartnerVerificationStatus = 'pending' | 'verified' | 'rejected' | 'suspended';
+
+/** Mirrors backend AdminPartnerSummary (app/schemas/admin.py). */
 export interface AdminPartnerSummary {
   id: string;
-  name: string;
   phone: string;
-  workshop_name: string | null;
-  experience_years: number;
-  verification_status: 'pending' | 'verified' | 'rejected';
-  services: string[];
-  created_at: string | null;
+  name: string | null;
+  verification_status: PartnerVerificationStatus;
+  /** Why the partner was rejected/suspended; null otherwise. */
+  verification_note: string | null;
+  is_available: boolean;
+  rating_avg: string | number | null;
+  rating_count: number | null;
+  created_at: string;
 }
 
 export interface AdminPartnerListResponse {
-  partners: AdminPartnerSummary[];
+  items: AdminPartnerSummary[];
   total: number;
+}
+
+export interface AdminPartnerDocument {
+  id: string;
+  doc_type: string | null;
+  status: string;
+  /** True when a file is stored; the storage path itself is never sent. */
+  has_file: boolean;
+  rejection_reason: string | null;
+  expiry_date: string | null;
+  uploaded_at: string;
+}
+
+export interface AdminPartnerEquipment {
+  id: string;
+  equipment_type: string | null;
+  registration_number: string | null;
+  verification_status: string;
+}
+
+export interface AdminPartnerDetail extends AdminPartnerSummary {
+  documents: AdminPartnerDocument[];
+  equipment: AdminPartnerEquipment[];
 }
 
 export const adminService = {
@@ -80,11 +108,29 @@ export const adminService = {
     return res.data;
   },
 
-  /** Update verification status of a partner */
-  async verifyPartner(partnerId: string, verificationStatus: 'verified' | 'rejected' | 'pending'): Promise<AdminPartnerSummary> {
+  /** One partner with documents and equipment, for the review dialog. */
+  async getPartner(partnerId: string): Promise<AdminPartnerDetail> {
+    const res = await apiClient<AdminPartnerDetail>(`/admin/partners/${partnerId}`, {
+      method: 'GET',
+    });
+    return res.data;
+  },
+
+  /**
+   * Update verification status. `notes` is required by the backend (422) when the
+   * status is `rejected` or `suspended`, and ignored otherwise.
+   */
+  async verifyPartner(
+    partnerId: string,
+    verificationStatus: PartnerVerificationStatus,
+    notes?: string,
+  ): Promise<AdminPartnerSummary> {
     const res = await apiClient<AdminPartnerSummary>(`/admin/partners/${partnerId}/verify`, {
       method: 'PATCH',
-      body: JSON.stringify({ verification_status: verificationStatus }),
+      body: JSON.stringify({
+        verification_status: verificationStatus,
+        ...(notes ? { notes } : {}),
+      }),
     });
     return res.data;
   },

@@ -8,14 +8,16 @@ and where the transaction boundary sits, belongs to
 app/services/partner_service.py.
 """
 import uuid
+from datetime import datetime
 from decimal import Decimal
 from typing import Iterable, Optional, Sequence
 
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
-from app.models.job import JobAssignment
+from app.models.job import Job, JobAssignment
 from app.models.partner import Partner, PartnerService
 from app.models.service import Service, ServiceCategory
 
@@ -185,6 +187,61 @@ async def get_partner_stats(
     }
 
 
+async def get_partner_earnings(
+    db: AsyncSession,
+    partner_id: uuid.UUID,
+    today_start: datetime,
+    week_start: datetime,
+) -> dict:
+    """Aggregate completed-job payouts for today, this week and lifetime.
+
+    One query with FILTER clauses rather than three round trips: the three
+    windows share the same join and the same "this partner actually completed
+    it" predicate, so splitting them would repeat both for no gain. The join
+    to job_assignments is what makes the sum belong to *this* partner; a job
+    has one accepted assignment, and `status='completed'` excludes offers that
+    were declined or cancelled.
+    """
+    stmt = (
+        select(
+            func.coalesce(
+                func.sum(Job.price_final).filter(Job.completed_at >= today_start),
+                0,
+            ).label("today_amount"),
+            func.count()
+            .filter(Job.completed_at >= today_start)
+            .label("today_jobs"),
+            func.coalesce(
+                func.sum(Job.price_final).filter(Job.completed_at >= week_start),
+                0,
+            ).label("week_amount"),
+            func.count()
+            .filter(Job.completed_at >= week_start)
+            .label("week_jobs"),
+            func.coalesce(func.sum(Job.price_final), 0).label("lifetime_amount"),
+            func.count().label("lifetime_jobs"),
+        )
+        .select_from(Job)
+        .join(JobAssignment, JobAssignment.job_id == Job.id)
+        .where(
+            JobAssignment.partner_id == partner_id,
+            JobAssignment.status == "completed",
+            Job.status == "completed",
+        )
+    )
+    result = await db.execute(stmt)
+    row = result.one()
+    return {
+        "partner_id": partner_id,
+        "today_amount": Decimal(str(row.today_amount or 0)),
+        "today_jobs": int(row.today_jobs or 0),
+        "week_amount": Decimal(str(row.week_amount or 0)),
+        "week_jobs": int(row.week_jobs or 0),
+        "lifetime_amount": Decimal(str(row.lifetime_amount or 0)),
+        "lifetime_jobs": int(row.lifetime_jobs or 0),
+    }
+
+
 async def list_partners(
     db: AsyncSession, status: Optional[str] = None
 ) -> Sequence[Partner]:
@@ -198,14 +255,30 @@ async def list_partners(
 
 
 async def update_partner_verification(
-    db: AsyncSession, partner_id: uuid.UUID, verification_status: str
+    db: AsyncSession,
+    partner_id: uuid.UUID,
+    verification_status: str,
+    note: Optional[str] = None,
 ) -> Optional[Partner]:
-    """Update a partner's verification status."""
+    """Update a partner's verification status and the reason behind it."""
     partner = await get_partner_by_id(db, partner_id)
     if not partner:
         return None
     partner.verification_status = verification_status
+    partner.verification_note = note
     await db.flush()
     return partner
+
+
+async def get_partner_with_credentials(
+    db: AsyncSession, partner_id: uuid.UUID
+) -> Optional[Partner]:
+    """One partner with documents and equipment eagerly loaded (async: no lazy loads)."""
+    result = await db.execute(
+        select(Partner)
+        .options(selectinload(Partner.documents), selectinload(Partner.equipment))
+        .where(Partner.id == partner_id)
+    )
+    return result.scalar_one_or_none()
 
 

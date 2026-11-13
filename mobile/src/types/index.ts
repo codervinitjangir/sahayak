@@ -157,20 +157,9 @@ export type OwnerStackParamList = {
     initialStep?: FlowStep;
     serviceType?: ServiceType;
     pickupAddress?: string;
+    /** Resume tracking an existing request (e.g. after the app was closed). */
+    jobId?: string;
   };
-  ServiceSelect?: { vehicleId?: string; initialStep?: FlowStep };
-  PickupLocation?: {
-    serviceType: ServiceType;
-    vehicleId: string;
-    subServiceId?: string;
-    notes?: string;
-    estimatedPrice?: number;
-    initialStep?: FlowStep;
-  };
-  FindingPartner?: { jobId: string; initialStep?: FlowStep };
-  PartnerMatched?: { jobId: string; initialStep?: FlowStep };
-  JobComplete?: { jobId: string };
-  Profile?: undefined;
 };
 
 export type PartnerStackParamList = {
@@ -178,11 +167,4 @@ export type PartnerStackParamList = {
   IncomingOffer: { jobId: string; assignmentId?: string; offerData?: any };
   ActiveJob: { jobId: string };
   PartnerJobDone: { jobId: string };
-  Profile?: undefined;
-};
-
-export type RootTabParamList = {
-  Home: undefined;
-  Tracking: undefined;
-  Profile: undefined;
 };

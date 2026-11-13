@@ -47,6 +47,9 @@ from app.api import API_V1_PREFIX
 from app.config.database import get_db
 from app.repositories import partner_repository
 from app.schemas.admin import (
+    AdminPartnerDetail,
+    AdminPartnerDocument,
+    AdminPartnerEquipment,
     AdminPartnerListResponse,
     AdminPartnerSummary,
     AdminPartnerVerificationRequest,
@@ -247,21 +250,65 @@ async def list_partners(
 ) -> ApiResponse[AdminPartnerListResponse]:
     """Admin roster view of partners with live verification and availability status."""
     partners = await partner_repository.list_partners(db, status=status_filter)
-    items = [
-        AdminPartnerSummary(
-            id=p.id,
-            phone=p.phone,
-            name=p.name,
-            business_name=p.business_name,
-            verification_status=p.verification_status,
-            is_available=bool(p.is_available),
-            rating_avg=p.rating_avg,
-            rating_count=p.rating_count,
-            created_at=p.created_at,
-        )
-        for p in partners
-    ]
+    items = [_partner_summary(p) for p in partners]
     return envelope(AdminPartnerListResponse(items=items, total=len(items)))
+
+
+def _partner_summary(p) -> AdminPartnerSummary:
+    return AdminPartnerSummary(
+        id=p.id,
+        phone=p.phone,
+        name=p.name,
+        verification_status=p.verification_status,
+        verification_note=p.verification_note,
+        is_available=bool(p.is_available),
+        rating_avg=p.rating_avg,
+        rating_count=p.rating_count,
+        created_at=p.created_at,
+    )
+
+
+@admin_partners_router.get(
+    "/{partner_id}",
+    response_model=ApiResponse[AdminPartnerDetail],
+    status_code=status.HTTP_200_OK,
+    summary="One partner with their documents and equipment, for verification review",
+)
+async def get_partner_detail(
+    partner_id: uuid.UUID,
+    identity: Identity = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[AdminPartnerDetail]:
+    """What an admin needs to approve or reject: capabilities, documents, equipment."""
+    p = await partner_repository.get_partner_with_credentials(db, partner_id)
+    if not p:
+        raise NotFoundError("PARTNER_NOT_FOUND", "Partner not found")
+    return envelope(
+        AdminPartnerDetail(
+            **_partner_summary(p).model_dump(),
+            documents=[
+                AdminPartnerDocument(
+                    id=d.id,
+                    doc_type=d.doc_type,
+                    status=d.status,
+                    has_file=bool(d.file_url),
+                    rejection_reason=d.rejection_reason,
+                    expiry_date=d.expiry_date,
+                    uploaded_at=d.uploaded_at,
+                )
+                for d in p.documents
+            ],
+            equipment=[
+                AdminPartnerEquipment(
+                    id=e.id,
+                    equipment_type=e.equipment_type,
+                    registration_number=e.registration_number,
+                    verification_status=e.verification_status,
+                )
+                for e in p.equipment
+            ],
+        )
+    )
 
 
 @admin_partners_router.patch(
@@ -278,7 +325,7 @@ async def verify_partner(
 ) -> ApiResponse[AdminPartnerSummary]:
     """Promote or reject a partner's verification status for dispatch eligibility."""
     partner = await partner_repository.update_partner_verification(
-        db, partner_id, payload.verification_status
+        db, partner_id, payload.verification_status, payload.notes
     )
     if not partner:
         raise NotFoundError("PARTNER_NOT_FOUND", "Partner not found")
@@ -286,17 +333,5 @@ async def verify_partner(
     await db.commit()
     await db.refresh(partner)
 
-    return envelope(
-        AdminPartnerSummary(
-            id=partner.id,
-            phone=partner.phone,
-            name=partner.name,
-            business_name=partner.business_name,
-            verification_status=partner.verification_status,
-            is_available=bool(partner.is_available),
-            rating_avg=partner.rating_avg,
-            rating_count=partner.rating_count,
-            created_at=partner.created_at,
-        )
-    )
+    return envelope(_partner_summary(partner))
 

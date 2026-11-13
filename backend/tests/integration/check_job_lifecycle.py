@@ -123,6 +123,11 @@ def one(sql: str, params=None):
     return result[0] if result else None
 
 
+def start_code_of(job_id: str) -> str:
+    """The owner's code, read from the row the way the owner's GET would show it."""
+    return one("SELECT start_code FROM jobs WHERE id = %(i)s", {"i": job_id})["start_code"]
+
+
 def job_row(job_id: str) -> dict:
     return one(
         "SELECT status, price_final, completed_at, cancelled_at, cancellation_reason "
@@ -383,7 +388,15 @@ async def main() -> None:
 
         r = await c.post(f"/api/v1/jobs/{job_a}/status",
                          json={"status": "in_progress"}, headers=hdr(token))
-        check("partner_en_route → in_progress accepted", r.status_code == 200,
+        check("partner_en_route → in_progress via /status is refused (needs the code)",
+              r.status_code == 400 and code_of(r) == "INVALID_START_CODE",
+              f"HTTP {r.status_code} {code_of(r)}")
+        check("the refused /status start wrote nothing",
+              job_row(job_a)["status"] == "partner_en_route", chain(job_a))
+
+        r = await c.post(f"/api/v1/jobs/{job_a}/start",
+                         json={"start_code": start_code_of(job_a)}, headers=hdr(token))
+        check("partner_en_route → in_progress accepted via /start", r.status_code == 200,
               f"HTTP {r.status_code} {code_of(r)}")
 
         r = await c.post(f"/api/v1/jobs/{job_a}/status",
@@ -469,18 +482,28 @@ async def main() -> None:
               job_row(job_d)["status"] == "assigned" and len(history_for(job_d)) == 3,
               chain(job_d))
 
-        r = await c.post(f"/api/v1/jobs/{job_d}/status",
-                         json={"status": "in_progress"}, headers=hdr(dtoken))
+        r = await c.post(f"/api/v1/jobs/{job_d}/start",
+                         json={"start_code": start_code_of(job_d)}, headers=hdr(dtoken))
         check("assigned → in_progress (skipping one step) is 409",
               r.status_code == 409, f"HTTP {r.status_code} {code_of(r)}")
 
         # Walk it to completed, then try to move it again.
         for target, body in (("partner_en_route", {}), ("in_progress", {}),
                              ("completed", {"price_final": 640})):
+            if target == "in_progress":
+                await c.post(f"/api/v1/jobs/{job_d}/start",
+                             json={"start_code": start_code_of(job_d)}, headers=hdr(dtoken))
+                continue
             await c.post(f"/api/v1/jobs/{job_d}/status",
                          json={"status": target, **body}, headers=hdr(dtoken))
 
-        for target in ("in_progress", "cancelled", "partner_en_route", "completed"):
+        r = await c.post(f"/api/v1/jobs/{job_d}/start",
+                         json={"start_code": start_code_of(job_d)}, headers=hdr(dtoken))
+        check("completed → in_progress via /start is refused (terminal state)",
+              r.status_code == 409 and code_of(r) == "INVALID_STATUS_TRANSITION",
+              f"HTTP {r.status_code} {code_of(r)}")
+
+        for target in ("cancelled", "partner_en_route", "completed"):
             body = {"status": target}
             if target == "completed":
                 body["price_final"] = 900
@@ -529,8 +552,12 @@ async def main() -> None:
         # ------------------------------------------------------------------
         etoken = partners[worker_e]["token"]
         for target in ("partner_en_route", "in_progress"):
-            r = await c.post(f"/api/v1/jobs/{job_e}/status",
-                             json={"status": target}, headers=hdr(etoken))
+            if target == "in_progress":
+                r = await c.post(f"/api/v1/jobs/{job_e}/start",
+                                 json={"start_code": start_code_of(job_e)}, headers=hdr(etoken))
+            else:
+                r = await c.post(f"/api/v1/jobs/{job_e}/status",
+                                 json={"status": target}, headers=hdr(etoken))
             if r.status_code != 200:
                 raise SystemExit(f"could not walk job_e to {target}: {r.status_code} {r.text[:300]}")
 
@@ -687,9 +714,11 @@ async def main() -> None:
         check("the seeded towing services are grouped under a category",
               any(s.get("category_code") for s in cat["items"]),
               str({s.get("category_code") for s in cat["items"]}))
-        check("no price is invented — the schema has none to report",
-              all("price" not in k for s in cat["items"] for k in s),
-              "a price field appeared in the catalogue")
+        # Since 2026-10-21 the catalogue carries base_price (SERVICE_BASE_PRICES, the
+        # same constant POST /jobs persists as price_estimate); no other price key.
+        check("the only price field is base_price (no invented per-row prices)",
+              all(k == "base_price" for s in cat["items"] for k in s if "price" in k),
+              "an unexpected price field appeared in the catalogue")
         # Pinned against the drift this endpoint exists to end: the catalogue the
         # API serves has to be the catalogue the database holds.
         db_codes = {r["code"] for r in rows("SELECT code FROM services")}

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { getAuthToken, setAuthToken } from '../services/authToken';
 import { UNAUTHORIZED_EVENT } from '../services/api';
+import { identityService } from '../services/identity.service';
 import {
   IS_SUPABASE_CONFIGURED,
   getSupabase,
@@ -124,6 +125,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     setAuthToken(token);
+  }, [token]);
+
+  // Who is signed in, for the header (and its Sign out button). Resolved from
+  // the backend on every token change; a token that maps to no profile yet
+  // (mid-signup) still counts as signed in so the visitor can sign out.
+  useEffect(() => {
+    if (!token) {
+      setUser(null);
+      return undefined;
+    }
+    let cancelled = false;
+    void (async () => {
+      let phone = '';
+      if (IS_SUPABASE_CONFIGURED) {
+        try {
+          const { data } = await getSupabase().auth.getSession();
+          phone = data.session?.user?.phone ? `+${data.session.user.phone.replace(/^\+/, '')}` : '';
+        } catch {
+          // Phone is cosmetic here.
+        }
+      }
+      const resolved = await identityService.resolve();
+      if (cancelled) return;
+      const backendRole = resolved.kind === 'registered' ? resolved.identity.role : undefined;
+      setUser({
+        id: resolved.kind === 'registered' ? resolved.identity.id : '',
+        name: backendRole === 'partner' ? 'Partner' : backendRole === 'admin' ? 'Admin' : 'Owner',
+        phone,
+        role: backendRole === 'partner' ? 'partner' : backendRole === 'admin' ? 'ops' : 'owner',
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [token]);
 
   return (

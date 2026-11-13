@@ -76,8 +76,19 @@ Use high reasoning effort for: dispatch engine changes, auth, concurrency/lockin
 schema migrations, anything security-sensitive. Use medium for straightforward 
 CRUD following an already-established pattern in this codebase.
 
+## Token economy — use as few tokens as possible
+- Read only what the task needs: use Grep/Glob first, then Read with offset/limit. Never
+  read whole large files (`ADR.md`, `TASKS.md`, `Final prd.md`) or `node_modules`.
+- Don't re-read files you just edited or re-derive facts already in this file/memory.
+- Run tests narrowly (the affected file/harness) unless the testing bar above demands full
+  regression; show only failures and the final count, not full logs.
+- Keep replies short: result, deviations, and what's not verified. No long recaps.
+- Prefer Edit over rewriting files; batch independent tool calls in one message.
+
 ## Where things stand
-**Pacing comes from `ROADMAP.md` — 12 weeks, currently week 3.** Any 20-week or 5-month
+**Pacing comes from `ROADMAP.md` — 12 weeks. As of 2026-11-12 the build is complete
+(weeks 1–10 done); weeks 11–12 are viva prep and demo rehearsal only. No new features —
+only fixes to things that break the demo.** Any 20-week or 5-month
 timeline in `README.md` or `Final prd.md` is superseded and must not be used for pacing.
 See `TASKS.md` for the current backlog and what's already done. See 
 `docs/adr/ADR.md` for architectural decision history (one file, ADR-001 onward — 

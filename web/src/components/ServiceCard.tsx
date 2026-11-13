@@ -1,13 +1,6 @@
 import React from 'react';
-import {
-  Truck,
-  BatteryCharging,
-  CircleDot,
-  Wrench,
-  Fuel,
-  HelpCircle,
-  ShieldCheck,
-} from 'lucide-react';
+import { ShieldCheck } from 'lucide-react';
+import { serviceIcon } from './serviceIcon';
 import { Service } from '../types/jobs';
 
 export interface ServiceCardProps {
@@ -23,32 +16,7 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({
   onSelect,
   disabled = false,
 }) => {
-  const getIcon = (code: string) => {
-    switch (code) {
-      case 'flatbed_towing':
-      case 'wheel_lift_towing':
-      case 'flatbed_tow':
-      case 'wheel_lift_tow':
-      case 'towing':
-        return Truck;
-      case 'battery_jumpstart':
-      case 'battery':
-        return BatteryCharging;
-      case 'flat_tyre':
-      case 'tyre':
-        return CircleDot;
-      case 'minor_repair':
-      case 'repair':
-        return Wrench;
-      case 'fuel_delivery':
-      case 'fuel':
-        return Fuel;
-      default:
-        return HelpCircle;
-    }
-  };
-
-  const Icon = getIcon(service.code);
+  const Icon = serviceIcon(service.code);
 
   return (
     <div
@@ -62,12 +30,12 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({
           onSelect(service);
         }
       }}
-      className={`relative p-4 rounded-xl border-2 transition-all cursor-pointer touch-target flex flex-col justify-between ${
+      className={`relative p-4 rounded-card border-2 transition-colors cursor-pointer flex flex-col justify-between min-h-[104px] ${
         disabled
           ? 'opacity-40 cursor-not-allowed border-slate-200 bg-slate-50'
           : isSelected
-          ? 'border-brand-700 bg-brand-50/60 shadow-sm ring-1 ring-brand-700'
-          : 'border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm'
+          ? 'border-brand-700 bg-brand-50'
+          : 'border-line bg-white hover:border-slate-300'
       }`}
     >
       <div className="flex items-start justify-between gap-3">
@@ -90,11 +58,11 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({
       </div>
 
       <div className="mt-3">
-        <h4 className="text-base font-semibold text-slate-900">{service.name}</h4>
+        <h4 className="text-base font-semibold text-ink">{service.name}</h4>
         {service.requires_vehicle_equipment && (
           <div className="mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-amber-50 text-amber-800 border border-amber-200">
-            <ShieldCheck className="w-3 h-3" aria-hidden="true" />
-            <span>Verified Equipment Req.</span>
+            <ShieldCheck className="w-3.5 h-3.5" aria-hidden="true" />
+            <span>Needs an equipped partner</span>
           </div>
         )}
       </div>

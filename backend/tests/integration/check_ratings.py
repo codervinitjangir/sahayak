@@ -375,10 +375,14 @@ async def job_through_to(c, tag: str, final_status: str, price: float | None = N
 
     chain = ["partner_en_route", "in_progress", "completed"]
     for step in chain[:chain.index(final_status) + 1]:
-        body: dict = {"status": step}
-        if step == "completed":
-            body["price_final"] = price if price is not None else 500
-        r = await c.post(f"/api/v1/jobs/{job_id}/status", json=body, headers=hdr(token))
+        if step == "in_progress":  # POST /start only, with the owner's code
+            r = await c.post(f"/api/v1/jobs/{job_id}/start",
+                             json={"start_code": one("SELECT start_code FROM jobs WHERE id = %(i)s", {"i": job_id})["start_code"]}, headers=hdr(token))
+        else:
+            body: dict = {"status": step}
+            if step == "completed":
+                body["price_final"] = price if price is not None else 500
+            r = await c.post(f"/api/v1/jobs/{job_id}/status", json=body, headers=hdr(token))
         if r.status_code != 200:
             raise SystemExit(f"job {tag} → {step} failed: {r.status_code} {r.text[:300]}")
 

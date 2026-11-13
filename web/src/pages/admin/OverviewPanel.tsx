@@ -39,7 +39,7 @@ export const OverviewPanel: React.FC<{ data: AnalyticsOverview }> = ({ data }) =
     <div className="space-y-5">
       {/* The hero and its immediate context, in one card so the number is read
           with its denominator rather than on its own. */}
-      <section className="rounded-[16px] border border-[#E7E0D2] bg-white p-6 shadow-2xs">
+      <section className="rounded-[16px] border border-[#EEF2F6] bg-white p-6 shadow-2xs">
         <div className="flex flex-wrap items-end justify-between gap-6">
           <HeroFigure
             label="Completion rate"
@@ -55,9 +55,9 @@ export const OverviewPanel: React.FC<{ data: AnalyticsOverview }> = ({ data }) =
               ['No match found', compact(jobs.no_match_found)],
             ].map(([label, value]) => (
               <div key={label}>
-                <dt className="text-xs text-[#5B5346] font-medium">{label}</dt>
+                <dt className="text-xs text-[#475569] font-medium">{label}</dt>
                 <dd
-                  className="text-lg font-bold text-[#1B1712] font-['Fraunces']"
+                  className="text-lg font-bold text-[#0F172A]"
                   style={{ fontVariantNumeric: 'tabular-nums' }}
                 >
                   {value}

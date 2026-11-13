@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, AlertCircle, Camera, CheckCircle2, ShieldAlert } from 'lucide-react';
+import { ArrowLeft, AlertCircle, LifeBuoy, RefreshCw } from 'lucide-react';
 import { useVehicles } from '../../features/vehicles/hooks';
 import { useServices, useCreateJob } from '../../features/jobs/hooks';
 import { ApiError, createIdempotencyKey } from '../../services/api';
@@ -8,48 +8,71 @@ import { LocationPicker } from '../../components/LocationPicker';
 import { ServiceCard } from '../../components/ServiceCard';
 import { VehicleSelector } from '../../components/VehicleSelector';
 import { Button } from '../../components/ui/Button';
+import { Skeleton } from '../../components/ui/Skeleton';
 import { AddVehicleModal } from '../../components/AddVehicleModal';
+import { SafetyStrip } from '../../components/SafetyStrip';
 import { getAuthToken } from '../../services/authToken';
 import { usersService } from '../../services/users.service';
-import { LocationPoint, Service } from '../../types/jobs';
+import { LocationPoint } from '../../types/jobs';
 
-const FALLBACK_SERVICES: Service[] = [
-  { id: 1, category_id: 3, code: 'flatbed_towing', name: 'Flatbed Towing', requires_vehicle_equipment: true },
-  { id: 2, category_id: 3, code: 'wheel_lift_towing', name: 'Wheel-Lift Towing', requires_vehicle_equipment: true },
-  { id: 3, category_id: 2, code: 'battery_jumpstart', name: 'Battery Jumpstart', requires_vehicle_equipment: false },
-  { id: 4, category_id: 2, code: 'flat_tyre', name: 'Flat Tyre Support', requires_vehicle_equipment: false },
-  { id: 5, category_id: 2, code: 'minor_repair', name: 'On-Site Minor Repair', requires_vehicle_equipment: false },
-  { id: 6, category_id: 1, code: 'fuel_delivery', name: 'Emergency Fuel Delivery', requires_vehicle_equipment: false },
+type CategoryFilter = 'all' | 'mechanic' | 'towing' | 'fuel';
+
+const FILTERS: { id: CategoryFilter; label: string }[] = [
+  { id: 'all', label: 'All' },
+  { id: 'mechanic', label: 'On-site repair' },
+  { id: 'towing', label: 'Tow truck' },
+  { id: 'fuel', label: 'Fuel' },
 ];
+
+const StepHeading: React.FC<{ n: number; id: string; children: React.ReactNode; required?: boolean }> = ({
+  n,
+  id,
+  children,
+  required = true,
+}) => (
+  <div className="flex items-center justify-between gap-3">
+    <h2 id={id} className="text-lg font-bold flex items-center gap-3">
+      <span
+        className={`w-7 h-7 rounded-full text-sm font-bold inline-flex items-center justify-center tnum ${
+          required ? 'bg-brand-700 text-white' : 'bg-slate-200 text-ink-soft'
+        }`}
+        aria-hidden="true"
+      >
+        {n}
+      </span>
+      <span>{children}</span>
+    </h2>
+    <span className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
+      {required ? 'Required' : 'Optional'}
+    </span>
+  </div>
+);
 
 export const RequestHelpPage: React.FC = () => {
   const navigate = useNavigate();
 
-  // Queries
-  const { data: serverVehicles = [], isLoading: isLoadingVehicles } = useVehicles();
-  const { data: serverServices = [], isLoading: isLoadingServices } = useServices();
+  const { data: vehicles = [], isLoading: isLoadingVehicles } = useVehicles();
+  const {
+    data: services = [],
+    isLoading: isLoadingServices,
+    isError: servicesFailed,
+    refetch: refetchServices,
+  } = useServices();
   const createJobMutation = useCreateJob();
 
-  // Active services list
-  const services = serverServices.length > 0 ? serverServices : FALLBACK_SERVICES;
-  const vehicles = serverVehicles;
-
-  // Emergency-first form state: Location is step 1
-  const [pickupLocation, setPickupLocation] = useState<LocationPoint>({
-    lat: 12.9716,
-    lng: 77.5946,
-    address: 'Bengaluru Central, Karnataka',
-  });
+  // There is deliberately no default pin. A partner is sent to whatever is here, so
+  // it has to come from the device's GPS or from an area the owner chose.
+  const [pickupLocation, setPickupLocation] = useState<LocationPoint | null>(null);
+  const [landmark, setLandmark] = useState('');
 
   const [selectedServiceId, setSelectedServiceId] = useState<number | null>(null);
-  const [serviceCategoryFilter, setServiceCategoryFilter] = useState<'all' | 'mechanic' | 'towing' | 'fuel'>('all');
+  const [serviceCategoryFilter, setServiceCategoryFilter] = useState<CategoryFilter>('all');
   const [selectedVehicleId, setSelectedVehicleId] = useState<string>(vehicles[0]?.id || '');
   const [issueDescription, setIssueDescription] = useState('');
-  const [photoUrls, setPhotoUrls] = useState<string[]>([]);
   const [formError, setFormError] = useState<string | null>(null);
   const [isAddVehicleOpen, setIsAddVehicleOpen] = useState(false);
 
-  // Quick emergency auth modal state if user is unauthenticated
+  // Quick registration modal when a verified account has no profile yet
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authName, setAuthName] = useState('');
   const [authPhone, setAuthPhone] = useState('');
@@ -61,54 +84,42 @@ export const RequestHelpPage: React.FC = () => {
   // same key, otherwise the retry dispatches a second partner to the same breakdown.
   const idempotencyKeyRef = useRef<string>(createIdempotencyKey());
 
-  // Auto-select first vehicle when serverVehicles load or if unselected
   useEffect(() => {
-    if (serverVehicles.length > 0) {
-      const selectionIsStale =
-        !selectedVehicleId ||
-        !serverVehicles.some((v) => v.id === selectedVehicleId);
-
-      if (selectionIsStale) {
-        setSelectedVehicleId(serverVehicles[0].id);
-      }
+    if (vehicles.length > 0) {
+      const selectionIsStale = !selectedVehicleId || !vehicles.some((v) => v.id === selectedVehicleId);
+      if (selectionIsStale) setSelectedVehicleId(vehicles[0].id);
     }
-  }, [serverVehicles, selectedVehicleId]);
+  }, [vehicles, selectedVehicleId]);
 
-  const dispatchJob = async (serviceCode: string) => {
+  const dispatchJob = async (serviceCode: string, location: LocationPoint) => {
+    const addressText = landmark.trim() || location.address;
     try {
       const newJob = await createJobMutation.mutateAsync({
         payload: {
           vehicle_id: selectedVehicleId,
           service_code: serviceCode,
-          pickup_lat: pickupLocation.lat,
-          pickup_lng: pickupLocation.lng,
-          pickup_address_text: pickupLocation.address,
+          pickup_lat: location.lat,
+          pickup_lng: location.lng,
+          pickup_address_text: addressText,
           issue_description: issueDescription || undefined,
-          issue_photo_urls: photoUrls.length > 0 ? photoUrls : undefined,
           // Retained for backward compatibility
           service_id: selectedServiceId ?? undefined,
-          pickup: pickupLocation,
+          pickup: { ...location, address: addressText },
         },
         idempotencyKey: idempotencyKeyRef.current,
       });
 
       // This draft is now committed; any later request is a genuinely new one.
       idempotencyKeyRef.current = createIdempotencyKey();
-
-      // Redirect to live matching / tracking page
       navigate(`/owner/jobs/${newJob.id}`);
     } catch (err: unknown) {
       // A verified account with no profile yet is not an error to report, it is a
-      // form to show: the token is good and registration is one POST away. The
-      // backend says so with its own code rather than leaving us to guess from a
-      // 403 (ADR-011), so this is the one failure that opens the modal instead of
-      // printing a sentence the driver cannot act on.
+      // form to show: the token is good and registration is one POST away (ADR-011).
       if (err instanceof ApiError && err.code === 'USER_NOT_REGISTERED') {
         setShowAuthModal(true);
         return;
       }
-      const errorMsg = err instanceof Error ? err.message : 'Failed to dispatch request. Please try again.';
-      setFormError(errorMsg);
+      setFormError(err instanceof Error ? err.message : 'Could not send your request. Please try again.');
     }
   };
 
@@ -116,14 +127,8 @@ export const RequestHelpPage: React.FC = () => {
     e.preventDefault();
     setFormError(null);
 
-    // Validation
-    if (!pickupLocation || !pickupLocation.lat || !pickupLocation.lng) {
+    if (!pickupLocation) {
       setFormError('Please pinpoint your emergency pickup location.');
-      return;
-    }
-
-    if (!selectedServiceId) {
-      setFormError('Please select the roadside assistance service needed.');
       return;
     }
 
@@ -134,23 +139,21 @@ export const RequestHelpPage: React.FC = () => {
     }
 
     if (!selectedVehicleId) {
-      if (serverVehicles.length === 0) {
-        setFormError('Please add a saved vehicle before requesting assistance.');
-      } else {
-        setFormError('Please select which vehicle requires assistance.');
-      }
+      setFormError(
+        vehicles.length === 0
+          ? 'Please add a saved vehicle before requesting assistance.'
+          : 'Please select which vehicle requires assistance.'
+      );
       return;
     }
 
-    // Backend requires an authenticated session with a valid JWT token.
-    // If not signed in, redirect to login page.
-    const token = getAuthToken();
-    if (!token) {
+    // The backend needs an authenticated session. If there is none, sign in first.
+    if (!getAuthToken()) {
       navigate(`/login?redirect=${encodeURIComponent('/owner/request')}`);
       return;
     }
 
-    await dispatchJob(selectedService.code);
+    await dispatchJob(selectedService.code, pickupLocation);
   };
 
   const handleQuickAuthSubmit = async (e: React.FormEvent) => {
@@ -167,198 +170,153 @@ export const RequestHelpPage: React.FC = () => {
 
     setAuthSubmitting(true);
     try {
-      await usersService.createUser({
-        name: cleanName,
-        phone: `+91${cleanPhone}`,
-        role: 'owner',
-      });
+      await usersService.createUser({ name: cleanName, phone: `+91${cleanPhone}`, role: 'owner' });
 
       setShowAuthModal(false);
       const selectedService = services.find((s) => s.id === selectedServiceId);
-      if (selectedService) {
-        await dispatchJob(selectedService.code);
+      if (selectedService && pickupLocation) {
+        await dispatchJob(selectedService.code, pickupLocation);
       }
     } catch (err: unknown) {
-      setAuthError(err instanceof Error ? err.message : 'Failed to register emergency contact.');
+      setAuthError(err instanceof Error ? err.message : 'Could not save your details. Try again.');
     } finally {
       setAuthSubmitting(false);
     }
   };
 
-  const handleSimulatePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (files && files.length > 0) {
-      // In local/test mode, create an object URL representation
-      const file = files[0];
-      const simulatedUrl = URL.createObjectURL(file);
-      setPhotoUrls((prev) => [...prev, simulatedUrl]);
+  const visibleServices = services.filter((service) => {
+    switch (serviceCategoryFilter) {
+      case 'towing':
+        return service.requires_vehicle_equipment || service.code.includes('tow');
+      case 'mechanic':
+        return !service.requires_vehicle_equipment && !service.code.includes('fuel');
+      case 'fuel':
+        return service.code.includes('fuel');
+      default:
+        return true;
     }
-  };
+  });
+
+  const inputClass =
+    'w-full min-h-[52px] px-3.5 bg-white border border-line rounded-control text-base text-ink placeholder:text-ink-muted focus:border-brand-700 focus:ring-2 focus:ring-brand-700 outline-none';
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6 space-y-8">
-      {/* Header & Navigation */}
       <div className="flex items-center gap-3">
         <button
           type="button"
           onClick={() => navigate('/owner')}
-          className="p-2 -ml-2 rounded-full text-slate-600 hover:text-slate-900 hover:bg-slate-100 touch-target focus:outline-none focus:ring-2 focus:ring-brand-700"
+          className="w-11 h-11 -ml-2 rounded-full inline-flex items-center justify-center text-ink-soft hover:text-ink hover:bg-slate-100"
           aria-label="Go back to owner dashboard"
         >
-          <ArrowLeft className="w-5 h-5" />
+          <ArrowLeft className="w-5 h-5" aria-hidden="true" />
         </button>
         <div>
-          <h1 className="text-xl sm:text-2xl font-black text-slate-900">Request Roadside Help</h1>
-          <p className="text-xs sm:text-sm text-slate-500">
-            Explainable weighted dispatch to verified Bengaluru partners
-          </p>
+          <h1 className="text-2xl font-bold tracking-tight">Request Roadside Help</h1>
+          <p className="text-sm text-ink-soft">Four quick steps. Only the first three are required.</p>
         </div>
       </div>
+
+      <SafetyStrip />
 
       {formError && (
         <div
           role="alert"
-          className="p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3 text-red-800 text-sm animate-shake"
+          className="p-4 bg-emergency-50 border border-emergency-100 rounded-control flex items-start gap-3 text-emergency-700 text-sm"
         >
-          <AlertCircle className="w-5 h-5 shrink-0 text-red-600 mt-0.5" />
+          <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" aria-hidden="true" />
           <div className="flex-1">
-            <span className="font-semibold block">Request Submission Failed</span>
+            <span className="font-semibold block">We could not send your request</span>
             <span>{formError}</span>
           </div>
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-8">
-        {/* Step 1: Emergency Location (UX Guideline: Location First!) */}
-        <section aria-labelledby="location-section-heading" className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 id="location-section-heading" className="text-base font-bold text-slate-900 flex items-center gap-2">
-              <span className="w-6 h-6 rounded-full bg-brand-700 text-white text-xs font-bold inline-flex items-center justify-center">
-                1
-              </span>
-              <span>Where is your vehicle stranded?</span>
-            </h2>
-            <span className="text-xs text-emergency-700 font-semibold uppercase tracking-wider">Required</span>
-          </div>
-          <p className="text-xs text-slate-500">
-            Accurate coordinates allow the dispatch engine to compute precise driving distances.
-          </p>
-          <LocationPicker location={pickupLocation} onChange={(loc) => setPickupLocation(loc)} />
+      <form onSubmit={handleSubmit} className="space-y-10" noValidate>
+        {/* 1. Location first: it is the one thing dispatch cannot work without. */}
+        <section aria-labelledby="location-section-heading" className="space-y-4">
+          <StepHeading n={1} id="location-section-heading">
+            Where is your vehicle stranded?
+          </StepHeading>
+          <LocationPicker
+            location={pickupLocation}
+            onChange={setPickupLocation}
+            landmark={landmark}
+            onLandmarkChange={setLandmark}
+          />
         </section>
 
-        {/* Step 2: Service Selection */}
-        <section aria-labelledby="service-section-heading" className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 id="service-section-heading" className="text-base font-bold text-slate-900 flex items-center gap-2">
-              <span className="w-6 h-6 rounded-full bg-brand-700 text-white text-xs font-bold inline-flex items-center justify-center">
-                2
-              </span>
-              <span>Select Service Needed</span>
-            </h2>
-            <span className="text-xs text-emergency-700 font-semibold uppercase tracking-wider">Required</span>
-          </div>
+        {/* 2. Service */}
+        <section aria-labelledby="service-section-heading" className="space-y-4">
+          <StepHeading n={2} id="service-section-heading">
+            What do you need?
+          </StepHeading>
 
-          {/* Quick Category Filter: Tow / Mechanic / All */}
-          <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl border border-slate-200 overflow-x-auto" role="tablist" aria-label="Filter service types">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={serviceCategoryFilter === 'all'}
-              onClick={() => setServiceCategoryFilter('all')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
-                serviceCategoryFilter === 'all'
-                  ? 'bg-white text-brand-800 shadow-sm border border-slate-200/60'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              All Options ({services.length})
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={serviceCategoryFilter === 'mechanic'}
-              onClick={() => setServiceCategoryFilter('mechanic')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap flex items-center gap-1 ${
-                serviceCategoryFilter === 'mechanic'
-                  ? 'bg-white text-brand-800 shadow-sm border border-slate-200/60'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              🔧 Mechanic (On-Site)
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={serviceCategoryFilter === 'towing'}
-              onClick={() => setServiceCategoryFilter('towing')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap flex items-center gap-1 ${
-                serviceCategoryFilter === 'towing'
-                  ? 'bg-white text-brand-800 shadow-sm border border-slate-200/60'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              🚛 Tow Truck
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={serviceCategoryFilter === 'fuel'}
-              onClick={() => setServiceCategoryFilter('fuel')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap flex items-center gap-1 ${
-                serviceCategoryFilter === 'fuel'
-                  ? 'bg-white text-brand-800 shadow-sm border border-slate-200/60'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              ⛽ Emergency Fuel
-            </button>
+          <div
+            className="flex items-center gap-1 p-1 bg-slate-100 rounded-control overflow-x-auto"
+            role="tablist"
+            aria-label="Filter services"
+          >
+            {FILTERS.map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                role="tab"
+                aria-selected={serviceCategoryFilter === f.id}
+                onClick={() => setServiceCategoryFilter(f.id)}
+                className={`min-h-[44px] px-4 rounded-[10px] text-sm font-semibold whitespace-nowrap transition-colors ${
+                  serviceCategoryFilter === f.id ? 'bg-white text-ink shadow-card' : 'text-ink-soft hover:text-ink'
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
           </div>
 
           {isLoadingServices ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 animate-pulse">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="h-28 bg-slate-200 rounded-xl" />
+                <Skeleton key={i} variant="rectangular" height={96} className="w-full" />
               ))}
+            </div>
+          ) : servicesFailed || services.length === 0 ? (
+            <div className="p-5 border border-line rounded-card bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <p className="text-ink-soft">
+                {servicesFailed
+                  ? 'We could not load the list of services.'
+                  : 'No services are available right now.'}
+              </p>
+              <button
+                type="button"
+                onClick={() => refetchServices()}
+                className="inline-flex items-center justify-center gap-2 min-h-[48px] px-4 rounded-control border border-line font-semibold hover:bg-slate-50"
+              >
+                <RefreshCw className="w-4 h-4" aria-hidden="true" />
+                Try again
+              </button>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" role="radiogroup" aria-label="Available services">
-              {services
-                .filter((service) => {
-                  if (serviceCategoryFilter === 'all') return true;
-                  if (serviceCategoryFilter === 'towing')
-                    return service.requires_vehicle_equipment || service.code.includes('tow');
-                  if (serviceCategoryFilter === 'mechanic')
-                    return !service.requires_vehicle_equipment && service.code !== 'fuel_delivery';
-                  if (serviceCategoryFilter === 'fuel')
-                    return service.code === 'fuel_delivery';
-                  return true;
-                })
-                .map((service) => (
-                  <ServiceCard
-                    key={service.id}
-                    service={service}
-                    isSelected={selectedServiceId === service.id}
-                    onSelect={(s) => setSelectedServiceId(s.id)}
-                  />
-                ))}
+              {visibleServices.map((service) => (
+                <ServiceCard
+                  key={service.id}
+                  service={service}
+                  isSelected={selectedServiceId === service.id}
+                  onSelect={(s) => setSelectedServiceId(s.id)}
+                />
+              ))}
+              {visibleServices.length === 0 && (
+                <p className="text-ink-soft sm:col-span-2">No services in this group. Try &ldquo;All&rdquo;.</p>
+              )}
             </div>
           )}
         </section>
 
-        {/* Step 3: Vehicle Selection */}
-        <section aria-labelledby="vehicle-section-heading" className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 id="vehicle-section-heading" className="text-base font-bold text-slate-900 flex items-center gap-2">
-              <span className="w-6 h-6 rounded-full bg-brand-700 text-white text-xs font-bold inline-flex items-center justify-center">
-                3
-              </span>
-              <span>Select Vehicle</span>
-            </h2>
-            <span className="text-xs text-emergency-700 font-semibold uppercase tracking-wider">Required</span>
-          </div>
-          <p className="text-xs text-slate-500">
-            Vehicle registration and type are captured on the job record for partner equipment matching.
-          </p>
+        {/* 3. Vehicle */}
+        <section aria-labelledby="vehicle-section-heading" className="space-y-4">
+          <StepHeading n={3} id="vehicle-section-heading">
+            Which vehicle?
+          </StepHeading>
           <VehicleSelector
             vehicles={vehicles}
             selectedVehicleId={selectedVehicleId}
@@ -368,119 +326,86 @@ export const RequestHelpPage: React.FC = () => {
           />
         </section>
 
-        {/* Step 4: Issue Notes & Photos */}
-        <section aria-labelledby="details-section-heading" className="space-y-3">
-          <h2 id="details-section-heading" className="text-base font-bold text-slate-900 flex items-center gap-2">
-            <span className="w-6 h-6 rounded-full bg-slate-200 text-slate-700 text-xs font-bold inline-flex items-center justify-center">
-              4
-            </span>
-            <span>Issue Details & Photos (Optional)</span>
-          </h2>
-
-          <div className="space-y-3">
-            <div>
-              <label htmlFor="issue-notes" className="block text-xs font-semibold text-slate-600 mb-1">
-                Describe what happened
-              </label>
-              <textarea
-                id="issue-notes"
-                rows={3}
-                placeholder="e.g. Left rear tyre is flat, I am parked on the roadside shoulder with hazards on."
-                value={issueDescription}
-                onChange={(e) => setIssueDescription(e.target.value)}
-                className="w-full p-3 bg-white border border-slate-300 rounded-lg text-base text-slate-900 focus:border-brand-700 focus:ring-1 focus:ring-brand-700 outline-none resize-none"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1.5">
-                Attach breakdown photo (helps partner arrive prepared)
-              </label>
-              <div className="flex items-center gap-3">
-                <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-sm rounded-lg border border-slate-300 transition-colors touch-target">
-                  <Camera className="w-4 h-4" />
-                  <span>Take / Upload Photo</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={handleSimulatePhotoUpload}
-                  />
-                </label>
-
-                {photoUrls.length > 0 && (
-                  <span className="text-xs font-semibold text-brand-700 inline-flex items-center gap-1">
-                    <CheckCircle2 className="w-4 h-4 text-brand-700" />
-                    <span>{photoUrls.length} photo attached</span>
-                  </span>
-                )}
-              </div>
-            </div>
+        {/* 4. Notes */}
+        <section aria-labelledby="details-section-heading" className="space-y-4">
+          <StepHeading n={4} id="details-section-heading" required={false}>
+            Anything we should know?
+          </StepHeading>
+          <div>
+            <label htmlFor="issue-notes" className="block text-sm font-semibold mb-1.5">
+              Describe what happened
+            </label>
+            <textarea
+              id="issue-notes"
+              rows={3}
+              placeholder="e.g. Left rear tyre is flat, I am parked on the roadside shoulder with hazards on."
+              value={issueDescription}
+              onChange={(e) => setIssueDescription(e.target.value)}
+              className={`${inputClass} py-3 resize-none`}
+            />
           </div>
         </section>
 
-        {/* Submit Button & Notice */}
-        <div className="pt-4 space-y-3">
-          <div className="p-3 bg-amber-50/80 border border-amber-200/80 rounded-xl text-xs text-amber-900 text-center font-medium">
+        <div className="space-y-3">
+          <p className="p-3 bg-slate-50 border border-line rounded-control text-sm text-ink-soft text-center">
             Final price is confirmed when the job is completed.
-          </div>
+          </p>
 
           <Button
             type="submit"
             size="lg"
             variant="primary"
             isLoading={createJobMutation.isPending}
-            className="w-full text-lg font-bold shadow-md bg-brand-700 hover:bg-brand-800"
+            className="w-full text-lg font-semibold min-h-[56px]"
           >
-            <ShieldAlert className="w-5 h-5 text-white" />
-            <span>Dispatch Verified Partner</span>
+            <LifeBuoy className="w-5 h-5" aria-hidden="true" />
+            <span>Request help now</span>
           </Button>
 
-          <p className="text-xs text-center text-slate-500">
-            By dispatching, you consent to sharing your vehicle and breakdown coordinates with eligible verified service partners.
+          <p className="text-xs text-center text-ink-muted">
+            By requesting help you agree to share your vehicle details and pickup location with eligible
+            verified partners. Your phone number is shared only with the partner who takes the job.
           </p>
         </div>
       </form>
 
-      {/* Add Vehicle Modal */}
       <AddVehicleModal
         isOpen={isAddVehicleOpen}
         onClose={() => setIsAddVehicleOpen(false)}
         onSuccess={(v) => setSelectedVehicleId(v.id)}
       />
 
-      {/* Quick Emergency Contact Modal if unauthenticated */}
       {showAuthModal && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60"
           role="dialog"
           aria-modal="true"
           aria-labelledby="quick-auth-title"
         >
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-md w-full overflow-hidden p-6 space-y-4 animate-scale-up">
+          <div className="bg-white rounded-sheet shadow-float max-w-md w-full p-6 space-y-4">
             <div>
-              <h2 id="quick-auth-title" className="text-lg font-bold text-slate-900">
-                Emergency Contact Details
+              <h2 id="quick-auth-title" className="text-xl font-bold">
+                One last detail
               </h2>
-              <p className="text-xs text-slate-500 mt-0.5">
-                The dispatched partner needs your contact number to coordinate arrival.
+              <p className="text-sm text-ink-soft mt-1">
+                Your partner needs your name and number to coordinate arrival.
               </p>
             </div>
 
             {authError && (
               <div
                 role="alert"
-                className="p-3 bg-red-50 border border-red-200 rounded-xl flex items-start gap-2 text-red-800 text-xs"
+                className="p-3 bg-emergency-50 border border-emergency-100 rounded-control flex items-start gap-2 text-emergency-700 text-sm"
               >
-                <AlertCircle className="w-4 h-4 shrink-0 text-red-600 mt-0.5" />
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
                 <span>{authError}</span>
               </div>
             )}
 
-            <form onSubmit={handleQuickAuthSubmit} className="space-y-3">
+            <form onSubmit={handleQuickAuthSubmit} className="space-y-4">
               <div>
-                <label htmlFor="qa-name" className="block text-xs font-semibold text-slate-700 mb-1">
-                  Full Name
+                <label htmlFor="qa-name" className="block text-sm font-semibold mb-1.5">
+                  Full name
                 </label>
                 <input
                   id="qa-name"
@@ -488,18 +413,18 @@ export const RequestHelpPage: React.FC = () => {
                   placeholder="e.g. Asha Sharma"
                   value={authName}
                   onChange={(e) => setAuthName(e.target.value)}
-                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 focus:border-brand-700 focus:ring-1 focus:ring-brand-700 outline-none"
+                  className={inputClass}
                   required
                   autoFocus
                 />
               </div>
 
               <div>
-                <label htmlFor="qa-phone" className="block text-xs font-semibold text-slate-700 mb-1">
-                  Mobile Number
+                <label htmlFor="qa-phone" className="block text-sm font-semibold mb-1.5">
+                  Mobile number
                 </label>
-                <div className="flex rounded-lg border border-slate-300 overflow-hidden focus-within:border-brand-700 focus-within:ring-1 focus-within:ring-brand-700">
-                  <span className="inline-flex items-center px-2.5 bg-slate-50 border-r border-slate-200 text-xs font-semibold text-slate-600">
+                <div className="flex rounded-control border border-line overflow-hidden focus-within:border-brand-700 focus-within:ring-2 focus-within:ring-brand-700">
+                  <span className="inline-flex items-center px-3 bg-slate-50 border-r border-line text-sm font-semibold text-ink-soft">
                     +91
                   </span>
                   <input
@@ -510,29 +435,18 @@ export const RequestHelpPage: React.FC = () => {
                     placeholder="98765 43210"
                     value={authPhone}
                     onChange={(e) => setAuthPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                    className="flex-1 px-3 py-2 bg-white text-sm text-slate-900 outline-none"
+                    className="flex-1 min-h-[52px] px-3 bg-white text-base outline-none tnum"
                     required
                   />
                 </div>
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowAuthModal(false)}
-                  disabled={authSubmitting}
-                >
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-line">
+                <Button type="button" variant="outline" onClick={() => setShowAuthModal(false)} disabled={authSubmitting}>
                   Cancel
                 </Button>
-                <Button
-                  type="submit"
-                  variant="primary"
-                  size="sm"
-                  isLoading={authSubmitting}
-                >
-                  Continue & Dispatch
+                <Button type="submit" variant="primary" isLoading={authSubmitting}>
+                  Continue and request
                 </Button>
               </div>
             </form>

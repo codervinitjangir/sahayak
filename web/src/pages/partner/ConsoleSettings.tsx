@@ -13,7 +13,6 @@ import {
   Ruler,
   Settings,
   ShieldCheck,
-  Users,
   Volume2,
 } from 'lucide-react';
 
@@ -43,17 +42,17 @@ const ToggleRow: React.FC<{
 }> = ({ Icon, label, hint, checked, onChange }) => (
   <div className="flex items-start justify-between gap-4 py-3 border-b border-[#F0EADB] last:border-b-0">
     <div className="flex items-start gap-3 min-w-0">
-      <span className="w-8 h-8 rounded-[10px] bg-[#F6F1E6] border border-[#E7E0D2] flex items-center justify-center shrink-0 mt-0.5">
-        <Icon className={`w-4 h-4 ${checked ? 'text-[#0F766E]' : 'text-[#9A917F]'}`} />
+      <span className="w-8 h-8 rounded-[10px] bg-[#F6F8FA] border border-[#EEF2F6] flex items-center justify-center shrink-0 mt-0.5">
+        <Icon className={`w-4 h-4 ${checked ? 'text-[#0F766E]' : 'text-[#64748B]'}`} />
       </span>
       <div className="min-w-0">
-        <div className="text-xs font-bold text-[#1B1712]">{label}</div>
-        <p className="text-[11px] text-[#5B5346] mt-0.5 leading-snug">{hint}</p>
+        <div className="text-xs font-bold text-[#0F172A]">{label}</div>
+        <p className="text-xs text-[#475569] mt-0.5 leading-snug">{hint}</p>
       </div>
     </div>
     <div className="flex items-center gap-2 shrink-0 pt-1">
       {/* Never state by colour alone — the word carries the state too. */}
-      <span className="text-[10px] font-bold uppercase tracking-wider text-[#5B5346] tabular-nums w-6 text-right">
+      <span className="text-xs font-bold uppercase tracking-wider text-[#475569] tabular-nums w-6 text-right">
         {checked ? 'On' : 'Off'}
       </span>
       <button
@@ -89,18 +88,18 @@ function SegmentedRow<T extends string>({
   return (
     <div className="flex items-start justify-between gap-4 py-3 border-b border-[#F0EADB] last:border-b-0">
       <div className="flex items-start gap-3 min-w-0">
-        <span className="w-8 h-8 rounded-[10px] bg-[#F6F1E6] border border-[#E7E0D2] flex items-center justify-center shrink-0 mt-0.5">
+        <span className="w-8 h-8 rounded-[10px] bg-[#F6F8FA] border border-[#EEF2F6] flex items-center justify-center shrink-0 mt-0.5">
           <Icon className="w-4 h-4 text-[#0F766E]" />
         </span>
         <div className="min-w-0">
-          <div className="text-xs font-bold text-[#1B1712]">{label}</div>
-          <p className="text-[11px] text-[#5B5346] mt-0.5 leading-snug">{hint}</p>
+          <div className="text-xs font-bold text-[#0F172A]">{label}</div>
+          <p className="text-xs text-[#475569] mt-0.5 leading-snug">{hint}</p>
         </div>
       </div>
       <div
         role="radiogroup"
         aria-label={label}
-        className="flex items-center gap-0.5 bg-[#F6F1E6] border border-[#E7E0D2] rounded-[10px] p-0.5 shrink-0"
+        className="flex items-center gap-0.5 bg-[#F6F8FA] border border-[#EEF2F6] rounded-[10px] p-0.5 shrink-0"
       >
         {options.map((option) => {
           const isActive = option.value === value;
@@ -111,8 +110,8 @@ function SegmentedRow<T extends string>({
               role="radio"
               aria-checked={isActive}
               onClick={() => onChange(option.value)}
-              className={`px-2.5 py-1 rounded-[8px] text-[11px] font-bold transition-all ${
-                isActive ? 'bg-[#0F766E] text-white shadow-2xs' : 'text-[#5B5346] hover:text-[#1B1712]'
+              className={`px-2.5 py-1 rounded-[8px] text-xs font-bold transition-all ${
+                isActive ? 'bg-[#0F766E] text-white shadow-2xs' : 'text-[#475569] hover:text-[#0F172A]'
               }`}
             >
               {option.label}
@@ -129,17 +128,17 @@ function SegmentedRow<T extends string>({
 const FactRow: React.FC<{ Icon: typeof Bell; label: string; value: string }> = ({ Icon, label, value }) => (
   <div className="flex items-center justify-between gap-3 py-2.5 border-b border-[#F0EADB] last:border-b-0">
     <div className="flex items-center gap-2.5 min-w-0">
-      <Icon className="w-3.5 h-3.5 text-[#9A917F] shrink-0" />
-      <span className="text-[11px] font-medium text-[#5B5346] truncate">{label}</span>
+      <Icon className="w-3.5 h-3.5 text-[#64748B] shrink-0" />
+      <span className="text-xs font-medium text-[#475569] truncate">{label}</span>
     </div>
-    <span className="text-[11px] font-bold text-[#1B1712] text-right truncate">{value}</span>
+    <span className="text-xs font-bold text-[#0F172A] text-right truncate">{value}</span>
   </div>
 );
 
 const CardHeading: React.FC<{ title: string; caption: string }> = ({ title, caption }) => (
   <div className="mb-1">
-    <h2 className="text-sm font-bold text-[#1B1712] font-['Fraunces']">{title}</h2>
-    <p className="text-[11px] text-[#5B5346] mt-0.5">{caption}</p>
+    <h2 className="text-sm font-bold text-[#0F172A]">{title}</h2>
+    <p className="text-xs text-[#475569] mt-0.5">{caption}</p>
   </div>
 );
 
@@ -167,7 +166,7 @@ export const ConsoleSettingsView: React.FC<{
   embedded?: boolean;
   /** Supplied by the console so a cross-reference swaps the view in place. */
   onNavigate?: (view: ConsoleView) => void;
-}> = ({ embedded = false, onNavigate }) => {
+}> = ({ embedded = false }) => {
   const profile = usePartnerProfile();
   const settings = useConsoleSettings();
   const [notice, setNotice] = useState<string | null>(null);
@@ -189,15 +188,15 @@ export const ConsoleSettingsView: React.FC<{
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-              <span className="text-[11px] font-bold tracking-wider text-[#0F766E] uppercase bg-[#0F766E]/10 px-2.5 py-0.5 rounded-full border border-[#0F766E]/20">
+              <span className="text-xs font-bold tracking-wider text-[#0F766E] uppercase bg-[#0F766E]/10 px-2.5 py-0.5 rounded-full border border-[#0F766E]/20">
                 Console Preferences
               </span>
-              <span className="text-xs font-medium text-[#5B5346]">Applies to this device</span>
+              <span className="text-xs font-medium text-[#475569]">Applies to this device</span>
             </div>
-            <h1 className="font-['Fraunces'] text-2xl sm:text-3xl font-semibold text-[#1B1712] tracking-tight">
+            <h1 className="text-2xl sm:text-3xl font-semibold text-[#0F172A] tracking-tight">
               Console Settings
             </h1>
-            <p className="text-xs text-[#5B5346] mt-0.5">
+            <p className="text-xs text-[#475569] mt-0.5">
               Alerts, display units and duty behaviour for the dispatch console — every change saves as you make it
             </p>
           </div>
@@ -206,7 +205,7 @@ export const ConsoleSettingsView: React.FC<{
             <button
               type="button"
               onClick={handleReset}
-              className="px-3.5 py-1.5 rounded-[10px] bg-white hover:bg-[#FBF8F1] border border-[#E7E0D2] shadow-2xs text-xs font-semibold text-[#1B1712] flex items-center gap-1.5 transition-all"
+              className="px-3.5 py-1.5 rounded-[10px] bg-white hover:bg-[#FFFFFF] border border-[#EEF2F6] shadow-2xs text-xs font-semibold text-[#0F172A] flex items-center gap-1.5 transition-all"
             >
               <RotateCcw className="w-3.5 h-3.5 text-[#0F766E]" />
               <span>Restore defaults</span>
@@ -224,7 +223,7 @@ export const ConsoleSettingsView: React.FC<{
           <button
             type="button"
             onClick={() => setNotice(null)}
-            className="text-[11px] font-bold text-[#0F5C55] underline underline-offset-2 shrink-0"
+            className="text-xs font-bold text-[#0F5C55] underline underline-offset-2 shrink-0"
           >
             Dismiss
           </button>
@@ -311,21 +310,6 @@ export const ConsoleSettingsView: React.FC<{
               />
               <FactRow Icon={MapPin} label="Operating zone" value={profile.extraDetails.operatingZone} />
             </div>
-            <p className="text-[11px] text-[#5B5346] mt-3">
-              The window and zone are set in{' '}
-              {onNavigate ? (
-                <button
-                  type="button"
-                  onClick={() => onNavigate('preferences')}
-                  className="font-bold text-[#0F766E] underline underline-offset-2 hover:text-[#0C5F58]"
-                >
-                  Fleet &amp; Preferences
-                </button>
-              ) : (
-                <span className="font-bold text-[#1B1712]">Fleet &amp; Preferences</span>
-              )}
-              .
-            </p>
           </section>
         </div>
 
@@ -336,7 +320,6 @@ export const ConsoleSettingsView: React.FC<{
             <div className="mt-2">
               <FactRow Icon={ShieldCheck} label="Partner ID" value={profile.id} />
               <FactRow Icon={Phone} label="Phone" value={profile.phone} />
-              <FactRow Icon={Users} label="Team size" value={`${profile.extraDetails.teamSize} on the roster`} />
             </div>
           </section>
 
@@ -349,7 +332,7 @@ export const ConsoleSettingsView: React.FC<{
                 value="Live backend"
               />
             </div>
-            <p className="text-[11px] text-[#5B5346] mt-3">
+            <p className="text-xs text-[#475569] mt-3">
               This console communicates directly with the live dispatch backend. Offers and dispatches are synced automatically.
             </p>
           </section>
@@ -361,10 +344,10 @@ export const ConsoleSettingsView: React.FC<{
   if (embedded) return body;
 
   return (
-    <div className="min-h-screen bg-[#F6F1E6] text-[#1B1712] py-6 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-[#F6F8FA] text-[#0F172A] py-6 px-4 sm:px-6 lg:px-8">
       <div className="max-w-6xl mx-auto">
         <PartnerTopBar />
-        <div className="flex items-center gap-2 mb-4 text-[#5B5346]">
+        <div className="flex items-center gap-2 mb-4 text-[#475569]">
           <Settings className="w-4 h-4 text-[#0F766E]" />
           <span className="text-xs font-bold uppercase tracking-wider">Roadside Dispatch</span>
         </div>

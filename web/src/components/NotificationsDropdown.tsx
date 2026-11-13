@@ -9,7 +9,7 @@ export interface NotificationsDropdownProps {
 
 export const NotificationsDropdown: React.FC<NotificationsDropdownProps> = ({
   className = '',
-  iconClassName = 'w-4 h-4 text-[#5B5346]',
+  iconClassName = 'w-4 h-4 text-[#475569]',
 }) => {
   const [unreadCount, setUnreadCount] = useState<number>(0);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
@@ -98,7 +98,7 @@ export const NotificationsDropdown: React.FC<NotificationsDropdownProps> = ({
       <button
         type="button"
         onClick={toggleDropdown}
-        className="w-9 h-9 rounded-[10px] bg-white hover:bg-[#FBF8F1] border border-[#E7E0D2] shadow-2xs flex items-center justify-center text-[#5B5346] hover:text-[#1B1712] transition-colors relative cursor-pointer"
+        className="w-9 h-9 rounded-[10px] bg-white hover:bg-[#FFFFFF] border border-[#EEF2F6] shadow-2xs flex items-center justify-center text-[#475569] hover:text-[#0F172A] transition-colors relative cursor-pointer"
         title={unreadCount > 0 ? `${unreadCount} unread notifications` : 'Notifications'}
         aria-label="Notifications"
       >
@@ -109,12 +109,12 @@ export const NotificationsDropdown: React.FC<NotificationsDropdownProps> = ({
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 top-11 w-80 sm:w-96 bg-white rounded-[16px] border border-[#E7E0D2] shadow-xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-100">
-          <div className="px-4 py-3 border-b border-[#E7E0D2] flex items-center justify-between bg-[#FDFBF7]">
+        <div className="absolute right-0 top-11 w-80 sm:w-96 bg-white rounded-[16px] border border-[#EEF2F6] shadow-xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+          <div className="px-4 py-3 border-b border-[#EEF2F6] flex items-center justify-between bg-[#FDFBF7]">
             <div className="flex items-center gap-2">
-              <h4 className="font-bold text-sm text-[#1B1712]">Notifications</h4>
+              <h4 className="font-bold text-sm text-[#0F172A]">Notifications</h4>
               {unreadCount > 0 && (
-                <span className="px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 text-[10px] font-bold">
+                <span className="px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 text-xs font-bold">
                   {unreadCount} new
                 </span>
               )}
@@ -123,7 +123,7 @@ export const NotificationsDropdown: React.FC<NotificationsDropdownProps> = ({
               <button
                 type="button"
                 onClick={handleMarkAllRead}
-                className="text-xs text-[#0F766E] hover:text-[#0D645D] font-semibold flex items-center gap-1 cursor-pointer"
+                className="text-xs text-[#0F766E] hover:text-[#115E59] font-semibold flex items-center gap-1 cursor-pointer"
               >
                 <CheckCheck className="w-3.5 h-3.5" />
                 Mark all read
@@ -157,7 +157,7 @@ export const NotificationsDropdown: React.FC<NotificationsDropdownProps> = ({
                     <p className={`text-xs ${!item.is_read ? 'font-semibold text-slate-900' : 'text-slate-600'}`}>
                       {item.message || item.event.replace(/_/g, ' ')}
                     </p>
-                    <span className="text-[10px] text-slate-400 mt-1 block">
+                    <span className="text-xs text-slate-400 mt-1 block">
                       {new Date(item.sent_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>

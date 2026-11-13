@@ -48,21 +48,21 @@ export const ChartCard: React.FC<ChartCardProps> = ({
   return (
     <section
       aria-labelledby={headingId}
-      className="rounded-[16px] border border-[#E7E0D2] bg-white p-5 shadow-2xs"
+      className="rounded-[16px] border border-[#EEF2F6] bg-white p-5 shadow-2xs"
     >
       <div className="mb-4 flex items-start justify-between gap-4">
         <div>
-          <h3 id={headingId} className="text-sm font-bold text-[#1B1712]">
+          <h3 id={headingId} className="text-sm font-bold text-[#0F172A]">
             {title}
           </h3>
-          {subtitle && <p className="mt-0.5 text-xs text-[#5B5346]">{subtitle}</p>}
+          {subtitle && <p className="mt-0.5 text-xs text-[#475569]">{subtitle}</p>}
         </div>
         {!empty && (
           <button
             type="button"
             onClick={() => setShowTable((v) => !v)}
             aria-pressed={showTable}
-            className="flex shrink-0 items-center gap-1.5 rounded-[8px] border border-[#E7E0D2] bg-white px-2.5 py-1.5 text-xs font-semibold text-[#5B5346] transition hover:bg-[#F6F1E6] hover:text-[#1B1712]"
+            className="flex shrink-0 items-center gap-1.5 rounded-[8px] border border-[#EEF2F6] bg-white px-2.5 py-1.5 text-xs font-semibold text-[#475569] transition hover:bg-[#F6F8FA] hover:text-[#0F172A]"
           >
             {showTable ? (
               <>
@@ -296,7 +296,7 @@ export const StackedBar: React.FC<{ segments: StackSegment[]; total?: number }> 
           return (
             <div
               key={s.label}
-              className="flex items-center justify-center text-[11px] font-semibold"
+              className="flex items-center justify-center text-xs font-semibold"
               title={`${s.label}: ${text} (${((s.value / safeSum) * 100).toFixed(1)}%)`}
               style={{
                 width: `${widthPct}%`,
@@ -352,7 +352,7 @@ export const GroupedBars: React.FC<{
                     }`}
                   >
                     {value === null ? (
-                      <span className="text-[11px] italic text-slate-400">no data</span>
+                      <span className="text-xs italic text-slate-400">no data</span>
                     ) : (
                       <span
                         className="h-3.5 rounded-r-[4px]"
@@ -364,7 +364,7 @@ export const GroupedBars: React.FC<{
                     )}
                   </span>
                   <span
-                    className="w-16 shrink-0 text-right text-[11px] text-slate-700"
+                    className="w-16 shrink-0 text-right text-xs text-slate-700"
                     style={{ fontVariantNumeric: 'tabular-nums' }}
                   >
                     {value === null ? '—' : format(value)}
@@ -412,7 +412,7 @@ export const DivergingBars: React.FC<{
               {r.label}
               {r.muted && (
                 <span
-                  className="rounded bg-slate-100 px-1 py-0.5 text-[10px] font-medium text-slate-500"
+                  className="rounded bg-slate-100 px-1 py-0.5 text-xs font-medium text-slate-500"
                   title="Constant across this window — cannot have driven the choice, so the backend excludes it from the driver."
                 >
                   constant
@@ -449,7 +449,7 @@ export const DivergingBars: React.FC<{
               )}
             </span>
             <span
-              className="text-right text-[11px] text-slate-700"
+              className="text-right text-xs text-slate-700"
               style={{ fontVariantNumeric: 'tabular-nums' }}
             >
               {value === null ? '—' : format(value)}
@@ -547,8 +547,8 @@ export const RangeStrip: React.FC<{
             title={`mean: ${fmt(mean)} ${unit}`}
           />
         )}
-        <span className="absolute left-0 top-7 text-[11px] text-slate-400">{fmt(min)}</span>
-        <span className="absolute right-0 top-7 text-[11px] text-slate-400">
+        <span className="absolute left-0 top-7 text-xs text-slate-400">{fmt(min)}</span>
+        <span className="absolute right-0 top-7 text-xs text-slate-400">
           {fmt(max)} {unit}
         </span>
       </div>
@@ -584,7 +584,7 @@ export const NotesList: React.FC<{ notes: AnalyticsNote[] }> = ({ notes }) => {
           <li key={note.code} className="flex gap-2 text-xs leading-relaxed text-amber-900">
             <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden="true" />
             <span>
-              <code className="rounded bg-amber-100 px-1 py-0.5 font-mono text-[10px] font-semibold">
+              <code className="rounded bg-amber-100 px-1 py-0.5 font-mono text-xs font-semibold">
                 {note.code}
               </code>{' '}
               {note.detail}

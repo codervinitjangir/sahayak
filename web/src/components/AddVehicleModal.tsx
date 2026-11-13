@@ -190,7 +190,7 @@ export const AddVehicleModal: React.FC<AddVehicleModalProps> = ({
               className="w-full px-3 py-2 font-mono uppercase bg-white border border-slate-300 rounded-lg text-sm text-slate-900 focus:border-brand-700 focus:ring-1 focus:ring-brand-700 outline-none"
               required
             />
-            <p className="text-[11px] text-slate-500 mt-1">
+            <p className="text-xs text-slate-500 mt-1">
               Standard RTO registration number matching your vehicle plates.
             </p>
           </div>

@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  CheckCircle2,
   ChevronRight,
   Eye,
   EyeOff,
@@ -25,13 +24,12 @@ import {
   useOfferResponse,
   usePartnerEarnings,
   usePartnerTrustStats,
-  usePendingOffer,
-} from '../../features/partners/useOffers';
+  usePendingOffer, usePartnerServices } from '../../features/partners/useOffers';
 import { jobsService } from '../../services/jobs.service';
 import {
+  verificationBadgeLabel,
   capabilityLabel,
   derivePartnerCapability,
-  EQUIPMENT_TYPES,
   type EarningsWindow,
   type PartnerOffer,
   type PartnerProfile,
@@ -70,7 +68,7 @@ export function resolveLiveState(input: {
   return 'idle';
 }
 
-/* ── 0. Left Sidebar: Warm Paper Stationery (Sahayak Identity) ─────────── */
+/* ── 0. Left Sidebar: Sahayak identity ─────────── */
 
 /** The four console destinations. Every one of them renders inside the console
  *  shell — none of them is a page of its own. */
@@ -86,9 +84,9 @@ export const CONSOLE_NAV: ReadonlyArray<{
   path: string;
 }> = [
   { view: 'dispatches', label: 'Dispatches', Icon: Truck, group: 'main', path: '/partner/dashboard' },
-  { view: 'preferences', label: 'Fleet & Preferences', Icon: Wrench, group: 'main', path: '/partner/preferences' },
-  { view: 'verification', label: 'Verification & KYC', Icon: ShieldCheck, group: 'main', path: '/partner/verification' },
-  { view: 'settings', label: 'Console Settings', Icon: Settings, group: 'settings', path: '/partner/settings' },
+  { view: 'preferences', label: 'Services & Preferences', Icon: Wrench, group: 'main', path: '/partner/preferences' },
+  { view: 'verification', label: 'Verification', Icon: ShieldCheck, group: 'main', path: '/partner/verification' },
+  { view: 'settings', label: 'Settings', Icon: Settings, group: 'settings', path: '/partner/settings' },
 ];
 
 export const PartnerSidebar: React.FC<{
@@ -100,6 +98,7 @@ export const PartnerSidebar: React.FC<{
    *  keeps the standalone pages (and their tests) working on their own. */
   onNavigate?: (view: ConsoleView) => void;
 }> = ({ profile, isAvailable, activeNav = 'dispatches', onNavigate }) => {
+  const { data: sidebarStats } = usePartnerTrustStats();
   // The sidebar is the one element on screen for all four views, so the shift
   // summary belongs here rather than on any single view. It also keeps the
   // column from collapsing into ~380px of empty cream between the nav and the
@@ -112,12 +111,12 @@ export const PartnerSidebar: React.FC<{
       const isActive = activeNav === view;
       const className = `w-full text-left flex items-center gap-3 px-3.5 py-2.5 text-xs font-semibold cursor-pointer transition-all ${
         isActive
-          ? 'citisum-active-pill'
-          : 'text-[#5B5346] hover:text-[#1B1712] rounded-[10px] hover:bg-[#F6F1E6]/70'
+          ? 'nav-active-pill'
+          : 'text-[#475569] hover:text-[#0F172A] rounded-[10px] hover:bg-[#F6F8FA]/70'
       }`;
       const icon = (
         <Icon
-          className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : view === 'settings' ? 'text-[#5B5346]' : 'text-[#0F766E]'}`}
+          className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : view === 'settings' ? 'text-[#475569]' : 'text-[#0F766E]'}`}
         />
       );
 
@@ -146,8 +145,8 @@ export const PartnerSidebar: React.FC<{
       className="partner-sidebar"
     >
       <div>
-        {/* Brand Header: Fraunces Wordmark + Roadside Dispatch */}
-        <div className="mb-6 pb-4 border-b border-[#E7E0D2]">
+        {/* Brand header */}
+        <div className="mb-6 pb-4 border-b border-[#EEF2F6]">
           <Link
             to="/partner/dashboard"
             onClick={(e) => {
@@ -158,68 +157,64 @@ export const PartnerSidebar: React.FC<{
             }}
             className="block group focus:outline-none"
           >
-            <span className="font-['Fraunces'] font-semibold text-xl tracking-tight text-[#1B1712] block leading-tight group-hover:text-[#0F766E] transition-colors">
+            <span className="font-semibold text-xl tracking-tight text-[#0F172A] block leading-tight group-hover:text-[#0F766E] transition-colors">
               Sahayak
             </span>
-            <span className="text-[10px] font-bold text-[#5B5346] tracking-wider uppercase block mt-0.5">
+            <span className="text-xs font-bold text-[#475569] tracking-wider uppercase block mt-0.5">
               Roadside Dispatch
             </span>
           </Link>
         </div>
 
         {/* Section 1: MAIN MENU */}
-        <div className="text-[10px] font-bold tracking-wider text-[#9A917F] uppercase px-3 mt-4 mb-2">
+        <div className="partner-sidebar__label text-xs font-bold tracking-wider text-[#64748B] uppercase px-3 mt-4 mb-2">
           MAIN MENU
         </div>
 
-        <nav className="space-y-1 w-full">{renderNav('main')}</nav>
+        <nav className="partner-sidebar__nav space-y-1 w-full">{renderNav('main')}</nav>
 
         {/* Section 2: SETTINGS */}
-        <div className="text-[10px] font-bold tracking-wider text-[#9A917F] uppercase px-3 mt-6 mb-2">
+        <div className="partner-sidebar__label text-xs font-bold tracking-wider text-[#64748B] uppercase px-3 mt-6 mb-2">
           SETTINGS
         </div>
 
-        <nav className="space-y-1 w-full">{renderNav('settings')}</nav>
+        <nav className="partner-sidebar__nav space-y-1 w-full">{renderNav('settings')}</nav>
 
         {/* Section 3: TODAY — the shift at a glance, on every view */}
-        <div className="text-[10px] font-bold tracking-wider text-[#9A917F] uppercase px-3 mt-8 mb-2">
+        <div className="partner-sidebar__label text-xs font-bold tracking-wider text-[#64748B] uppercase px-3 mt-8 mb-2">
           Today
         </div>
 
-        <div className="rounded-[14px] bg-[#FBF8F1] border border-[#E7E0D2] px-3.5 py-3">
+        <div className="max-lg:hidden rounded-card bg-white border border-line px-3.5 py-3">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <div className="font-['Fraunces'] text-xl font-semibold text-[#1B1712] tabular-nums leading-none">
+              <div className="text-xl font-semibold text-[#0F172A] tabular-nums leading-none">
                 {today?.jobsCompleted ?? 0}
               </div>
-              <div className="text-[9px] text-[#9A917F] font-medium mt-1">Jobs done</div>
+              <div className="text-xs text-[#64748B] font-medium mt-1">Jobs done</div>
             </div>
             <div>
-              <div className="font-['Fraunces'] text-xl font-semibold text-[#1B1712] tabular-nums leading-none">
+              <div className="text-xl font-semibold text-[#0F172A] tabular-nums leading-none">
                 {privacyMode ? '₹••••' : formatRupees(today?.amountEarned ?? 0)}
               </div>
-              <div className="text-[9px] text-[#9A917F] font-medium mt-1">Earned</div>
+              <div className="text-xs text-[#64748B] font-medium mt-1">Earned</div>
             </div>
           </div>
-          <div className="mt-3 pt-2.5 border-t border-[#E7E0D2] flex items-center gap-1.5">
+          <div className="mt-3 pt-2.5 border-t border-[#EEF2F6] flex items-center gap-1.5">
             <span
               className={`w-1.5 h-1.5 rounded-full shrink-0 ${isAvailable ? 'bg-emerald-600' : 'bg-neutral-300'}`}
             />
-            <span className="text-[10px] font-semibold text-[#5B5346] truncate">
-              {isAvailable ? 'On duty' : 'Off duty'} · {profile.extraDetails.operatingZone.split(' & ')[0]}
+            <span className="text-xs font-semibold text-[#475569] truncate">
+              {isAvailable ? 'On duty' : 'Off duty'}
             </span>
           </div>
         </div>
       </div>
 
       {/* Partner Profile Badge Card at bottom of sidebar */}
-      <div className="p-3 rounded-[14px] bg-[#FBF8F1] border border-[#E7E0D2] flex items-center gap-3 mt-6">
+      <div className="max-lg:hidden p-3 rounded-card bg-white border border-line flex items-center gap-3 mt-6">
         <div className="relative shrink-0">
-          <img
-            src="/assets/partner_portrait.jpg"
-            alt={profile.name}
-            className="w-10 h-10 rounded-full object-cover ring-2 ring-[#0F766E]/40 shadow-xs"
-          />
+          <span aria-hidden="true" className="w-10 h-10 rounded-full flex items-center justify-center bg-brand-700 text-white font-semibold">{profile.name.trim().charAt(0).toUpperCase()}</span>
           <span
             className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-white ${
               isAvailable ? 'bg-emerald-600' : 'bg-neutral-300'
@@ -227,15 +222,15 @@ export const PartnerSidebar: React.FC<{
           />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="font-bold text-xs text-[#1B1712] truncate leading-tight">
+          <div className="font-bold text-xs text-[#0F172A] truncate leading-tight">
             {profile.name}
           </div>
-          <div className="text-[10px] text-[#5B5346] font-medium truncate mt-0.5">
-            {profile.extraDetails.workshopName || 'Partner Garage'}
+          <div className="text-xs text-[#475569] font-medium truncate mt-0.5">
+            {profile.phone || 'Service partner'}
           </div>
-          <div className="text-[9px] text-[#0F766E] font-semibold flex items-center gap-1 mt-0.5">
+          <div className="text-xs text-[#0F766E] font-semibold flex items-center gap-1 mt-0.5">
             <span className="w-1.5 h-1.5 rounded-full bg-[#0F766E]" />
-            <span>Tier 1 Verified</span>
+            <span>{verificationBadgeLabel(sidebarStats?.verificationStatus)}</span>
           </div>
         </div>
       </div>
@@ -253,33 +248,33 @@ const TopBar: React.FC<{
   return (
     <header className="w-full flex flex-col gap-4 mb-6">
       {!hideTopRow && <PartnerTopBar profile={profile} />}
-      {/* Subheader Row: Fraunces Serif Title + Secondary Tabs + Action Button */}
+      {/* Subheader row: title, secondary tabs and action button */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
         <div>
-          <h1 className="font-['Fraunces'] text-2xl sm:text-3xl font-semibold text-[#1B1712] tracking-tight">
+          <h1 className="text-2xl sm:text-3xl font-semibold text-[#0F172A] tracking-tight">
             Dispatches
           </h1>
-          <p className="text-xs text-[#5B5346] mt-0.5">
+          <p className="text-xs text-[#475569] mt-0.5">
             Live Bengaluru urban grid rescue operations & automated dispatch
           </p>
 
           {/* Secondary Action Tabs with Deep Teal Active Underline */}
-          <div className="flex items-center gap-5 mt-3 text-xs font-semibold text-[#5B5346]">
+          <div className="flex items-center gap-5 mt-3 text-xs font-semibold text-[#475569]">
             <button
               type="button"
-              className="text-[#1B1712] font-bold pb-1 border-b-2 border-[#0F766E] cursor-pointer"
+              className="text-[#0F172A] font-bold pb-1 border-b-2 border-[#0F766E] cursor-pointer"
             >
               All dispatches
             </button>
             <button
               type="button"
-              className="hover:text-[#1B1712] pb-1 cursor-pointer transition-colors"
+              className="hover:text-[#0F172A] pb-1 cursor-pointer transition-colors"
             >
               Active fleet units
             </button>
             <button
               type="button"
-              className="hover:text-[#1B1712] pb-1 cursor-pointer transition-colors"
+              className="hover:text-[#0F172A] pb-1 cursor-pointer transition-colors"
             >
               Settlements & Payouts
             </button>
@@ -288,7 +283,7 @@ const TopBar: React.FC<{
 
         {/* Right Action: Capability Badge */}
         <div className="flex items-center gap-2 self-start sm:self-auto">
-          <div className="hidden lg:flex items-center gap-1.5 bg-white rounded-[10px] px-3 py-1.5 border border-[#E7E0D2] shadow-2xs text-[11px] font-bold text-[#1B1712]">
+          <div className="hidden lg:flex items-center gap-1.5 bg-white rounded-[10px] px-3 py-1.5 border border-[#EEF2F6] shadow-2xs text-xs font-bold text-[#0F172A]">
             <Wrench className="w-3.5 h-3.5 text-[#0F766E]" />
             <span>{capability}</span>
           </div>
@@ -298,7 +293,7 @@ const TopBar: React.FC<{
   );
 };
 
-/* ── 2. Left Dominant Card: Inland Bengaluru Satellite Map View ───────────── */
+/* ── 2. Dispatch status card ───────────────────────────────────────────────── */
 
 interface LiveZoneMapProps {
   liveState: LiveState;
@@ -311,6 +306,14 @@ interface LiveZoneMapProps {
   onRefreshLocation: () => void;
 }
 
+/**
+ * The partner's main card: what dispatch is doing for them right now.
+ *
+ * It used to sit on a stock aerial photo with a decorative route drawn over it,
+ * which read as a live map but showed nothing real. It now shows only things
+ * the backend actually reports: shift state, the last GPS fix, the current offer
+ * and the active job.
+ */
 const LiveZoneMap: React.FC<LiveZoneMapProps> = ({
   liveState,
   profile,
@@ -334,10 +337,9 @@ const LiveZoneMap: React.FC<LiveZoneMapProps> = ({
   return (
     <section
       data-testid={`live-state-${liveState}`}
-      aria-label="Live Zone Map and Dispatch Telemetry"
-      className="bento-card relative overflow-hidden h-[620px] lg:h-[720px] w-full flex flex-col justify-between group"
+      aria-label="Dispatch status"
+      className="bento-card relative overflow-hidden w-full flex flex-col min-h-[420px] lg:min-h-[560px] bg-white"
     >
-      {/* Screen Reader ARIA Live Announcements */}
       <div aria-live="assertive" className="sr-only">
         {liveState === 'pending_offer' && 'New job offer received.'}
         {liveState === 'active_job' && 'Job accepted and active. Check progress below.'}
@@ -347,229 +349,113 @@ const LiveZoneMap: React.FC<LiveZoneMapProps> = ({
         {liveState === 'idle' && 'You are on duty. Scanning your zone for offers.'}
       </div>
 
-      {/* Photorealistic Inland Bengaluru Aerial Map Background */}
-      <img
-        src="/assets/satellite_aerial_map.jpg"
-        alt="Bengaluru Inland Urban Grid and Ring Road Flyovers"
-        className={`absolute inset-0 w-full h-full object-cover select-none transition-all duration-700 ${
-          isOffDuty ? 'filter grayscale contrast-125 opacity-70' : 'brightness-95 contrast-105'
-        }`}
-      />
-
-      {/* SVG Overlay: Vector Connected Waypoint Route & Nodes */}
-      <svg
-        className="absolute inset-0 w-full h-full pointer-events-none z-10"
-        viewBox="0 0 500 700"
-        preserveAspectRatio="xMidYMid slice"
-      >
-        <defs>
-          <filter id="bengaluru-node-glow" x="-50%" y="-50%" width="200%" height="200%">
-            <feGaussianBlur stdDeviation="3" result="blur" />
-            <feComposite in="SourceGraphic" in2="blur" operator="over" />
-          </filter>
-        </defs>
-
-        {/* Connected Highway Route Polyline */}
-        <path
-          d="M 90 610 L 170 510 L 205 385 L 205 315 L 275 220 L 350 110"
-          fill="none"
-          stroke="#FFFFFF"
-          strokeWidth="3"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className="drop-shadow-md"
-        />
-
-        {/* Waypoint 1 (Partner Station / Depot Start) */}
-        <g transform="translate(90, 610)">
-          <circle cx="0" cy="0" r="16" fill="rgba(255, 255, 255, 0.25)" filter="url(#bengaluru-node-glow)" />
-          <circle cx="0" cy="0" r="7" fill="#FFFFFF" stroke="#181818" strokeWidth="2.5" />
-        </g>
-
-        {/* Waypoint 2 */}
-        <g transform="translate(170, 510)">
-          <circle cx="0" cy="0" r="14" fill="rgba(255, 255, 255, 0.2)" />
-          <circle cx="0" cy="0" r="6" fill="#FFFFFF" stroke="#181818" strokeWidth="2" />
-        </g>
-
-        {/* Waypoint 3 (Active Dispatch Waypoint) */}
-        <g transform="translate(205, 385)">
-          <circle cx="0" cy="0" r="22" fill="rgba(255, 255, 255, 0.35)" className="animate-ping" style={{ animationDuration: '3s' }} />
-          <circle cx="0" cy="0" r="16" fill="rgba(255, 255, 255, 0.3)" />
-          <circle cx="0" cy="0" r="8" fill="#FFFFFF" stroke="#181818" strokeWidth="2.5" />
-          <circle cx="0" cy="0" r="3" fill="#F03F3F" />
-        </g>
-
-        {/* Waypoint 4 */}
-        <g transform="translate(205, 315)">
-          <circle cx="0" cy="0" r="12" fill="rgba(255, 255, 255, 0.2)" />
-          <circle cx="0" cy="0" r="5" fill="#FFFFFF" stroke="#181818" strokeWidth="2" />
-        </g>
-
-        {/* Waypoint 5 */}
-        <g transform="translate(275, 220)">
-          <circle cx="0" cy="0" r="14" fill="rgba(255, 255, 255, 0.2)" />
-          <circle cx="0" cy="0" r="6" fill="#FFFFFF" stroke="#181818" strokeWidth="2" />
-        </g>
-
-        {/* Waypoint 6 (Route Terminus) */}
-        <g transform="translate(350, 110)">
-          <circle cx="0" cy="0" r="14" fill="rgba(255, 255, 255, 0.2)" />
-          <circle cx="0" cy="0" r="6" fill="#FFFFFF" stroke="#181818" strokeWidth="2" />
-        </g>
-      </svg>
-
-      {/* Top Floating Controls */}
-      <div className="relative z-20 p-4 sm:p-5 flex items-center justify-between pointer-events-none">
-        <div className="pointer-events-auto">
-          <span className="glass-panel inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold text-[#1B1712]">
-            <MapPin className="w-3.5 h-3.5 text-[#0F766E]" />
-            <span>{profile.extraDetails.operatingZone}</span>
-            <span className="text-[#9A917F]">·</span>
-            <span className="text-[#0F766E] font-bold">{profile.extraDetails.towCoverageRadiusKm} km</span>
-          </span>
-        </div>
-
-        {/* One control, and it does the thing it says. An "Expand map" button
-            over a static image and a duplicate of the sidebar's Settings entry
-            were the only two here before, and neither did anything. */}
+      {/* Header: zone and GPS fix */}
+      <div className="p-4 sm:p-5 flex items-center justify-between gap-3 border-b border-line">
+        <span className="inline-flex items-center gap-2 text-sm font-semibold text-ink min-w-0">
+          <MapPin className="w-4 h-4 text-brand-700 shrink-0" aria-hidden="true" />
+          <span className="truncate">Dispatch status</span>
+        </span>
         <button
           type="button"
           onClick={onRefreshLocation}
-          className="pointer-events-auto glass-panel inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-semibold text-[#1B1712] hover:text-[#0F766E] transition-colors"
+          className="inline-flex items-center gap-1.5 min-h-[44px] px-3 rounded-full border border-line text-sm font-semibold text-ink hover:bg-slate-50 shrink-0"
           title="Re-acquire GPS position"
         >
-          <RefreshCw className="w-3.5 h-3.5 text-[#0F766E]" />
-          <span className="tabular-nums">
-            {locationAgeSeconds !== null ? `Fix ${formatAge(locationAgeSeconds)}` : 'Locate me'}
+          <RefreshCw className="w-4 h-4 text-brand-700" aria-hidden="true" />
+          <span className="tnum">
+            {locationAgeSeconds !== null ? `GPS ${formatAge(locationAgeSeconds)}` : 'Share location'}
           </span>
         </button>
       </div>
 
-      {/* Floating Translucent Route Info Card */}
-      <div className="relative z-20 px-4 sm:px-6 pointer-events-auto my-auto">
-        {/* STATE A: OFF DUTY */}
+      {/* Body: one state at a time */}
+      <div className="flex-1 flex items-center justify-center p-4 sm:p-8">
         {liveState === 'off_duty' && (
-          <div
-            data-testid="map-overlay-off-duty"
-            className="glass-panel rounded-[18px] p-4 sm:p-5 text-[#1B1712] max-w-xs shadow-xl animate-in fade-in"
-          >
-            <div className="flex items-center gap-2 mb-2">
-              <span className="w-2 h-2 rounded-full bg-[#9A917F]" />
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[#5B5346]">Dispatch Paused</span>
-            </div>
-            <h2 className="font-['Fraunces'] text-base sm:text-lg font-semibold text-[#1B1712] tracking-tight leading-snug">
-              You are off duty
-            </h2>
-            <p className="text-xs text-[#5B5346] mt-1 leading-relaxed">
-              Dispatch is not sending you offers and your GPS position is not being broadcast.
+          <div data-testid="map-overlay-off-duty" className="w-full max-w-sm text-center">
+            <span className="mx-auto w-14 h-14 rounded-full bg-slate-100 text-ink-muted flex items-center justify-center">
+              <Power className="w-6 h-6" aria-hidden="true" />
+            </span>
+            <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-ink-muted">Dispatch paused</p>
+            <h2 className="mt-1 text-2xl font-bold tracking-tight">You are off duty</h2>
+            <p className="mt-2 text-sm text-ink-soft leading-relaxed">
+              Dispatch is not sending you offers and your GPS position is not being shared.
             </p>
-            <div className="mt-4 pt-3 border-t border-[#E7E0D2] flex items-center justify-between gap-2">
-              <Button
-                type="button"
-                variant="primary"
-                size="sm"
-                onClick={onGoOnline}
-                className="w-full text-xs font-semibold !bg-[#1B1712] hover:!bg-[#2A231C] text-white rounded-[12px] py-2 shadow-xs"
-              >
-                <Power className="w-3.5 h-3.5 mr-1.5" />
-                <span>Go on duty</span>
-              </Button>
-            </div>
+            <Button type="button" variant="primary" size="lg" onClick={onGoOnline} className="mt-6 w-full">
+              <Power className="w-5 h-5" aria-hidden="true" />
+              <span>Go on duty</span>
+            </Button>
           </div>
         )}
 
-        {/* STATE B: IDLE */}
         {liveState === 'idle' && (
-          <div
-            data-testid="map-overlay-idle"
-            className="glass-panel rounded-[18px] p-4 text-[#1B1712] max-w-[270px] sm:max-w-[290px] shadow-xl animate-in fade-in"
-          >
-            <div className="flex items-center justify-between mb-2 pb-1.5 border-b border-[#E7E0D2]">
-              <div className="flex items-center gap-1.5">
-                <MapPin className="w-3.5 h-3.5 text-[#0F766E]" />
-                <h2 className="text-xs font-bold text-[#1B1712] tracking-tight">Indiranagar Hub · Bengaluru Grid</h2>
-              </div>
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            </div>
-
-            {/* List with micro icons */}
-            <div className="space-y-1.5 text-[11px] text-[#5B5346] my-2.5">
-              <div className="flex items-center gap-2">
-                <Truck className="w-3 h-3 text-[#0F766E] shrink-0" />
-                <span className="truncate">
-                  {profile.extraDetails.towRegistrationNumber
-                    ? `Unit: ${profile.extraDetails.towRegistrationNumber}`
-                    : 'Readiness: On Standby'}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <ShieldCheck className="w-3 h-3 text-[#0F766E] shrink-0" />
-                <span className="truncate">
-                  {profile.extraDetails.operatingZone
-                    ? `Zone: ${profile.extraDetails.operatingZone}`
-                    : 'Commercial Roadside Partner'}
-                </span>
-              </div>
-            </div>
-
-            {/* Specified Single Plain Sentence Requirement */}
-            <div className="pt-2 border-t border-[#E7E0D2]">
-              <p className="text-xs font-semibold text-[#1B1712] leading-tight">
-                You're available. Waiting for the next job.
-              </p>
-            </div>
+          <div data-testid="map-overlay-idle" className="w-full max-w-sm text-center">
+            <span className="relative mx-auto flex w-14 h-14">
+              <span className="absolute inset-0 rounded-full bg-brand-500/30 animate-pulse-ring" />
+              <span className="relative w-14 h-14 rounded-full bg-brand-50 text-brand-700 flex items-center justify-center">
+                <ShieldCheck className="w-6 h-6" aria-hidden="true" />
+              </span>
+            </span>
+            <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-status-success">On duty</p>
+            <h2 className="mt-1 text-2xl font-bold tracking-tight">
+              You're available. Waiting for the next job.
+            </h2>
+            <ul className="mt-5 text-sm text-ink-soft space-y-2 text-left inline-block">
+              <li className="flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-brand-700 shrink-0" aria-hidden="true" />
+                <span>Your location is shared with dispatch while you are on duty.</span>
+              </li>
+            </ul>
           </div>
         )}
 
-        {/* STATE C: PENDING OFFER (Intentional Exception: border-neutral-900) */}
         {liveState === 'pending_offer' && offer && (
           <div
             data-testid="map-overlay-pending-offer"
-            className="glass-panel rounded-[18px] p-4 sm:p-5 text-[#1B1712] max-w-xs shadow-2xl border-2 border-neutral-900 animate-in fade-in"
+            className="w-full max-w-sm rounded-card border-2 border-ink p-5 bg-white shadow-float"
           >
-            <div className="flex items-center justify-between gap-2 mb-2 pb-2 border-b border-[#E7E0D2]">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-accent bg-red-50 px-2 py-0.5 rounded-full border border-red-200">
-                Incoming Dispatch Offer
+            <div className="flex items-center justify-between gap-2 pb-3 border-b border-line">
+              <span className="text-xs font-bold uppercase tracking-wide text-emergency-700 bg-emergency-50 px-2.5 py-1 rounded-full border border-emergency-100">
+                Incoming dispatch offer
               </span>
-              <span className="text-[10px] font-bold text-[#0F766E] bg-teal-50 px-2 py-0.5 rounded-full border border-teal-200">
-                Awaiting response
-              </span>
+              <span className="text-xs font-semibold text-brand-800">Awaiting response</span>
             </div>
 
-            <h2 className="font-['Fraunces'] text-sm font-semibold text-[#1B1712] truncate mb-0.5">{offer.serviceName}</h2>
-            <p className="text-[11px] font-mono text-[#5B5346] mb-2">{offer.vehicleNumber}</p>
+            <h2 className="mt-3 text-lg font-bold truncate">{offer.serviceName}</h2>
+            <p className="text-sm font-mono text-ink-soft">{offer.vehicleNumber}</p>
 
             {offer.payoutEstimate !== undefined && (
-              <div className="mb-2 p-2 bg-[#FBF8F1] rounded-[10px] border border-[#E7E0D2] flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-[#9A917F]">Est. Payout</span>
-                <span className="font-['Fraunces'] text-base font-semibold text-[#1B1712] tabular-nums">{formatRupees(offer.payoutEstimate)}</span>
+              <div className="mt-3 p-3 rounded-control bg-slate-50 border border-line flex items-center justify-between">
+                <span className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Est. payout</span>
+                <span className="text-lg font-bold tnum">{formatRupees(offer.payoutEstimate)}</span>
               </div>
             )}
 
-            <div className="text-[11px] text-[#5B5346] mb-3 space-y-1">
-              <p className="truncate">📍 {offer.pickupAddressText}</p>
-              <p className="text-[#9A917F] tabular-nums">ETA: ~{formatDistance(offer.distanceAtOfferM)} away</p>
+            <div className="mt-3 text-sm text-ink-soft space-y-1">
+              <p className="flex gap-2">
+                <MapPin className="w-4 h-4 mt-0.5 shrink-0 text-brand-700" aria-hidden="true" />
+                <span className="break-words">{offer.pickupAddressText}</span>
+              </p>
+              <p className="tnum text-ink-muted">{formatDistance(offer.distanceAtOfferM)} from you</p>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="mt-5 flex items-center gap-3">
               <Button
                 type="button"
                 variant="outline"
-                size="sm"
+                size="lg"
                 disabled={isResponding}
                 onClick={() => reject(offer.id)}
-                className="flex-1 text-xs font-semibold text-[#5B5346] !border-[#E7E0D2] hover:bg-[#F6F1E6] rounded-[12px]"
+                className="flex-1 !border-line !text-ink-soft hover:!bg-slate-50"
               >
                 Reject
               </Button>
               <Button
                 type="button"
                 variant="primary"
-                size="sm"
+                size="lg"
                 disabled={isResponding}
                 onClick={handleAccept}
-                className="flex-1 text-xs font-semibold !bg-accent hover:!bg-accent-hover text-white rounded-[12px] shadow-sm border-0"
+                className="flex-1"
               >
                 Accept Job
               </Button>
@@ -577,58 +463,48 @@ const LiveZoneMap: React.FC<LiveZoneMapProps> = ({
           </div>
         )}
 
-        {/* STATE D: ACTIVE JOB */}
         {liveState === 'active_job' && activeJob && (
           <div
             data-testid="map-overlay-active-job"
-            className="glass-panel rounded-[18px] p-4 sm:p-5 text-[#1B1712] max-w-xs shadow-2xl animate-in fade-in"
+            className="w-full max-w-sm rounded-card border border-line p-5 bg-white shadow-card"
           >
-            <div className="flex items-center gap-2 mb-2 pb-1.5 border-b border-[#E7E0D2]">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800">Job In Progress</span>
+            <div className="flex items-center gap-2 pb-3 border-b border-line">
+              <span className="w-2 h-2 rounded-full bg-status-success animate-pulse" />
+              <span className="text-xs font-bold uppercase tracking-wide text-status-success">Job in progress</span>
             </div>
-            <h2 className="font-['Fraunces'] text-sm font-semibold text-[#1B1712] truncate">{activeJob.service?.name || 'Roadside Assistance'}</h2>
-            <p className="text-[11px] font-mono text-[#5B5346] mb-2">{activeJob.vehicle_number}</p>
-            <div className="mb-3">
+            <h2 className="mt-3 text-lg font-bold truncate">{activeJob.service?.name || 'Roadside assistance'}</h2>
+            <p className="text-sm font-mono text-ink-soft mb-3">{activeJob.vehicle_number}</p>
+            <div className="mb-4">
               <JobTimeline status={activeJob.status} variant="compact" />
             </div>
             <Link
               to={`/partner/jobs/${activeJob.id}`}
-              className="w-full flex items-center justify-center gap-1 text-xs font-semibold text-[#1B1712] bg-[#F6F1E6] hover:bg-[#EFE8DA] border border-[#E7E0D2] py-2 rounded-[12px] transition-all"
+              className="w-full inline-flex items-center justify-center gap-1 min-h-[48px] text-sm font-semibold text-white bg-brand-700 hover:bg-brand-800 rounded-control transition-colors"
             >
-              <span>View Full Progress</span>
-              <ChevronRight className="w-3.5 h-3.5" />
+              <span>View full progress</span>
+              <ChevronRight className="w-4 h-4" aria-hidden="true" />
             </Link>
           </div>
         )}
       </div>
 
-      {/* Bottom Floating Bar: the unit this map is actually tracking.
-          It replaces a dock of five controls where "Filter zones", "Dispatch"
-          and "Recenter" did nothing at all and the other two were duplicates of
-          sidebar entries one click away. */}
-      <div className="relative z-20 p-4 sm:p-5 pointer-events-none">
-        <div className="pointer-events-auto glass-dock rounded-[14px] px-3.5 py-2.5 flex items-center justify-between gap-3 shadow-md border border-[#E7E0D2]">
-          <div className="flex items-center gap-2 min-w-0">
-            <Truck className="w-4 h-4 text-[#0F766E] shrink-0" />
-            <div className="min-w-0">
-              <div className="text-[11px] font-bold text-[#1B1712] font-mono truncate">
-                {profile.extraDetails.towRegistrationNumber}
-              </div>
-              <div className="text-[9px] text-[#5B5346] font-medium truncate">
-                {profile.extraDetails.workshopName} · {profile.extraDetails.teamSize} on shift
-              </div>
+      {/* Footer: unit and broadcast state */}
+      <div className="px-4 sm:px-5 py-3 border-t border-line flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 min-w-0">
+          <Truck className="w-4 h-4 text-brand-700 shrink-0" aria-hidden="true" />
+          <div className="min-w-0 text-sm">
+            <div className="font-semibold font-mono truncate">
+              {profile.name}
             </div>
           </div>
-
-          <div className="flex items-center gap-1.5 shrink-0">
-            <span
-              className={`w-1.5 h-1.5 rounded-full ${isOffDuty ? 'bg-neutral-400' : 'bg-emerald-500 animate-pulse'}`}
-            />
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[#5B5346]">
-              {isOffDuty ? 'Not broadcasting' : 'Broadcasting'}
-            </span>
-          </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <span
+            className={`w-2 h-2 rounded-full ${isOffDuty ? 'bg-slate-300' : 'bg-status-success animate-pulse'}`}
+          />
+          <span className="text-xs font-semibold uppercase tracking-wide text-ink-soft">
+            {isOffDuty ? 'Not sharing location' : 'Sharing location'}
+          </span>
         </div>
       </div>
     </section>
@@ -662,14 +538,14 @@ const EarningsAndSettlementsCard: React.FC = () => {
             wrapped "Earnings & Settlements" onto two lines in this column while
             every neighbouring card heading stayed on one. */}
         <div className="flex items-center justify-between gap-2 mb-1.5">
-          <h2 className="font-['Fraunces'] font-semibold text-lg text-[#1B1712] tracking-tight truncate min-w-0">
+          <h2 className="font-semibold text-lg text-[#0F172A] tracking-tight truncate min-w-0">
             Earnings &amp; Settlements
           </h2>
 
           <div className="flex items-center gap-1.5 shrink-0">
             {changePct !== null && !privacyMode && (
               <span
-                className={`inline-flex items-center gap-1 text-[10px] font-bold ${
+                className={`inline-flex items-center gap-1 text-xs font-bold ${
                   changePct >= 0 ? 'text-[#0F766E]' : 'text-rose-700'
                 }`}
               >
@@ -681,7 +557,7 @@ const EarningsAndSettlementsCard: React.FC = () => {
                   {changePct >= 0 ? '+' : '−'}
                   {Math.abs(changePct).toFixed(1)}%
                 </span>
-                <span className="font-medium text-[#9A917F]">
+                <span className="font-medium text-[#64748B]">
                   {window === 'today' ? 'vs yesterday' : 'vs last week'}
                 </span>
               </span>
@@ -692,7 +568,7 @@ const EarningsAndSettlementsCard: React.FC = () => {
               aria-checked={privacyMode}
               aria-label="Hide earnings figures"
               onClick={() => updateConsoleSettings({ privacyMode: !privacyMode })}
-              className="p-1 text-[#9A917F] hover:text-[#1B1712] transition-colors shrink-0"
+              className="p-1 text-[#64748B] hover:text-[#0F172A] transition-colors shrink-0"
               title={privacyMode ? 'Show earnings figures' : 'Hide earnings figures'}
             >
               {privacyMode ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
@@ -703,20 +579,20 @@ const EarningsAndSettlementsCard: React.FC = () => {
         <div className="flex items-center justify-between gap-3">
           {/* Settled-to-date only. "Today" lived here as well as in the chart
               callout, so the same figure was printed twice on one card. */}
-          <span className="text-xs text-[#5B5346]">
+          <span className="text-xs text-[#475569]">
             Settled to date:{' '}
-            <strong className="text-[#1B1712] tabular-nums">{privacyMode ? '₹••••' : formatRupees(earnings?.amountEarned ?? 0)}</strong>
+            <strong className="text-[#0F172A] tabular-nums">{privacyMode ? '₹••••' : formatRupees(earnings?.amountEarned ?? 0)}</strong>
             <span className="text-[#C9C0AE] mx-1.5">·</span>
-            <strong className="text-[#1B1712] tabular-nums">{earnings?.jobsCompleted ?? 0}</strong> jobs{' '}
+            <strong className="text-[#0F172A] tabular-nums">{earnings?.jobsCompleted ?? 0}</strong> jobs{' '}
             {window === 'today' ? 'today' : 'this week'}
           </span>
 
           {/* Period tabs */}
-          <div className="flex items-center gap-1 text-[10px] font-semibold text-[#9A917F] shrink-0">
+          <div className="flex items-center gap-1 text-xs font-semibold text-[#64748B] shrink-0">
             <button
               type="button"
               onClick={() => setWindow('today')}
-              className={`px-1.5 py-0.5 rounded-[6px] ${window === 'today' ? 'text-[#1B1712] font-bold bg-[#F6F1E6]' : 'hover:text-[#1B1712]'}`}
+              className={`px-1.5 py-0.5 rounded-[6px] ${window === 'today' ? 'text-[#0F172A] font-bold bg-[#F6F8FA]' : 'hover:text-[#0F172A]'}`}
             >
               Today
             </button>
@@ -724,7 +600,7 @@ const EarningsAndSettlementsCard: React.FC = () => {
             <button
               type="button"
               onClick={() => setWindow('week')}
-              className={`px-1.5 py-0.5 rounded-[6px] ${window === 'week' ? 'text-[#1B1712] font-bold bg-[#F6F1E6]' : 'hover:text-[#1B1712]'}`}
+              className={`px-1.5 py-0.5 rounded-[6px] ${window === 'week' ? 'text-[#0F172A] font-bold bg-[#F6F8FA]' : 'hover:text-[#0F172A]'}`}
             >
               This Week
             </button>
@@ -735,21 +611,21 @@ const EarningsAndSettlementsCard: React.FC = () => {
       {/* Honest Empty State / Real Payout Summary */}
       <div className="relative pt-4 pb-2 flex-1 flex flex-col justify-center">
         {(earnings?.amountEarned ?? 0) === 0 ? (
-          <div className="rounded-[12px] bg-[#F6F1E6]/70 border border-[#E7E0D2] p-5 text-center flex flex-col items-center justify-center my-auto">
-            <div className="text-xs font-semibold text-[#1B1712]">No settled payouts yet</div>
-            <p className="text-[11px] text-[#5B5346] mt-1 max-w-xs">
+          <div className="rounded-[12px] bg-[#F6F8FA]/70 border border-[#EEF2F6] p-5 text-center flex flex-col items-center justify-center my-auto">
+            <div className="text-xs font-semibold text-[#0F172A]">No settled payouts yet</div>
+            <p className="text-xs text-[#475569] mt-1 max-w-xs">
               Payouts are settled automatically upon job completion. Active dispatch assignments will appear here.
             </p>
           </div>
         ) : (
-          <div className="bg-[#FBF8F1] rounded-[12px] p-5 border border-[#E7E0D2] text-center my-auto">
-            <span className="text-[10px] font-bold text-[#9A917F] uppercase tracking-wider">
+          <div className="bg-[#FFFFFF] rounded-[12px] p-5 border border-[#EEF2F6] text-center my-auto">
+            <span className="text-xs font-bold text-[#64748B] uppercase tracking-wider">
               {window === 'today' ? "Today's Settled Payout" : "This Week's Settled Payout"}
             </span>
-            <div className="font-['Fraunces'] text-2xl font-bold text-[#0F766E] mt-1.5 tabular-nums">
+            <div className="text-2xl font-bold text-[#0F766E] mt-1.5 tabular-nums">
               {privacyMode ? '₹••••' : formatRupees(earnings?.amountEarned ?? 0)}
             </div>
-            <div className="text-xs text-[#5B5346] mt-1">
+            <div className="text-xs text-[#475569] mt-1">
               {earnings?.jobsCompleted ?? 0} jobs completed
             </div>
           </div>
@@ -775,7 +651,7 @@ const RecentDispatchActivityCard: React.FC = () => {
       aria-label="Recent Jobs"
       className="bento-card p-5 flex flex-col h-[355px] overflow-hidden"
     >
-      <h2 className="font-['Fraunces'] font-semibold text-lg text-[#1B1712] tracking-tight mb-3 shrink-0">
+      <h2 className="font-semibold text-lg text-[#0F172A] tracking-tight mb-3 shrink-0">
         Recent Dispatch Activity
       </h2>
 
@@ -783,14 +659,14 @@ const RecentDispatchActivityCard: React.FC = () => {
         {isLoading ? (
           <div className="space-y-2 py-2">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="h-12 rounded-[10px] bg-[#F6F1E6] animate-pulse" />
+              <div key={i} className="h-12 rounded-[10px] bg-[#F6F8FA] animate-pulse" />
             ))}
           </div>
         ) : jobs.length === 0 ? (
           <div className="flex-1 h-full flex flex-col items-center justify-center text-center p-4">
-            <Truck className="w-7 h-7 text-[#9A917F] mb-1.5 opacity-50" />
-            <p className="text-xs font-bold text-[#1B1712]">No recent dispatch activity</p>
-            <p className="text-[11px] text-[#5B5346] mt-0.5 max-w-[200px]">
+            <Truck className="w-7 h-7 text-[#64748B] mb-1.5 opacity-50" />
+            <p className="text-xs font-bold text-[#0F172A]">No recent dispatch activity</p>
+            <p className="text-xs text-[#475569] mt-0.5 max-w-[200px]">
               Assigned and completed roadside jobs will appear here.
             </p>
           </div>
@@ -806,13 +682,13 @@ const RecentDispatchActivityCard: React.FC = () => {
               return (
                 <div
                   key={job.id}
-                  className="flex items-center gap-2.5 p-2 rounded-[10px] hover:bg-[#F6F1E6]/70 transition-colors"
+                  className="flex items-center gap-2.5 p-2 rounded-[10px] hover:bg-[#F6F8FA]/70 transition-colors"
                 >
                   <div className="text-center w-8 shrink-0">
-                    <span className="block text-[9px] text-[#9A917F] font-semibold uppercase leading-none">
+                    <span className="block text-xs text-[#64748B] font-semibold uppercase leading-none">
                       {day}
                     </span>
-                    <span className="block font-['Fraunces'] text-sm font-semibold text-[#1B1712] leading-none mt-0.5">
+                    <span className="block text-sm font-semibold text-[#0F172A] leading-none mt-0.5">
                       {date}
                     </span>
                   </div>
@@ -822,19 +698,19 @@ const RecentDispatchActivityCard: React.FC = () => {
                   </span>
 
                   <div className="min-w-0 flex-1">
-                    <h3 className="text-xs font-bold text-[#1B1712] truncate leading-tight">
+                    <h3 className="text-xs font-bold text-[#0F172A] truncate leading-tight">
                       {job.service_name || 'Roadside Job'}{' '}
                       {job.vehicle_number && (
-                        <span className="font-mono font-medium text-[#5B5346]">{job.vehicle_number}</span>
+                        <span className="font-mono font-medium text-[#475569]">{job.vehicle_number}</span>
                       )}
                     </h3>
-                    <p className="text-[10px] text-[#5B5346] truncate">{detail}</p>
+                    <p className="text-xs text-[#475569] truncate">{detail}</p>
                   </div>
 
                   <span
-                    className={`text-[9px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${
+                    className={`text-xs font-semibold px-2 py-0.5 rounded-full shrink-0 ${
                       job.status === 'in_progress' || job.status === 'partner_en_route'
-                        ? 'bg-[#1B1712] text-white font-bold'
+                        ? 'bg-[#0F172A] text-white font-bold'
                         : 'bg-emerald-50 text-emerald-800 border border-emerald-200'
                     }`}
                   >
@@ -850,7 +726,7 @@ const RecentDispatchActivityCard: React.FC = () => {
                   <Link
                     to={`/partner/jobs/${job.id}`}
                     aria-label={`Open job ${job.id}`}
-                    className="p-1 text-[#9A917F] hover:text-[#1B1712] transition-colors shrink-0"
+                    className="p-1 text-[#64748B] hover:text-[#0F172A] transition-colors shrink-0"
                   >
                     <ChevronRight className="w-3.5 h-3.5" />
                   </Link>
@@ -864,99 +740,41 @@ const RecentDispatchActivityCard: React.FC = () => {
   );
 };
 
-/* ── 5. Right Top: Fleet & Equipment Readiness ────────────────────────────── */
+/* ── 5. Right Top: services linked to this partner (from the backend) ────── */
 
 const FleetAndEquipmentCard: React.FC<{ profile: PartnerProfile }> = ({ profile }) => {
-  const activeServices = profile.services.filter((service) => service.active);
-  const unitLabel =
-    profile.extraDetails.mechanicUnitType === 'mobile_van'
-      ? 'Mobile workshop van'
-      : profile.extraDetails.mechanicUnitType === 'bike_toolkit'
-        ? 'Bike toolkit unit'
-        : 'Workshop dispatch';
+  const { data: services, isLoading, isError } = usePartnerServices();
 
   return (
-    <section
-      aria-label="Service Capabilities"
-      className="bento-card p-5 flex flex-col justify-between h-[345px]"
-    >
-      <div className="min-h-0 flex flex-col">
-        <h2 className="font-['Fraunces'] font-semibold text-lg text-[#1B1712] tracking-tight mb-3">
-          Fleet &amp; Equipment
-        </h2>
+    <section aria-label="Service Capabilities" className="bento-card p-5 flex flex-col">
+      <h2 className="font-semibold text-lg tracking-tight mb-1">Your services</h2>
+      <p className="text-sm text-ink-soft mb-4">What dispatch can offer you.</p>
 
-        {/* The unit that is actually on the road, read from the profile rather
-            than hard-coded. This slot used to hold three stock photographs of
-            trucks that were not this partner's trucks. */}
-        <div className="rounded-[12px] bg-[#FBF8F1] border border-[#E7E0D2] px-3.5 py-3 mb-3">
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <h3 className="text-xs font-bold text-[#1B1712] leading-tight truncate">{unitLabel}</h3>
-              <p className="text-[10px] font-mono text-[#5B5346] mt-0.5 truncate">
-                {profile.extraDetails.towRegistrationNumber}
-              </p>
-            </div>
-            <span className="text-[9px] font-bold uppercase tracking-wider text-[#0F766E] bg-[#0F766E]/10 border border-[#0F766E]/20 px-2 py-0.5 rounded-full shrink-0">
-              {EQUIPMENT_TYPES.find((e) => e.code === profile.extraDetails.towTruckType)?.label ?? 'Recovery unit'}
-            </span>
-          </div>
-          <p className="text-[10px] text-[#5B5346] mt-2 leading-snug">
-            {profile.extraDetails.towCapacity}
-            {profile.extraDetails.winchEquipped ? ' · Winch equipped' : ''}
-          </p>
-        </div>
+      {isLoading ? (
+        <p className="text-sm text-ink-muted" role="status">Loading…</p>
+      ) : isError ? (
+        <p className="text-sm text-emergency-700" role="alert">We could not load your services.</p>
+      ) : (services ?? []).length === 0 ? (
+        <p className="text-sm text-ink-soft">
+          No services are linked yet. Choose them in Preferences to start receiving offers.
+        </p>
+      ) : (
+        <ul className="flex flex-wrap gap-2">
+          {(services ?? []).map((service) => (
+            <li
+              key={service.service_id}
+              className="text-sm font-semibold bg-canvas border border-line px-3 py-1 rounded-full"
+            >
+              {service.name}
+            </li>
+          ))}
+        </ul>
+      )}
 
-        {/* What this unit is dispatched for */}
-        <div className="min-h-0 flex-1 overflow-hidden">
-          <div className="text-[9px] font-bold uppercase tracking-wider text-[#9A917F] mb-1.5">
-            Accepting {activeServices.length} of {profile.services.length} services
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {activeServices.slice(0, 4).map((service) => (
-              <span
-                key={service.id}
-                className="text-[10px] font-semibold text-[#1B1712] bg-[#F6F1E6] border border-[#E7E0D2] px-2 py-0.5 rounded-full truncate max-w-full"
-              >
-                {service.name}
-              </span>
-            ))}
-            {activeServices.length > 4 && (
-              <span className="text-[10px] font-semibold text-[#5B5346] px-1 py-0.5">
-                +{activeServices.length - 4} more
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* 2-Column Metrics — both measured, both from the profile. A third
-            column reading "24/7 · Active readiness" was restating the duty
-            toggle as if it were a statistic. */}
-        <div className="grid grid-cols-2 gap-2 py-2 border-t border-b border-[#E7E0D2] text-left mt-3">
-          <div>
-            <div className="text-xs font-bold text-[#1B1712] tabular-nums">
-              {profile.extraDetails.towCoverageRadiusKm} km
-            </div>
-            <div className="text-[9px] text-[#9A917F] font-medium">Coverage radius</div>
-          </div>
-          <div>
-            <div className="text-xs font-bold text-[#1B1712] tabular-nums">
-              {profile.extraDetails.availabilityMode === '24_7' ? '24 / 7' : 'Daytime'}
-            </div>
-            <div className="text-[9px] text-[#9A917F] font-medium">Availability window</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Action Row */}
-      <div className="flex items-center justify-between gap-2 pt-2">
-        <span className="px-3.5 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 font-bold text-xs flex items-center gap-1">
-          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-          <span>Active on grid</span>
-        </span>
-        <span className="text-[10px] text-[#9A917F] font-medium truncate">
-          {profile.extraDetails.operatingZone}
-        </span>
-      </div>
+      <p className="mt-4 pt-3 border-t border-line text-xs text-ink-muted">
+        {profile.name ? `${profile.name} · ` : ''}Services that need equipment (like towing) are enabled once
+        the Sahayak team has verified it.
+      </p>
     </section>
   );
 };
@@ -975,42 +793,36 @@ const PartnerStandingCard: React.FC<{ profile: PartnerProfile }> = ({ profile })
       className="bento-card p-5 flex flex-col justify-between h-[355px]"
     >
       <div>
-        <h2 className="font-['Fraunces'] font-semibold text-lg text-[#1B1712] tracking-tight mb-3">
+        <h2 className="font-semibold text-lg text-[#0F172A] tracking-tight mb-3">
           Partner Standing
         </h2>
 
         {/* Identity — one portrait, at the size an avatar is actually read at.
             A fanned stack of three stock headshots used to fill the top half of
             this card and say nothing about standing. */}
-        <div className="flex items-center gap-3 pb-3 border-b border-[#E7E0D2]">
-          <img
-            src="/assets/partner_portrait.jpg"
-            alt={profile.name}
-            className="w-11 h-11 rounded-full object-cover ring-2 ring-[#0F766E]/40 shrink-0"
-          />
+        <div className="flex items-center gap-3 pb-3 border-b border-[#EEF2F6]">
+          <span aria-hidden="true" className="w-11 h-11 rounded-full   shrink-0 flex items-center justify-center bg-brand-700 text-white font-semibold">{profile.name.trim().charAt(0).toUpperCase()}</span>
           <div className="min-w-0">
-            <div className="text-xs font-bold text-[#1B1712] truncate">{profile.name}</div>
-            <div className="text-[10px] text-[#5B5346] truncate mt-0.5">
-              {profile.extraDetails.workshopName} · {profile.extraDetails.teamSize} on the roster
-            </div>
+            <div className="text-sm font-bold text-[#0F172A] truncate">{profile.name || 'Service partner'}</div>
+            <div className="text-xs text-[#475569] truncate mt-0.5">{profile.phone}</div>
           </div>
         </div>
 
         {/* The headline number gets headline treatment. */}
         <div className="flex items-end justify-between gap-3 pt-3.5">
           <div>
-            <div className="font-['Fraunces'] text-3xl font-semibold text-[#1B1712] tabular-nums leading-none">
+            <div className="text-3xl font-semibold text-[#0F172A] tabular-nums leading-none">
               {rating > 0 ? rating.toFixed(1) : '—'}
             </div>
-            <div className="text-[10px] text-[#9A917F] font-medium mt-1.5">
+            <div className="text-xs text-[#64748B] font-medium mt-1.5">
               Rating over {stats?.ratingCount ?? 0} jobs
             </div>
           </div>
           <div className="text-right">
-            <div className="font-['Fraunces'] text-3xl font-semibold text-[#1B1712] tabular-nums leading-none">
+            <div className="text-3xl font-semibold text-[#0F172A] tabular-nums leading-none">
               {stats?.lifetimeJobs ?? 0}
             </div>
-            <div className="text-[10px] text-[#9A917F] font-medium mt-1.5">Jobs completed</div>
+            <div className="text-xs text-[#64748B] font-medium mt-1.5">Jobs completed</div>
           </div>
         </div>
 
@@ -1018,10 +830,10 @@ const PartnerStandingCard: React.FC<{ profile: PartnerProfile }> = ({ profile })
             it gets a bar rather than another number in a row of numbers. */}
         <div className="mt-4">
           <div className="flex items-center justify-between mb-1.5">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[#9A917F]">
+            <span className="text-xs font-bold uppercase tracking-wider text-[#64748B]">
               Offer acceptance
             </span>
-            <span className="text-[11px] font-bold text-[#1B1712] tabular-nums">{acceptance}%</span>
+            <span className="text-xs font-bold text-[#0F172A] tabular-nums">{acceptance}%</span>
           </div>
           <div
             role="progressbar"
@@ -1036,13 +848,9 @@ const PartnerStandingCard: React.FC<{ profile: PartnerProfile }> = ({ profile })
         </div>
       </div>
 
-      <div className="pt-3 border-t border-[#E7E0D2] flex items-center gap-1.5">
+      <div className="pt-3 border-t border-[#EEF2F6] flex items-center gap-1.5">
         <ShieldCheck className="w-3.5 h-3.5 text-[#0F766E] shrink-0" />
-        <span className="text-[11px] font-bold text-[#0F766E]">Tier 1 Verified</span>
-        <span className="text-[10px] text-[#9A917F] ml-auto">
-          {profile.verificationItems.filter((item) => item.status === 'complete').length}/
-          {profile.verificationItems.length} checks cleared
-        </span>
+        <span className="text-xs font-bold text-[#0F766E]">{verificationBadgeLabel(stats?.verificationStatus)}</span>
       </div>
     </section>
   );

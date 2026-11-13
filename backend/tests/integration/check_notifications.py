@@ -416,6 +416,11 @@ async def accepted_job(c, tag: str) -> str:
 
 
 async def step(c, job_id: str, status: str, price: float | None = None) -> httpx.Response:
+    # in_progress is POST /start only (with the owner's code, read from the row).
+    if status == "in_progress":
+        return await c.post(f"/api/v1/jobs/{job_id}/start",
+                            json={"start_code": one("SELECT start_code FROM jobs WHERE id = %(i)s", {"i": job_id})["start_code"]},
+                            headers=hdr(partners["alpha"]["token"]))
     body: dict = {"status": status}
     if price is not None:
         body["price_final"] = price

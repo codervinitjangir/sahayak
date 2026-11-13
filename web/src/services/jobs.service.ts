@@ -159,6 +159,18 @@ export const jobsService = {
   },
 
   /**
+   * Partner verifies the owner's 4-digit start code; the only route from
+   * partner_en_route to in_progress. 400 INVALID_START_CODE on a wrong code.
+   */
+  async startJob(jobId: string, startCode: string): Promise<JobStatusTransitionResponse> {
+    const res = await apiClient<JobStatusTransitionResponse>(`/jobs/${jobId}/start`, {
+      method: 'POST',
+      body: JSON.stringify({ start_code: startCode }),
+    });
+    return res.data;
+  },
+
+  /**
    * Reads ratings and whether the caller may rate this completed job.
    * Real endpoint: GET /api/v1/jobs/{job_id}/ratings (FRONTEND-GUIDE §2.6)
    */

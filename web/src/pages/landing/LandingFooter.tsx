@@ -48,7 +48,7 @@ export const LandingFooter: React.FC = () => {
           <ul className="landing-footer__col-links">
             <li><a href="#how-it-works">How It Works</a></li>
             <li><a href="#features">Dispatch Engine</a></li>
-            <li><a href="#pricing">Fleet Pricing</a></li>
+            <li><a href="#pricing">Pricing Note</a></li>
             <li><Link to="/owner">Owner Portal</Link></li>
             <li><Link to="/owner/request">Request Help</Link></li>
           </ul>
@@ -80,10 +80,8 @@ export const LandingFooter: React.FC = () => {
           <h4 className="landing-footer__col-title">Safety &amp; Trust</h4>
           <ul className="landing-footer__col-links">
             <li><a href="#features">Verified Partners</a></li>
-            <li><a href="#features">Fixed Rate Card</a></li>
-            <li><a href="#features">GPS Live Tracking</a></li>
+            <li><a href="#features">Live Status Tracking</a></li>
             <li><a href="#features">Emergency SOP</a></li>
-            <li><a href="#features">Escalation Desk</a></li>
           </ul>
         </div>
 
@@ -92,9 +90,8 @@ export const LandingFooter: React.FC = () => {
           <ul className="landing-footer__col-links">
             <li><a href="#top">About Us</a></li>
             <li><a href="#top">Bengaluru Network</a></li>
-            <li><a href="#top">Careers</a></li>
-            <li><a href="#top">Privacy Policy</a></li>
-            <li><a href="#top">Terms of Service</a></li>
+            <li><Link to="/privacy">Privacy Policy</Link></li>
+            <li><Link to="/terms">Terms of Service</Link></li>
           </ul>
         </div>
       </div>

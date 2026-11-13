@@ -22,7 +22,6 @@ export interface PartnerAvailability {
 }
 
 /** Default coordinates for Bengaluru center when GPS is disabled in browser */
-const BENGALURU_COORDS = { lat: 12.9716, lng: 77.5946 };
 
 /**
  * The one place availability is read and written.
@@ -48,21 +47,24 @@ export function usePartnerAvailability(): PartnerAvailability {
 
   // Report location to backend and update store fix timestamp
   const reportLocationFix = useCallback(async () => {
+    // A fix is recorded only once the backend has accepted a real GPS reading.
+    // There is deliberately no fallback coordinate: reporting a made-up point
+    // would put this partner into dispatch for jobs they are nowhere near.
     const postCoords = (lat: number, lng: number) => {
-      recordLocationFix();
-      partnerService.reportLocation(lat, lng).catch((err) => {
-        console.warn('[usePartnerAvailability] Location beacon failed:', err);
-      });
+      partnerService
+        .reportLocation(lat, lng)
+        .then(() => recordLocationFix())
+        .catch((err) => {
+          console.warn('[usePartnerAvailability] Location beacon failed:', err);
+        });
     };
 
     if (typeof navigator !== 'undefined' && navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => postCoords(pos.coords.latitude, pos.coords.longitude),
-        () => postCoords(BENGALURU_COORDS.lat, BENGALURU_COORDS.lng),
-        { enableHighAccuracy: true, timeout: 5000 }
+        (err) => console.warn('[usePartnerAvailability] GPS unavailable — location not reported:', err.message),
+        { enableHighAccuracy: true, timeout: 10000 }
       );
-    } else {
-      postCoords(BENGALURU_COORDS.lat, BENGALURU_COORDS.lng);
     }
   }, []);
 
@@ -83,7 +85,9 @@ export function usePartnerAvailability(): PartnerAvailability {
       setPartnerAvailability(next);
       if (import.meta.env.MODE !== 'test') {
         partnerService.setAvailability(next).catch((err) => {
+          // The server did not take the change, so the switch must not claim it did.
           console.warn('[usePartnerAvailability] Failed to sync availability to server:', err);
+          setPartnerAvailability(!next);
         });
         if (next) {
           reportLocationFix();

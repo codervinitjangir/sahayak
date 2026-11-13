@@ -4,12 +4,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import {
   useFonts,
-  Poppins_400Regular,
-  Poppins_500Medium,
-  Poppins_600SemiBold,
-  Poppins_700Bold,
-  Poppins_800ExtraBold,
-} from "@expo-google-fonts/poppins";
+  Inter_400Regular,
+  Inter_500Medium,
+  Inter_600SemiBold,
+  Inter_700Bold,
+} from "@expo-google-fonts/inter";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import * as SplashScreen from "expo-splash-screen";
@@ -72,11 +71,10 @@ class ErrorBoundary extends React.Component<
 
 export default function App() {
   const [fontsLoaded, fontError] = useFonts({
-    Poppins_400Regular,
-    Poppins_500Medium,
-    Poppins_600SemiBold,
-    Poppins_700Bold,
-    Poppins_800ExtraBold,
+    Inter_400Regular,
+    Inter_500Medium,
+    Inter_600SemiBold,
+    Inter_700Bold,
   });
 
   const [splashFinished, setSplashFinished] = useState(false);
@@ -94,7 +92,7 @@ export default function App() {
         <ErrorBoundary>
           <QueryClientProvider client={queryClient}>
             <StatusBar style="auto" />
-            <RootNavigator />
+            {(fontsLoaded || fontError) && <RootNavigator />}
 
             {/* ── SAHAYAK OPENING LAUNCH SEQUENCE (REVEALS FIRST SCREEN AT 1.76s) ── */}
             {Platform.OS !== "web" && !splashFinished && (

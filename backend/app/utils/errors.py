@@ -97,6 +97,11 @@ class ErrorCode:
     # thing that can be wrong is the job being over already, and the client's
     # remedy is specific: stop offering a cancel button for this job.
     JOB_ALREADY_TERMINAL = "JOB_ALREADY_TERMINAL"
+    # The 4-digit code the owner read out does not match the one stored on the
+    # job. Its own code because the client's remedy is specific — re-ask the
+    # customer — and because it must stay distinguishable from a generic
+    # validation failure on the same request.
+    INVALID_START_CODE = "INVALID_START_CODE"
 
     # Ratings
     #

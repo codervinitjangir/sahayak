@@ -37,6 +37,7 @@ from app.schemas.partner import (
     PartnerAvailabilityRequest,
     PartnerAvailabilityResponse,
     PartnerCreateRequest,
+    PartnerEarningsResponse,
     PartnerLocationRequest,
     PartnerLocationResponse,
     PartnerOfferItem,
@@ -169,6 +170,48 @@ async def get_my_stats(
     """
     stats = await partner_service.get_partner_stats(db, identity)
     return envelope(stats)
+
+
+@router.get(
+    "/me/services",
+    response_model=ApiResponse[PartnerServicesResponse],
+    status_code=status.HTTP_200_OK,
+    summary="List the services the caller offers",
+)
+async def list_my_services(
+    identity: Identity = Depends(require_partner),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[PartnerServicesResponse]:
+    """Every service this partner is linked to, with its base price.
+
+    The read side of POST /partners/{partner_id}/services. A partner with no
+    linked services gets an empty list, not a 404: not having declared coverage
+    yet is an ordinary pre-verification state, and dispatch simply will not
+    offer them work.
+    """
+    services = await partner_service.get_partner_services(db, identity)
+    return envelope(services)
+
+
+@router.get(
+    "/me/earnings",
+    response_model=ApiResponse[PartnerEarningsResponse],
+    status_code=status.HTTP_200_OK,
+    summary="Get the caller's completed-job earnings",
+)
+async def get_my_earnings(
+    identity: Identity = Depends(require_partner),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[PartnerEarningsResponse]:
+    """Today, this-week and lifetime payouts for the calling partner.
+
+    Sums jobs.price_final over completed jobs where this partner holds the
+    completed assignment. Calendar boundaries are IST. A partner with no
+    completed work gets zeros rather than a 404 — that is every partner's
+    first day.
+    """
+    earnings = await partner_service.get_partner_earnings(db, identity)
+    return envelope(earnings)
 
 
 @router.post(
