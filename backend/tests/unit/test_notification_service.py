@@ -211,6 +211,7 @@ def test_every_message_is_reachable():
     reachable = set(EVENT_FOR_STATUS.values()) | {
         "job_cancelled_by_owner",
         "job_cancelled_by_partner",
+        "job_cancelled_by_support",  # actor_role="admin", ADR-024
         "job_offered",
     }
     assert set(NOTIFICATION_EVENTS) == reachable

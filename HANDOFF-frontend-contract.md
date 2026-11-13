@@ -2241,3 +2241,13 @@ Callers: job owner, assigned partner, or admin; anyone else gets 404 `JOB_NOT_FO
   - Calling it for a job in any other status is harmless (`searched: false`).
   - 429 `RATE_LIMITED` above 12 calls/min per job.
   - Web `JobTrackingPage` and mobile `OwnerHelpFlowScreen` already do this.
+
+### 17.6 Admin back office (ADR-024, 2026-11-14)
+All `require_admin`; anyone else 403. Every write is audited in the same transaction.
+- `GET /api/v1/admin/jobs?status=live|all|<job status>&q=&limit=50&offset=0` → `{items, total, limit, offset}`. Items carry owner and partner name/phone, newest `assignment_status`, prices, timestamps. `q` matches owner name/phone, vehicle number, address. Unknown `status` → 400.
+- `POST /api/v1/admin/jobs/{job_id}/cancel` body `{reason}` (3–500 chars, required). 409 `JOB_ALREADY_TERMINAL` for completed/cancelled. Owner **and** partners get notification event `job_cancelled_by_support`.
+- `GET /api/v1/admin/users?q=&limit&offset` → owners with `job_count`, `has_login`, `suspended_at`, `suspension_reason`.
+- `PATCH /api/v1/admin/users/{user_id}/suspension` body `{suspended: bool, reason?}`. Idempotent. A suspended owner gets **403 `ACCOUNT_SUSPENDED`** on every authenticated request; clients should show "account suspended, contact support" for that code.
+- `GET /api/v1/admin/audit-log?target_type=job|user|partner&target_id=&limit&offset` → newest first.
+- `PATCH /admin/partners/{id}/verify` is unchanged in shape and now also writes an audit row.
+- Web: Admin console tabs **Jobs**, **Owners**, **Audit** (`/admin/jobs`, `/admin/owners`, `/admin/audit`).

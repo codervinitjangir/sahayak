@@ -201,9 +201,9 @@ view for verification (`/admin/verify`). Endpoints: `GET /admin/analytics/*`, `G
 
 Missing, in suggested order:
 
-1. **Live jobs board** with filters, and manual reassign / cancel by staff.
-2. **Owner and partner management**: search, view history, suspend or reinstate.
-3. **Audit log**: who approved, rejected, suspended or refunded what, and when.
+1. [x] **Live jobs board** with filters and staff cancel (2026-11-14, ADR-024). Manual *reassign* not built.
+2. [x] **Owner and partner management**: owner search, suspend/reinstate (2026-11-14). Partner suspend already via verify.
+3. [x] **Audit log**: append-only, same-transaction (2026-11-14, ADR-024).
 4. **Staff accounts and roles** (support, ops, finance) and an admin invite flow. Today an admin is
    linked to a login by editing the database.
 5. **Support inbox / disputes**, tied to payments item E.
@@ -254,7 +254,7 @@ defects, fixed in `fix/payments-sharing-review`. Still unverified on a physical 
 Code work, in order:
 1. [x] R7 remainder: public link stops after the job ends, plus a rate limit.
 2. [x] G1 radius escalation.
-3. Admin items 1–3: live jobs board with staff cancel, owner/partner management, audit log.
+3. [x] Admin items 1–3: live jobs board with staff cancel, owner/partner management, audit log.
 4. G8 profile edit and G10 account deletion / data export.
 5. [x] G9 partner notifications screen on mobile.
 6. G2 push notifications (device token registry + sender; needs FCM/APNs credentials to go live).

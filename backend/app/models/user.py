@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from typing import Optional, List
-from sqlalchemy import String, Boolean, DateTime, func
+from sqlalchemy import Text, String, Boolean, DateTime, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.config.database import Base
@@ -26,6 +26,12 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+    # ADR-024. Set by staff; a suspended owner's token resolves to 403
+    # ACCOUNT_SUSPENDED. Null means active. alembic/0004.
+    suspended_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    suspension_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Relationships
     vehicles: Mapped[List["Vehicle"]] = relationship(

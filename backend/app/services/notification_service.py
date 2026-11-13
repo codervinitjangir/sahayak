@@ -57,6 +57,8 @@ from app.utils.errors import ErrorCode, NotFoundError
 from app.utils.logging import log_event
 
 RecipientRole = Literal["user", "partner"]
+# Who can cause a change. "admin" is never a recipient: staff read the board.
+ActorRole = Literal["user", "partner", "admin"]
 
 # The channel every row this codebase writes carries. 'push' and 'sms' exist in
 # the constraint for a delivery worker that does not exist yet; writing either
@@ -96,6 +98,8 @@ NOTIFICATION_EVENTS: dict[str, str] = {
     # client to re-derive which happened from its own role.
     "job_cancelled_by_owner": "A job you accepted was cancelled by the owner.",
     "job_cancelled_by_partner": "Your partner cancelled this job. We are finding you another.",
+    # Staff cancelled it (ADR-024). Both sides hear, since neither of them acted.
+    "job_cancelled_by_support": "This job was cancelled by Sahayak support.",
     "job_no_match_found": "We could not find an available partner for your request.",
 }
 
@@ -124,7 +128,7 @@ EVENT_FOR_STATUS: dict[str, str] = {
 SILENT_STATUSES: frozenset[str] = frozenset({"requested", "matching"})
 
 
-def event_for(status: str, *, actor_role: Optional[RecipientRole]) -> Optional[str]:
+def event_for(status: str, *, actor_role: Optional[ActorRole]) -> Optional[str]:
     """The event name for a status change, or None if the change is silent.
 
     Separate from `recipients_for` because the two answer different questions
@@ -135,6 +139,8 @@ def event_for(status: str, *, actor_role: Optional[RecipientRole]) -> Optional[s
     if status in SILENT_STATUSES:
         return None
     if status == "cancelled":
+        if actor_role == "admin":
+            return "job_cancelled_by_support"
         return (
             "job_cancelled_by_owner"
             if actor_role == "user"
@@ -144,7 +150,7 @@ def event_for(status: str, *, actor_role: Optional[RecipientRole]) -> Optional[s
 
 
 def recipients_for(
-    status: str, *, actor_role: Optional[RecipientRole]
+    status: str, *, actor_role: Optional[ActorRole]
 ) -> tuple[RecipientRole, ...]:
     """Who hears about this change: everyone party to the job except whoever did it.
 
@@ -161,6 +167,8 @@ def recipients_for(
     """
     if status in SILENT_STATUSES:
         return ()
+    if actor_role == "admin":
+        return ("user", "partner")
     if actor_role == "user":
         return ("partner",)
     # Covers both actor_role == "partner" and actor_role is None. A partner
@@ -178,7 +186,7 @@ async def notify_job_status_change(
     *,
     job: Job,
     status: str,
-    actor_role: Optional[RecipientRole],
+    actor_role: Optional[ActorRole],
     partner_ids: Sequence[uuid.UUID] = (),
 ) -> int:
     """Write the notifications one status change calls for. Returns rows staged.

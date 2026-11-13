@@ -191,6 +191,9 @@ class ErrorCode:
     # either a valid window or a 403.
     INVALID_DATE_RANGE = "INVALID_DATE_RANGE"
 
+    # Admin operations (ADR-024)
+    ACCOUNT_SUSPENDED = "ACCOUNT_SUSPENDED"
+
     # Payments
     PAYMENT_NOT_FOUND = "PAYMENT_NOT_FOUND"
     PAYMENT_ALREADY_SETTLED = "PAYMENT_ALREADY_SETTLED"

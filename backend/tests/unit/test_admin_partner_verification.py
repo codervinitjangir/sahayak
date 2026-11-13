@@ -59,6 +59,23 @@ class FakeSession:
 
 import asyncio
 
+AUDITS: list = []
+
+
+@pytest.fixture(autouse=True)
+def _audit_and_preread(monkeypatch):
+    """verify_partner reads the old status and writes an audit row (ADR-024)."""
+    AUDITS.clear()
+
+    async def fake_get(db, partner_id):
+        return FakePartner(partner_id=partner_id, verification_status="pending") if partner_id == PARTNER_ID else None
+
+    async def fake_audit(db, **kw):
+        AUDITS.append(kw)
+
+    monkeypatch.setattr("app.repositories.partner_repository.get_partner_by_id", fake_get)
+    monkeypatch.setattr("app.repositories.admin_ops_repository.add_audit", fake_audit)
+
 
 def test_list_partners_returns_roster(monkeypatch):
     fake_partners = [
@@ -106,6 +123,8 @@ def test_verify_partner_updates_status(monkeypatch):
     assert res["data"].verification_status == "verified"
     assert db.committed is True
     assert db.refreshed is True
+    assert [a["action"] for a in AUDITS] == ["partner_verified"]
+    assert AUDITS[0]["details"] == {"from_status": "pending"}
 
 
 def test_verify_partner_not_found_raises(monkeypatch):

@@ -300,6 +300,19 @@ async def resolve_identity(db: AsyncSession, claims: TokenClaims) -> Identity:
 
     if matches:
         role, local_id = matches[0]
+        # ADR-024: a suspended owner is known but refused everywhere, at the one
+        # place every authenticated request passes through.
+        if role == "user" and getattr(user, "suspended_at", None) is not None:
+            log_event(
+                "auth_account_suspended",
+                level=logging.WARNING,
+                user_id=str(local_id),
+                outcome="rejected_suspended",
+            )
+            raise ForbiddenError(
+                code=ErrorCode.ACCOUNT_SUSPENDED,
+                message="This account has been suspended. Contact Sahayak support.",
+            )
         return Identity(
             auth_user_id=claims.auth_user_id, role=role, local_id=local_id
         )

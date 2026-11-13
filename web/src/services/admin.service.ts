@@ -71,6 +71,63 @@ export interface AdminPartnerDetail extends AdminPartnerSummary {
   equipment: AdminPartnerEquipment[];
 }
 
+// ---- Back office (ADR-024) -------------------------------------------------
+
+export interface AdminJobItem {
+  id: string;
+  status: string;
+  service_name?: string | null;
+  vehicle_number?: string | null;
+  pickup_address_text?: string | null;
+  owner_name?: string | null;
+  owner_phone?: string | null;
+  partner_name?: string | null;
+  partner_phone?: string | null;
+  assignment_status?: string | null;
+  price_estimate?: string | number | null;
+  price_final?: string | number | null;
+  requested_at: string;
+  completed_at?: string | null;
+  cancelled_at?: string | null;
+}
+
+export interface AdminUserItem {
+  id: string;
+  name: string;
+  phone: string;
+  email?: string | null;
+  created_at: string;
+  job_count: number;
+  has_login: boolean;
+  suspended_at?: string | null;
+  suspension_reason?: string | null;
+}
+
+export interface AdminAuditEntry {
+  id: string;
+  admin_id?: string | null;
+  action: string;
+  target_type: 'job' | 'user' | 'partner';
+  target_id: string;
+  reason?: string | null;
+  details?: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface Page<T> {
+  items: T[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+function qs(params: Record<string, string | number | undefined | null>): string {
+  const q = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== null && v !== '') q.set(k, String(v));
+  const str = q.toString();
+  return str ? `?${str}` : '';
+}
+
 export const adminService = {
   /** Funnel, conversion, partner supply, time-to-work-started. */
   async getOverview(params: AnalyticsWindowParams = {}): Promise<AnalyticsOverview> {
@@ -132,6 +189,39 @@ export const adminService = {
         ...(notes ? { notes } : {}),
       }),
     });
+    return res.data;
+  },
+
+  /** Live jobs board. status: 'live' (default), 'all', or one job status. */
+  async listJobs(params: { status?: string; q?: string; limit?: number; offset?: number } = {}): Promise<Page<AdminJobItem>> {
+    const res = await apiClient<Page<AdminJobItem>>(`/admin/jobs${qs(params)}`, { method: 'GET' });
+    return res.data;
+  },
+
+  /** Staff cancel; reason is required and goes in the audit log. */
+  async cancelJob(jobId: string, reason: string): Promise<AdminJobItem> {
+    const res = await apiClient<AdminJobItem>(`/admin/jobs/${jobId}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    });
+    return res.data;
+  },
+
+  async listUsers(params: { q?: string; limit?: number; offset?: number } = {}): Promise<Page<AdminUserItem>> {
+    const res = await apiClient<Page<AdminUserItem>>(`/admin/users${qs(params)}`, { method: 'GET' });
+    return res.data;
+  },
+
+  async setUserSuspension(userId: string, suspended: boolean, reason?: string): Promise<AdminUserItem> {
+    const res = await apiClient<AdminUserItem>(`/admin/users/${userId}/suspension`, {
+      method: 'PATCH',
+      body: JSON.stringify({ suspended, ...(reason ? { reason } : {}) }),
+    });
+    return res.data;
+  },
+
+  async listAudit(params: { target_type?: string; target_id?: string; limit?: number; offset?: number } = {}): Promise<Page<AdminAuditEntry>> {
+    const res = await apiClient<Page<AdminAuditEntry>>(`/admin/audit-log${qs(params)}`, { method: 'GET' });
     return res.data;
   },
 };

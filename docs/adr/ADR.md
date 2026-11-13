@@ -1169,3 +1169,20 @@ The second bug was blunter: `partner_supply` filtered on `p.is_verified`, a bool
 5. **Scoring** normalises distance to the circle actually searched, so a 30 km candidate from a 35 km search does not tie every other escalated candidate at a distance score of 0.
 
 **Consequences.** `no_match_found` is no longer always final within the window; analytics read current status, so a rescued job counts as matched, and its history still shows the miss. The endpoint is limited to 12 calls/min per job. When a worker is eventually added, it calls `retry_search` on a timer and this ADR's rules stay as they are.
+
+
+# ADR-024: Staff actions are written to an append-only audit log in the same transaction as the action
+
+**Date:** 2026-11-14 · **Status:** Accepted
+
+**Context.** Staff could approve or reject partners and nothing else, and nothing recorded who did it. The back office now adds a live jobs board with staff cancellation and owner suspension. Each of those changes someone's job or account, and "who did this, and why" has to have an answer that cannot be edited afterwards.
+
+**Decision.**
+1. **`admin_audit_log`** (alembic/0004): admin, action, target type and id, reason, details JSON, time. `admin_id` is `ON DELETE SET NULL`, so removing a staff account keeps their history.
+2. **Append-only at the database.** A trigger raises on UPDATE or DELETE. Convention alone would let a later endpoint "correct" a row; the trigger makes that a deliberate migration instead. (The QA harness disables it inside its own cleanup transaction only.)
+3. **Same transaction as the action**, the principle-4 pairing applied to staff: staff cancel writes the job, the assignments, the history row, the notifications and the audit row in one commit. A partner verification change does the same. No audit row for an action that rolled back; no action without one.
+4. **No-op writes are not audited.** Re-suspending a suspended owner changes nothing and records nothing.
+5. **Staff cancel follows owner cancel's rules** (ADR-013): row lock first, refuse completed/cancelled, close open assignments as `cancelled` (never `rejected`, which would charge the partner), and a new `job_cancelled_by_support` notification to **both** owner and partners, since neither acted. The reason is required.
+6. **Suspension is enforced in `resolve_identity`**, the one function every authenticated request passes through, as 403 `ACCOUNT_SUSPENDED`. Partners already have `verification_status = 'suspended'`, which removes them from dispatch; that path now writes audit rows too.
+
+**Consequences.** Staff contact details for owners and partners are visible on the board by design: the board exists so support can phone a stranded driver. Only `require_admin` routes serve it. Not built yet: staff roles (ops/finance/support) and an admin invite flow, so every admin can still do everything.

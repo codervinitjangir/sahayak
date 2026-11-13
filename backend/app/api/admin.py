@@ -60,7 +60,16 @@ from app.schemas.analytics import (
     AnalyticsOverview,
 )
 from app.schemas.common import ApiResponse, ErrorResponse, envelope
-from app.services import admin_analytics_service
+from app.schemas.admin_ops import (
+    AdminAuditListResponse,
+    AdminJobCancelRequest,
+    AdminJobItem,
+    AdminJobListResponse,
+    AdminUserItem,
+    AdminUserListResponse,
+    AdminUserSuspensionRequest,
+)
+from app.services import admin_analytics_service, admin_ops_service
 from app.services.auth_service import Identity
 from app.utils.auth import require_admin
 from app.utils.errors import NotFoundError
@@ -324,14 +333,114 @@ async def verify_partner(
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[AdminPartnerSummary]:
     """Promote or reject a partner's verification status for dispatch eligibility."""
+    before = await partner_repository.get_partner_by_id(db, partner_id)
+    from_status = before.verification_status if before else None
     partner = await partner_repository.update_partner_verification(
         db, partner_id, payload.verification_status, payload.notes
     )
     if not partner:
         raise NotFoundError("PARTNER_NOT_FOUND", "Partner not found")
 
+    # ADR-024: the audit row commits with the change it records.
+    await admin_ops_service.record_partner_verification(
+        db, partner_id, from_status=from_status or "", to_status=payload.verification_status,
+        note=payload.notes, identity=identity,
+    )
     await db.commit()
     await db.refresh(partner)
 
     return envelope(_partner_summary(partner))
 
+
+# ---------------------------------------------------------------------------
+# Back office (ADR-024): live jobs board, owner management, audit log
+# ---------------------------------------------------------------------------
+admin_ops_router = APIRouter(
+    prefix=f"{API_V1_PREFIX}/admin",
+    tags=["admin back office"],
+    responses=_ERROR_RESPONSES,
+)
+
+
+@admin_ops_router.get(
+    "/jobs",
+    response_model=ApiResponse[AdminJobListResponse],
+    summary="Live jobs board",
+)
+async def admin_list_jobs(
+    status_filter: Optional[str] = Query(
+        None, alias="status",
+        description="'live' (default: everything not finished), 'all', or one job status.",
+    ),
+    q: Optional[str] = Query(None, max_length=100, description="Owner name/phone, vehicle number or address."),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    identity: Identity = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[AdminJobListResponse]:
+    """Jobs newest first with owner, partner and service, for staff to act on."""
+    return envelope(await admin_ops_service.list_jobs(
+        db, status=status_filter, q=q, limit=limit, offset=offset))
+
+
+@admin_ops_router.post(
+    "/jobs/{job_id}/cancel",
+    response_model=ApiResponse[AdminJobItem],
+    summary="Cancel a job as staff (reason required, audited)",
+)
+async def admin_cancel_job(
+    job_id: uuid.UUID,
+    payload: AdminJobCancelRequest,
+    identity: Identity = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[AdminJobItem]:
+    """409 JOB_ALREADY_TERMINAL for a finished job. Owner and partners are notified."""
+    return envelope(await admin_ops_service.cancel_job(db, job_id, payload.reason, identity))
+
+
+@admin_ops_router.get(
+    "/users",
+    response_model=ApiResponse[AdminUserListResponse],
+    summary="Vehicle owners, searchable",
+)
+async def admin_list_users(
+    q: Optional[str] = Query(None, max_length=100, description="Name, phone or email."),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    identity: Identity = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[AdminUserListResponse]:
+    return envelope(await admin_ops_service.list_users(db, q=q, limit=limit, offset=offset))
+
+
+@admin_ops_router.patch(
+    "/users/{user_id}/suspension",
+    response_model=ApiResponse[AdminUserItem],
+    summary="Suspend or reinstate an owner (audited)",
+)
+async def admin_set_user_suspension(
+    user_id: uuid.UUID,
+    payload: AdminUserSuspensionRequest,
+    identity: Identity = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[AdminUserItem]:
+    """A suspended owner's every request answers 403 ACCOUNT_SUSPENDED."""
+    return envelope(await admin_ops_service.set_user_suspension(
+        db, user_id, suspended=payload.suspended, reason=payload.reason, identity=identity))
+
+
+@admin_ops_router.get(
+    "/audit-log",
+    response_model=ApiResponse[AdminAuditListResponse],
+    summary="Staff actions, newest first",
+)
+async def admin_audit_log(
+    target_type: Optional[str] = Query(None, pattern="^(job|user|partner)$"),
+    target_id: Optional[uuid.UUID] = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    identity: Identity = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[AdminAuditListResponse]:
+    return envelope(await admin_ops_service.list_audit(
+        db, target_type=target_type, target_id=target_id, limit=limit, offset=offset))

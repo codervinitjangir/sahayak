@@ -12,6 +12,9 @@ import {
   ShieldCheck,
   Wrench,
   Zap,
+  ClipboardList,
+  Users,
+  ScrollText,
 } from 'lucide-react';
 
 import { ApiError } from '../../services/api';
@@ -27,16 +30,29 @@ import { OverviewPanel } from './OverviewPanel';
 import { DispatchPanel } from './DispatchPanel';
 import { MatchingPanel } from './MatchingPanel';
 import { PartnersPanel } from './PartnersPanel';
+import { AuditPanel, JobsBoardPanel, OwnersPanel } from './BackOfficePanels';
 import '../partner/partner.css';
 
-type TabId = 'overview' | 'dispatch' | 'matching' | 'partners';
+type TabId = 'overview' | 'dispatch' | 'matching' | 'jobs' | 'partners' | 'owners' | 'audit';
 
 const TABS: { id: TabId; label: string; blurb: string; Icon: React.ElementType }[] = [
   { id: 'overview', label: 'Overview', blurb: 'Jobs, completion and partner supply', Icon: BarChart3 },
   { id: 'dispatch', label: 'Dispatch', blurb: 'Offers, acceptance and latency', Icon: Zap },
   { id: 'matching', label: 'Matching', blurb: 'Weighted engine vs pure-nearest', Icon: Compass },
+  { id: 'jobs', label: 'Jobs', blurb: 'Live board, staff cancel', Icon: ClipboardList },
   { id: 'partners', label: 'Partners', blurb: 'Mechanic verification & KYC approval', Icon: ShieldCheck },
+  { id: 'owners', label: 'Owners', blurb: 'Search, suspend, reinstate', Icon: Users },
+  { id: 'audit', label: 'Audit', blurb: 'Every staff action', Icon: ScrollText },
 ];
+
+// Tabs that are operations, not time-windowed reports.
+const OPS_TABS: TabId[] = ['jobs', 'partners', 'owners', 'audit'];
+const OPS_COPY: Record<string, { tag: string; title: string; blurb: string }> = {
+  jobs: { tag: 'Live Ops', title: 'Live jobs board', blurb: 'Every job still in motion, with who to call. Cancelling here notifies both sides and is recorded in the audit log.' },
+  partners: { tag: 'Ops Verification Queue', title: 'Partner Verification & KYC', blurb: 'Review mechanic profiles, inspect workshop credentials and tools, and approve or reject partners on phone or desktop.' },
+  owners: { tag: 'Accounts', title: 'Vehicle owners', blurb: 'Search owners and suspend or reinstate an account. Suspension is audited and blocks every request the owner makes.' },
+  audit: { tag: 'Compliance', title: 'Audit log', blurb: 'Append-only record of every staff action: who did what, to what, why and when.' },
+};
 
 /**
  * The Admin Operations Console.
@@ -50,6 +66,7 @@ export const AdminConsole: React.FC = () => {
   const navigate = useNavigate();
   const { tab } = useParams<{ tab?: string }>();
   const active: TabId = TABS.some((t) => t.id === tab) ? (tab as TabId) : 'overview';
+  const isOps = OPS_TABS.includes(active);
   const [preset, setPreset] = useState<WindowPreset>('7d');
   const { logout } = useAuth();
 
@@ -162,21 +179,21 @@ export const AdminConsole: React.FC = () => {
           <div>
             <div className="flex items-center gap-2 mb-1.5">
               <span className="px-2 py-0.5 rounded-[6px] text-xs font-bold bg-[#E6F4F1] text-[#0F766E] uppercase tracking-wider">
-                {active === 'partners' ? 'Ops Verification Queue' : 'Live Ops Console'}
+                {isOps ? OPS_COPY[active].tag : 'Live Ops Console'}
               </span>
             </div>
             <h1 className="text-2xl font-bold tracking-tight text-[#0F172A]">
-              {active === 'partners' ? 'Partner Verification & KYC' : 'Analytics'}
+              {isOps ? OPS_COPY[active].title : 'Analytics'}
             </h1>
             <p className="mt-0.5 text-xs text-[#475569] max-w-2xl leading-relaxed">
-              {active === 'partners'
-                ? 'Review mechanic profiles, inspect workshop credentials and tools, and approve or reject partners on phone or desktop.'
+              {isOps
+                ? OPS_COPY[active].blurb
                 : 'Read-only. Every figure carries its own caveats — the amber panel on each tab is part of the report, not a warning about it.'}
             </p>
           </div>
 
           {/* Time Window Selector & Refresh (analytics tabs only) */}
-          {active !== 'partners' && (
+          {!isOps && (
             <div className="flex items-center gap-2.5 flex-wrap">
               <div
                 role="group"
@@ -237,7 +254,7 @@ export const AdminConsole: React.FC = () => {
             ))}
           </nav>
 
-          {active !== 'partners' && (
+          {!isOps && (
             <WindowCaption
               from={query.data?.window.requested_from ?? null}
               firstJob={query.data?.window.first_job_at ?? null}
@@ -249,6 +266,12 @@ export const AdminConsole: React.FC = () => {
         {/* Panel Rendering */}
         {active === 'partners' ? (
           <PartnersPanel />
+        ) : active === 'jobs' ? (
+          <JobsBoardPanel />
+        ) : active === 'owners' ? (
+          <OwnersPanel />
+        ) : active === 'audit' ? (
+          <AuditPanel />
         ) : query.isError ? (
           <AnalyticsError error={query.error} />
         ) : query.data ? (
