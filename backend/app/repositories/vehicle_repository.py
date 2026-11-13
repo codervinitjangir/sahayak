@@ -16,9 +16,10 @@ differently depending on which endpoint is asked.
 import uuid
 from typing import List, Optional
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.job import Job
 from app.models.vehicle import Vehicle
 
 
@@ -101,3 +102,30 @@ async def create_vehicle_row(
     db.add(vehicle)
     await db.flush()
     return vehicle
+
+
+async def update_vehicle_row(
+    db: AsyncSession, vehicle: Vehicle, **fields: object
+) -> Vehicle:
+    """Apply mutable fields to a vehicle and flush the changes."""
+    for key, value in fields.items():
+        setattr(vehicle, key, value)
+    await db.flush()
+    return vehicle
+
+
+async def delete_vehicle_row(db: AsyncSession, vehicle: Vehicle) -> None:
+    """Delete a vehicle row and flush."""
+    await db.delete(vehicle)
+    await db.flush()
+
+
+async def has_active_jobs(db: AsyncSession, vehicle_id: uuid.UUID) -> bool:
+    """Return True if this vehicle is currently involved in an active assistance job."""
+    result = await db.execute(
+        select(func.count(Job.id))
+        .where(Job.vehicle_id == vehicle_id)
+        .where(Job.status.notin_(("completed", "cancelled")))
+    )
+    count = result.scalar_one_or_none() or 0
+    return count > 0

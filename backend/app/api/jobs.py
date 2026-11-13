@@ -32,6 +32,7 @@ from app.schemas.job import (
     JobCancelResponse,
     JobCreateRequest,
     JobDetailResponse,
+    JobPartnerLocationResponse,
     JobResponse,
     JobStartRequest,
     JobStatusTransitionRequest,
@@ -186,6 +187,26 @@ async def get_job(
     """
     detail = await job_service.get_job_with_status(db, job_id, identity)
     return envelope(detail)
+
+
+@router.get(
+    "/{job_id}/partner-location",
+    response_model=ApiResponse[JobPartnerLocationResponse],
+    status_code=status.HTTP_200_OK,
+    summary="Get real-time location of the assigned partner",
+)
+async def get_job_partner_location(
+    job_id: uuid.UUID,
+    identity: Identity = Depends(get_current_identity),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[JobPartnerLocationResponse]:
+    """Return the live GPS coordinates of the partner assigned to this job.
+
+    Enables live animated tracking on the driver's map. Only accessible to the
+    job's owner, an administrator, or the assigned partner.
+    """
+    location = await job_service.get_job_partner_location(db, job_id, identity)
+    return envelope(location)
 
 
 @router.post(

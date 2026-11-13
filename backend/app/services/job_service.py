@@ -6,6 +6,7 @@ and delegate here. This module owns the rules (does this vehicle belong to this
 user? is this service code real?), the transaction boundary, and the assembly of
 the read model. Every database call goes through app/repositories/job_repository.
 """
+from datetime import datetime, timezone
 import logging
 import secrets
 import time
@@ -19,6 +20,11 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config.redis_client import (
+    PARTNER_LOCATIONS_KEY,
+    get_redis,
+    location_updated_at_key,
+)
 from app.models.job import Job
 from app.repositories import (
     job_repository,
@@ -34,6 +40,7 @@ from app.schemas.job import (
     JobDetailResponse,
     JobHistoryItem,
     JobHistoryResponse,
+    JobPartnerLocationResponse,
     JobStatusTransitionRequest,
     JobStatusTransitionResponse,
     JobTimelineEntry,
@@ -1161,4 +1168,79 @@ async def list_jobs(
         limit=limit,
         offset=offset,
         has_more=offset + len(items) < total,
+    )
+
+
+async def get_job_partner_location(
+    db: AsyncSession,
+    job_id: uuid.UUID,
+    identity: Identity,
+) -> JobPartnerLocationResponse:
+    """Return the real-time coordinates of the partner assigned to this job.
+
+    Enables live tracking on the vehicle owner's map without persisting high-frequency
+    coordinates to PostgreSQL. Reads the partner's latest fix from Redis GEO set.
+
+    Protected: only the vehicle owner who raised the job, an admin, or the assigned
+    partner themselves may poll this coordinate.
+    """
+    job = await job_repository.get_job_by_id(db, job_id)
+    if job is None:
+        raise NotFoundError(ErrorCode.JOB_NOT_FOUND, "Job not found")
+
+    is_owner = identity.role == "user" and job.user_id == identity.local_id
+    is_admin = identity.role in ("admin", "super_admin", "ops")
+
+    assignment = await job_repository.get_responsible_assignment(db, job_id)
+    is_assigned_partner = (
+        identity.role == "partner"
+        and assignment is not None
+        and assignment.partner_id == identity.local_id
+    )
+
+    if not (is_owner or is_admin or is_assigned_partner):
+        raise NotFoundError(ErrorCode.JOB_NOT_FOUND, "Job not found")
+
+    # If terminal or unassigned, return null coordinates cleanly
+    if (
+        assignment is None
+        or assignment.partner_id is None
+        or job.status in ("completed", "cancelled", "no_match_found")
+    ):
+        return JobPartnerLocationResponse(
+            partner_id=assignment.partner_id if assignment else None,
+            status=job.status,
+            latitude=None,
+            longitude=None,
+            updated_at=None,
+        )
+
+    partner_id = assignment.partner_id
+    client = get_redis()
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+    updated_at: Optional[datetime] = None
+
+    try:
+        positions = await client.geopos(PARTNER_LOCATIONS_KEY, str(partner_id))
+        if positions and positions[0] is not None:
+            lng_val, lat_val = positions[0]
+            lat = float(lat_val)
+            lng = float(lng_val)
+
+        ts_str = await client.get(location_updated_at_key(partner_id))
+        if ts_str:
+            try:
+                updated_at = datetime.fromtimestamp(float(ts_str), timezone.utc)
+            except (ValueError, TypeError):
+                updated_at = None
+    except Exception as exc:
+        logging.getLogger(__name__).warning("Redis lookup failed for partner %s: %s", partner_id, exc)
+
+    return JobPartnerLocationResponse(
+        partner_id=partner_id,
+        status=job.status,
+        latitude=lat,
+        longitude=lng,
+        updated_at=updated_at,
     )

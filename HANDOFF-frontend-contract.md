@@ -2191,3 +2191,28 @@ calls (26 web call sites, was 23).
   `verification_status` is `rejected` or `suspended` (422 otherwise). The reason is stored in
   `partners.verification_note` and cleared on `verified`/`pending`.
 - DB: `partners.verification_note text` (see `backend/alembic/0003_partners_verification_note.sql`).
+
+## 17. Live Partner Location & Vehicle Management (2026-11-13)
+
+### 17.1 Live Partner Location Tracking
+- `GET /api/v1/jobs/{job_id}/partner-location`
+  - Auth: Owner of the job, admin, or the assigned partner. Non-party callers receive 404 `JOB_NOT_FOUND`.
+  - Response:
+    ```json
+    {
+      "data": {
+        "partner_id": "...",
+        "status": "partner_en_route",
+        "latitude": 12.9716,
+        "longitude": 77.5946,
+        "updated_at": "2026-11-13T16:20:00Z"
+      },
+      "meta": { "request_id": "..." }
+    }
+    ```
+  - Unassigned or terminal jobs return `latitude: null, longitude: null`.
+  - Redis coordinates read from GEO set `sahayak:partner_locations`.
+
+### 17.2 Vehicle CRUD
+- `PATCH /api/v1/vehicles/{vehicle_id}`: Update `make`, `model`, `vehicle_type`, or `vehicle_number` (normalised automatically).
+- `DELETE /api/v1/vehicles/{vehicle_id}`: Remove vehicle from caller's account. Refuses with 409 `VEHICLE_HAS_ACTIVE_JOB` if the vehicle is in an active roadside assistance job.

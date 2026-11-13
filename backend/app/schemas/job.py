@@ -448,3 +448,20 @@ class JobHistoryResponse(BaseModel):
     has_more: bool = Field(
         ..., description="True when offset + len(items) < total."
     )
+
+
+class JobPartnerLocationResponse(BaseModel):
+    """Real-time GPS coordinate response for an assigned partner.
+
+    Read from Redis GEO set for an active job, enabling the owner's app to
+    render a smooth moving marker on their map. Latitude and longitude are null
+    if the partner has not yet reported a coordinate.
+    """
+
+    partner_id: Optional[uuid.UUID] = None
+    status: str
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    updated_at: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)

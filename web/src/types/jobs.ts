@@ -33,8 +33,16 @@ export interface Service {
   code: string;
   name: string;
   requires_vehicle_equipment: boolean;
+  base_price?: string | number | null;
   category?: ServiceCategory;
+}
 
+export interface PartnerLiveLocation {
+  partner_id?: string | null;
+  status: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  updated_at?: string | null;
 }
 
 export interface JobAssignment {

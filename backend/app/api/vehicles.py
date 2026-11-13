@@ -37,7 +37,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api import API_V1_PREFIX
 from app.config.database import get_db
 from app.schemas.common import ApiResponse, ErrorResponse, envelope
-from app.schemas.vehicle import VehicleCreateRequest, VehicleItem
+from app.schemas.vehicle import (
+    VehicleCreateRequest,
+    VehicleDeleteResponse,
+    VehicleItem,
+    VehicleUpdateRequest,
+)
 from app.services import vehicle_service
 from app.services.auth_service import Identity
 from app.utils.auth import require_user
@@ -132,3 +137,38 @@ async def get_vehicle(
     """
     vehicle = await vehicle_service.get_user_vehicle(db, vehicle_id, identity.local_id)
     return envelope(vehicle)
+
+
+@router.patch(
+    "/{vehicle_id}",
+    response_model=ApiResponse[VehicleItem],
+    status_code=status.HTTP_200_OK,
+    summary="Update one of the caller's vehicles",
+)
+async def update_vehicle(
+    vehicle_id: uuid.UUID,
+    payload: VehicleUpdateRequest,
+    identity: Identity = Depends(require_user),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[VehicleItem]:
+    """Update details of a vehicle owned by the authenticated caller."""
+    vehicle = await vehicle_service.update_user_vehicle(
+        db, vehicle_id, payload, identity.local_id
+    )
+    return envelope(vehicle)
+
+
+@router.delete(
+    "/{vehicle_id}",
+    response_model=ApiResponse[VehicleDeleteResponse],
+    status_code=status.HTTP_200_OK,
+    summary="Delete one of the caller's vehicles",
+)
+async def delete_vehicle(
+    vehicle_id: uuid.UUID,
+    identity: Identity = Depends(require_user),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[VehicleDeleteResponse]:
+    """Remove a vehicle, provided it belongs to the caller and has no active requests."""
+    res = await vehicle_service.delete_user_vehicle(db, vehicle_id, identity.local_id)
+    return envelope(VehicleDeleteResponse(**res))

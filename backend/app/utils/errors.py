@@ -63,6 +63,7 @@ class ErrorCode:
 
     # Vehicles
     VEHICLE_NOT_FOUND = "VEHICLE_NOT_FOUND"
+    VEHICLE_HAS_ACTIVE_JOB = "VEHICLE_HAS_ACTIVE_JOB"
     # The registration number is empty, over-long, or contains something other
     # than letters and digits once spaces and hyphens are stripped. Its own code
     # rather than a bare 400 because the client's remedy is specific and local —

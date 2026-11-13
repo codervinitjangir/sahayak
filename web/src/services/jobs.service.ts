@@ -11,6 +11,7 @@ import {
   JobHistoryItem,
   JobCancelResponse,
   JobStatusTransitionResponse,
+  PartnerLiveLocation,
 } from '../types/jobs';
 
 /**
@@ -225,6 +226,7 @@ export const jobsService = {
         code: item.code,
         name: item.name,
         requires_vehicle_equipment: item.requires_vehicle_equipment,
+        base_price: item.base_price,
         category:
           item.category_code && item.category_id
             ? { id: item.category_id, code: item.category_code, name: item.category_name ?? '' }
@@ -234,6 +236,16 @@ export const jobsService = {
       // Offline, or the backend is down. The grid still renders.
       return SEEDED_SERVICES;
     }
+  },
+
+  /**
+   * Real-time GPS location of the partner assigned to an active job.
+   */
+  async getPartnerLocation(jobId: string): Promise<PartnerLiveLocation> {
+    const res = await apiClient<PartnerLiveLocation>(`/jobs/${jobId}/partner-location`, {
+      method: 'GET',
+    });
+    return res.data;
   },
 
   /**

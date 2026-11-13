@@ -47,8 +47,13 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({
           <Icon className="w-6 h-6" aria-hidden="true" />
         </div>
         <div className="flex flex-col items-end">
+          {service.base_price && (
+            <span className="text-xs font-bold text-[#0F766E] bg-teal-50 border border-teal-100 px-2 py-0.5 rounded">
+              From ₹{Number(service.base_price).toLocaleString('en-IN')}
+            </span>
+          )}
           <span
-            className={`w-5 h-5 rounded-full border flex items-center justify-center ${
+            className={`w-5 h-5 rounded-full border flex items-center justify-center mt-1.5 ${
               isSelected ? 'border-brand-700 bg-brand-700' : 'border-slate-300 bg-white'
             }`}
           >

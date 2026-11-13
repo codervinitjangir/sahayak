@@ -39,8 +39,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.vehicle import Vehicle
 from app.repositories import vehicle_repository
-from app.schemas.vehicle import VehicleCreateRequest
-from app.utils.errors import BadRequestError, ErrorCode, InternalError, NotFoundError
+from app.schemas.vehicle import VehicleCreateRequest, VehicleUpdateRequest
+from app.utils.errors import (
+    BadRequestError,
+    ConflictError,
+    ErrorCode,
+    InternalError,
+    NotFoundError,
+)
 from app.utils.logging import log_event
 
 # vehicles.vehicle_number is String(20), so this is the column's real ceiling and
@@ -249,3 +255,67 @@ async def get_user_vehicle(
         raise NotFoundError(ErrorCode.VEHICLE_NOT_FOUND, "Vehicle not found")
 
     return vehicle
+
+
+async def update_user_vehicle(
+    db: AsyncSession,
+    vehicle_id: uuid.UUID,
+    payload: VehicleUpdateRequest,
+    user_id: uuid.UUID,
+) -> Vehicle:
+    """Update editable attributes of an owner's vehicle.
+
+    Only the vehicle owner may edit it. Normalises vehicle_number if updated.
+    """
+    vehicle = await vehicle_repository.get_vehicle_by_id(db, vehicle_id)
+    if vehicle is None or vehicle.user_id != user_id:
+        raise NotFoundError(ErrorCode.VEHICLE_NOT_FOUND, "Vehicle not found")
+
+    updates = {}
+    if payload.vehicle_type is not None:
+        updates["vehicle_type"] = payload.vehicle_type
+    if payload.make is not None:
+        updates["make"] = payload.make.strip() or None
+    if payload.model is not None:
+        updates["model"] = payload.model.strip() or None
+    if payload.vehicle_number is not None:
+        updates["vehicle_number"] = normalise_vehicle_number(payload.vehicle_number)
+
+    if not updates:
+        return vehicle
+
+    try:
+        updated = await vehicle_repository.update_vehicle_row(db, vehicle, **updates)
+        await db.commit()
+        await db.refresh(updated)
+        return updated
+    except SQLAlchemyError as exc:
+        await db.rollback()
+        raise InternalError("Could not update vehicle") from exc
+
+
+async def delete_user_vehicle(
+    db: AsyncSession, vehicle_id: uuid.UUID, user_id: uuid.UUID
+) -> dict:
+    """Remove a vehicle from an owner's account.
+
+    Refused with 409 CONFLICT if the vehicle is currently involved in an active
+    in-flight roadside request.
+    """
+    vehicle = await vehicle_repository.get_vehicle_by_id(db, vehicle_id)
+    if vehicle is None or vehicle.user_id != user_id:
+        raise NotFoundError(ErrorCode.VEHICLE_NOT_FOUND, "Vehicle not found")
+
+    if await vehicle_repository.has_active_jobs(db, vehicle_id):
+        raise ConflictError(
+            ErrorCode.VEHICLE_HAS_ACTIVE_JOB,
+            "Cannot delete a vehicle with an active roadside assistance job",
+        )
+
+    try:
+        await vehicle_repository.delete_vehicle_row(db, vehicle)
+        await db.commit()
+        return {"id": vehicle_id, "deleted": True}
+    except SQLAlchemyError as exc:
+        await db.rollback()
+        raise InternalError("Could not delete vehicle") from exc

@@ -40,4 +40,16 @@ export const vehiclesApi = {
     apiClient
       .get<MobileVehicle>(`/vehicles/${vehicleId}`)
       .then((r) => r.data),
+
+  /** Update vehicle details (PATCH /api/v1/vehicles/{id}) */
+  updateVehicle: (vehicleId: string, payload: Partial<CreateVehiclePayload>) =>
+    apiClient
+      .patch<MobileVehicle>(`/vehicles/${vehicleId}`, payload)
+      .then((r) => r.data),
+
+  /** Delete a vehicle (DELETE /api/v1/vehicles/{id}) */
+  deleteVehicle: (vehicleId: string) =>
+    apiClient
+      .delete<{ id: string; deleted: boolean }>(`/vehicles/${vehicleId}`)
+      .then((r) => r.data),
 };

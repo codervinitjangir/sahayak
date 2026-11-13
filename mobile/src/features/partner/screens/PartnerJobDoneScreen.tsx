@@ -11,6 +11,7 @@ import {
   Animated,
   StatusBar,
   ActivityIndicator,
+  Pressable,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -57,6 +58,23 @@ export default function PartnerJobDoneScreen() {
   const [earnings, setEarnings] = useState<MobilePartnerEarnings | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [partnerRating, setPartnerRating] = useState<number>(0);
+  const [ratingSubmitted, setRatingSubmitted] = useState<boolean>(false);
+  const [submittingRating, setSubmittingRating] = useState<boolean>(false);
+
+  const handleRateCustomer = async (score: number) => {
+    setPartnerRating(score);
+    if (!jobId) return;
+    setSubmittingRating(true);
+    try {
+      await jobsApi.submitRating(jobId, score);
+      setRatingSubmitted(true);
+    } catch {
+      // If already rated or error, keep score
+    } finally {
+      setSubmittingRating(false);
+    }
+  };
 
   const load = useCallback(async () => {
     if (!jobId) {
@@ -206,6 +224,34 @@ export default function PartnerJobDoneScreen() {
                 This is the amount saved against the job. Payouts are settled by
                 Sahayak operations; there is no in-app withdrawal.
               </Text>
+            </Card>
+
+            <Card style={styles.ratingCard}>
+              <Text style={styles.cardHeading}>Rate vehicle owner</Text>
+              <Text style={styles.ratingSubtitle}>
+                How was your experience with {job.owner_name || "the vehicle owner"}?
+              </Text>
+              <View style={styles.starsRow}>
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <Pressable
+                    key={star}
+                    disabled={ratingSubmitted || submittingRating}
+                    onPress={() => void handleRateCustomer(star)}
+                    style={styles.starBtn}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Rate ${star} stars`}
+                  >
+                    <Ionicons
+                      name={star <= partnerRating ? "star" : "star-outline"}
+                      size={32}
+                      color={star <= partnerRating ? Colors.primary : Colors.border}
+                    />
+                  </Pressable>
+                ))}
+              </View>
+              {ratingSubmitted && (
+                <Text style={styles.ratingThanks}>Thank you for rating the customer!</Text>
+              )}
             </Card>
           </Animated.View>
         ) : null}
@@ -358,6 +404,39 @@ const styles = StyleSheet.create({
     fontFamily: Typography.fontFamily.regular,
     color: Colors.textMuted,
     lineHeight: 16,
+  },
+
+  ratingCard: {
+    marginHorizontal: Spacing.lg,
+    marginTop: Spacing.sm,
+    marginBottom: Spacing.sm,
+    gap: 8,
+    alignItems: "center",
+  },
+  cardHeading: {
+    fontSize: Typography.fontSize.base,
+    fontFamily: Typography.fontFamily.bold,
+    color: Colors.textPrimary,
+  },
+  ratingSubtitle: {
+    fontSize: Typography.fontSize.sm,
+    fontFamily: Typography.fontFamily.regular,
+    color: Colors.textSecondary,
+    textAlign: "center",
+  },
+  starsRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginVertical: Spacing.sm,
+  },
+  starBtn: {
+    padding: 4,
+  },
+  ratingThanks: {
+    fontSize: Typography.fontSize.sm,
+    fontFamily: Typography.fontFamily.medium,
+    color: Colors.primary,
+    marginTop: 4,
   },
 
   donePanel: {

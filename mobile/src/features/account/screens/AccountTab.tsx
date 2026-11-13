@@ -8,11 +8,33 @@ import { ListRow, SectionHeader, Skeleton } from "../../../components/ui/kit";
 import { EMERGENCY_NUMBER } from "../../../components/ui/SafetyActions";
 import { WEB_URL } from "../../../constants";
 import { useMyVehicles } from "../../shared/ownerData";
+import { vehiclesApi } from "../../../services/api/vehicles";
 
 export default function AccountTab({ onAddVehicle }: { onAddVehicle: () => void }) {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const vehicles = useMyVehicles();
+
+  const handleDeleteVehicle = (vehicleId: string, name: string) => {
+    Alert.alert("Remove vehicle?", `Remove ${name} from your account?`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Remove",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await vehiclesApi.deleteVehicle(vehicleId);
+            void vehicles.refetch();
+          } catch (err: any) {
+            Alert.alert(
+              "Could not remove",
+              err?.message || "Cannot delete a vehicle with an active roadside request."
+            );
+          }
+        },
+      },
+    ]);
+  };
 
   const confirmSignOut = () =>
     Alert.alert("Sign out?", "You will need to verify your number again to sign back in.", [
@@ -56,6 +78,7 @@ export default function AccountTab({ onAddVehicle }: { onAddVehicle: () => void 
                 icon={v.vehicle_type === "two_wheeler" ? "bicycle-outline" : "car-outline"}
                 title={`${v.make} ${v.model}`}
                 subtitle={v.vehicle_number}
+                onPress={() => handleDeleteVehicle(v.id, `${v.make} ${v.model}`)}
                 last={i === arr.length - 1}
               />
             ))

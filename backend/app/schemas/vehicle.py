@@ -22,6 +22,29 @@ class VehicleUpdate(BaseModel):
     vehicle_number: Optional[str] = None
 
 
+class VehicleUpdateRequest(BaseModel):
+    """Inbound payload for PATCH /vehicles/{id} — what an owner edits."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    vehicle_type: Optional[Literal["two_wheeler", "four_wheeler"]] = None
+    make: Optional[str] = Field(default=None, max_length=50)
+    model: Optional[str] = Field(default=None, max_length=50)
+    vehicle_number: Optional[str] = Field(
+        default=None,
+        min_length=1,
+        max_length=32,
+        description="Registration number. Stored uppercased with spaces and hyphens removed.",
+    )
+
+
+class VehicleDeleteResponse(BaseModel):
+    """Confirmation payload for DELETE /vehicles/{id}."""
+
+    id: uuid.UUID
+    deleted: bool = True
+
+
 class VehicleResponse(VehicleBase):
     id: uuid.UUID
     user_id: Optional[uuid.UUID] = None

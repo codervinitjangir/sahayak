@@ -184,6 +184,18 @@ export const jobsApi = {
   getRatings: (jobId: string) =>
     apiClient.get<JobRatingsResponse>(`/jobs/${jobId}/ratings`).then((r) => r.data),
 
+  /** Get real-time partner location (GET /api/v1/jobs/{jobId}/partner-location) */
+  getPartnerLocation: (jobId: string) =>
+    apiClient
+      .get<{
+        partner_id?: string | null;
+        status: string;
+        latitude?: number | null;
+        longitude?: number | null;
+        updated_at?: string | null;
+      }>(`/jobs/${jobId}/partner-location`)
+      .then((r) => r.data),
+
   /** Submit rating for completed job (POST /api/v1/jobs/{jobId}/ratings) */
   submitRating: (jobId: string, rating: number, comment?: string) =>
     apiClient

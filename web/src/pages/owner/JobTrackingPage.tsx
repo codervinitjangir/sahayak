@@ -58,6 +58,13 @@ export const JobTrackingPage: React.FC = () => {
     staleTime: 1000 * 60,
   });
 
+  const partnerLocationQuery = useQuery({
+    queryKey: ['jobs', jobId, 'partner-location'],
+    queryFn: () => (jobId ? jobsService.getPartnerLocation(jobId) : Promise.reject('No jobId')),
+    enabled: Boolean(jobId) && ['assigned', 'partner_en_route', 'in_progress'].includes(job?.status || ''),
+    refetchInterval: 5000,
+  });
+
   const canRate = ratingsQuery.data ? ratingsQuery.data.can_rate : !isRated;
   const alreadyRated = isRated || (ratingsQuery.data ? !ratingsQuery.data.can_rate : false);
 
@@ -191,6 +198,18 @@ export const JobTrackingPage: React.FC = () => {
                 </span>
               </div>
               <p className="text-sm text-ink-soft">Your partner is on the way to your pickup point.</p>
+            </div>
+          )}
+
+          {partnerLocationQuery.data?.latitude && partnerLocationQuery.data?.longitude && (
+            <div className="flex items-center gap-2.5 p-3 rounded-control bg-teal-50 border border-teal-200 text-teal-900 text-sm">
+              <span className="relative flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-teal-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-[#0F766E]"></span>
+              </span>
+              <span className="font-medium">
+                Live location active · Partner moving towards pickup
+              </span>
             </div>
           )}
 
