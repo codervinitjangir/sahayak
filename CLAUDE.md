@@ -86,10 +86,10 @@ CRUD following an already-established pattern in this codebase.
 - Prefer Edit over rewriting files; batch independent tool calls in one message.
 
 ## Where things stand
-**Pacing comes from `ROADMAP.md` — 12 weeks. As of 2026-11-12 the build is complete
-(weeks 1–10 done); weeks 11–12 are viva prep and demo rehearsal only. No new features —
-only fixes to things that break the demo.** Any 20-week or 5-month
-timeline in `README.md` or `Final prd.md` is superseded and must not be used for pacing.
+**The 12-week timeline no longer gates work (lifted by the team on 2026-11-14).** The
+backlog is `docs/NEXT-STEPS.md` section 9; build from it in its suggested order. The
+quality bar above is unchanged: every new feature still meets the testing and ADR rules.
+`ROADMAP.md`, `README.md` and `Final prd.md` timelines are historical only.
 See `TASKS.md` for the current backlog and what's already done. See 
 `docs/adr/ADR.md` for architectural decision history (one file, ADR-001 onward — 
 not a directory of separate files). See `HANDOFF-frontend-contract.md` for the 

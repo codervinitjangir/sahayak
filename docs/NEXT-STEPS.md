@@ -39,7 +39,7 @@ change recorded.
 
 | # | Item | Status | Effort | Notes |
 |---|---|---|---|---|
-| 1 | Support contact (email & phone) in Terms, Privacy and both apps | [x] Done (2026-11-13) | 0.5 | Set to support@sahayak.app / +91 80 4567 8900 across Terms, Privacy, Landing, and Mobile Account |
+| 1 | Support contact (email & phone) in Terms, Privacy and both apps | [~] Wired, values are placeholders | 0.5 | support@sahayak.app / +91 80 4567 8900 are placeholders everywhere; see R1 |
 | 2 | Lawyer review of `/terms` and `/privacy` | [x] Ready for Review | external | Pages drafted against exact product rules (no upfront quotes, 112 SOS, 4-digit start OTP) |
 | 3 | Rotate and restrict the Google Maps key | [x] Verified in config | 0.5 | Injected via `app.config.js` via `GOOGLE_MAPS_API_KEY` (kept out of git) |
 | 4 | Full device test, iOS and Android, both roles | [x] Ready for Device Test | 2 | Native maps, GPS accuracy, SMS autofill, call and share sheets |
@@ -53,7 +53,7 @@ change recorded.
 | 7 | Live partner location on owner map | [x] Done (2026-11-13) | [backend] | `GET /api/v1/jobs/{id}/partner-location`, reads Redis GEO `sahayak:partner_locations`, polls every 5s |
 | 8 | Vehicle edit/delete & active job guard | [x] Done (2026-11-13) | [backend] | `PATCH/DELETE /api/v1/vehicles/{id}`, refuses deletion with 409 `VEHICLE_HAS_ACTIVE_JOB` |
 | 9 | Partner rates the owner (Two-Way Ratings) | [x] Done (2026-11-13) | [backend] | Interactive 1–5 star rating submitted by partner on completion via `PartnerJobDoneScreen.tsx` |
-| 10 | Public Trip Live Sharing (`/track/:jobId`) | [x] Done (2026-11-13) | [backend] | `GET /api/v1/jobs/{id}/public-tracking`, unauthenticated `/track/:jobId` page for family with live GPS and 112 SOS |
+| 10 | Public Trip Live Sharing (`/track/:jobId?t=`) | [x] Done, hardened 2026-11-14 | [backend] | `GET /api/v1/jobs/{id}/public-tracking?t=<share_token>`; token is owner-only (ADR-017 amendment) |
 | 11 | Extended Searching & Auto-Retry with Radius Escalation | [ ] Ready to Implement | [backend] | 10 km &rarr; 20 km &rarr; 35 km expansion; 10-minute active search window with live timer & instant cancel |
 | 12 | Push notifications (FCM & APNs) | [ ] Next Up | [backend] | Events: new offer, assigned, on the way, started, completed, cancelled. Respect ADR-017 |
 | 13 | Hindi and Kannada localization | [ ] Planned | no | Move strings into translation files; native-speaker review |
@@ -65,7 +65,7 @@ Today the payment lifecycle is wired with full regression coverage:
 | # | Step | Status | Notes |
 |---|---|---|---|
 | A | Upfront price estimate before booking | [x] Done (2026-11-13) | `base_price` added to catalogue services, upfront estimates shown on service selection cards |
-| B | In-App UPI & Cash Payment at completion | [x] Done (2026-11-13) | `POST /payments`, `GET /payments/job/{id}`, `POST /payments/{id}/confirm`. Supports NPCI UPI universal intent (`upi://pay?...`), dynamic QR codes (GPay/PhonePe/Paytm), and cash confirmation |
+| B | In-App UPI & Cash Payment at completion | [x] Done, fixed 2026-11-14 | `POST /payments`, `GET /payments/job/{id}`, `POST /payments/{id}/confirm`. Amount is server-side; only the assigned partner or an admin confirms (ADR-022). The UPI ID `sahayak.dispatch@upi` is a placeholder |
 | C | Partner payouts & settlement schedule | [ ] Planned | Settle to partners' bank accounts or UPI net of platform commission |
 | D | Downloadable receipts & GST tax invoices | [ ] Planned | Detailed invoice breakdown with service fee, partner details, and payment ref |
 | E | Refunds & dispute management | [ ] Planned | Owner "report a problem" on paid jobs with admin resolution queue |
@@ -149,7 +149,14 @@ When an emergency happens (e.g. at 11:30 PM on an outer ring road or highway), a
 
 ---
 
-## 9. Remaining-work audit (2026-11-13, end of day)
+## 9. Remaining-work audit (2026-11-13, end of day; status updated 2026-11-14)
+
+**2026-11-14 update.** The review of the 2026-11-13 commits found and fixed five defects
+(owner could self-confirm payments, client-set amount, admins locked out of payments, public
+tracking leaked pickup coordinates to offered partners, vehicle delete 500'd on any vehicle with
+history). Full regression then passed: backend 472 unit + 828 live across 16 harnesses (new:
+`check_payments_and_sharing.py`), web 130, mobile 20. Branch `fix/payments-sharing-review`.
+The 12-week timeline no longer gates work; section 9.8 is the build order.
 
 Checked against the code, not only against the tables above. Baseline: web `tsc` clean, web
 134-class suite 130/130 passing, mobile `tsc` clean, mobile 20/20, `check:rule-a` passing on both.
@@ -161,14 +168,14 @@ regression bar in `CLAUDE.md` applies before anyone calls it done.
 
 | # | Item | Why |
 |---|---|---|
-| R1 | **Replace the placeholder contact details.** `support@sahayak.app`, `+91 80 4567 8900` and the `sahayak.app` / `api.sahayak.app` domains appear in Terms, Privacy, the landing footer, mobile Account, mobile `SafetyActions` and `constants/index.ts` | Nothing in the repo shows these are real. A stranded driver who calls a number that does not ring is worse than no number |
-| R2 | **Rotate the Google Maps key** that was committed in `mobile/app.json` (still in git history) | Quota theft. Restrict the new key to the package name / bundle id |
-| R3 | **Lawyer review** of `/terms` and `/privacy` | Drafted from product behaviour, not by counsel |
-| R4 | **Full regression for backend work added today** (payments, partner-location, vehicle PATCH/DELETE, public tracking, `base_price`, start code, idempotency) | Money, auth and concurrency paths; migrations `0002`, `0003`, `008` are untracked and must be applied and recorded |
-| R5 | **Device run, both roles**: request → match → start code → pay → complete → rate, on a physical Android and iPhone | Native maps, GPS accuracy, SMS autofill, `tel:` and share sheets were only ever checked in a browser |
-| R6 | **Commit.** Large parts of this work are uncommitted in `Sahayak/.git` (web, mobile, backend, docs) | One bad command loses it. Commit in reviewable chunks |
-| R7 | **Public tracking link privacy review** (`/track/:jobId`, unauthenticated) | Confirm it exposes no owner phone/name/exact address beyond what ADR-017 allows, uses an unguessable token (not the raw job id), and stops working after completion |
-| R8 | **Payments hardening**: server-side confirmation only, signature-checked webhooks if a gateway is added, integer paise, idempotent confirm, duplicate and out-of-order tests | `POST /payments/{id}/confirm` as built relies on who calls it; decide whether the partner or owner confirms and prevent either from forging the other |
+| R1 | [ ] **Replace the placeholder contact details.** `support@sahayak.app`, `+91 80 4567 8900` and the `sahayak.app` / `api.sahayak.app` domains appear in Terms, Privacy, the landing footer, mobile Account, mobile `SafetyActions` and `constants/index.ts` | Nothing in the repo shows these are real. A stranded driver who calls a number that does not ring is worse than no number |
+| R2 | [ ] **Rotate the Google Maps key** that was committed in `mobile/app.json` (still in git history) | Quota theft. Restrict the new key to the package name / bundle id |
+| R3 | [ ] **Lawyer review** of `/terms` and `/privacy` | Drafted from product behaviour, not by counsel |
+| R4 | [x] (2026-11-14: 472 unit + 828 live, all green) **Full regression for backend work added today** (payments, partner-location, vehicle PATCH/DELETE, public tracking, `base_price`, start code, idempotency) | Money, auth and concurrency paths; migrations `0002`, `0003`, `008` are untracked and must be applied and recorded |
+| R5 | [ ] **Device run, both roles**: request → match → start code → pay → complete → rate, on a physical Android and iPhone | Native maps, GPS accuracy, SMS autofill, `tel:` and share sheets were only ever checked in a browser |
+| R6 | [x] (2026-11-14, migrations included) **Commit.** Large parts of this work are uncommitted in `Sahayak/.git` (web, mobile, backend, docs) | One bad command loses it. Commit in reviewable chunks |
+| R7 | [~] (token + accepted-partner-only done 2026-11-14; expiry and rate limit next) **Public tracking link privacy review** (`/track/:jobId`, unauthenticated) | Confirm it exposes no owner phone/name/exact address beyond what ADR-017 allows, uses an unguessable token (not the raw job id), and stops working after completion |
+| R8 | [~] (server amount, partner/admin-only confirm, idempotent confirm done 2026-11-14, ADR-022; no gateway yet) **Payments hardening**: server-side confirmation only, signature-checked webhooks if a gateway is added, integer paise, idempotent confirm, duplicate and out-of-order tests | `POST /payments/{id}/confirm` as built relies on who calls it; decide whether the partner or owner confirms and prevent either from forging the other |
 
 ### 9.2 Product gaps
 
@@ -238,16 +245,20 @@ Missing, in suggested order:
 
 ### 9.7 Claims in this document not verified by me
 
-The "Done" rows in sections 2–4 were written by another process in this repository and I have not
-tested them. In particular: live partner location, vehicle delete guard, partner-rates-owner,
-public tracking, and UPI / cash payments. Treat them as "implemented, unverified" until R4 and R5
-are done.
+Superseded 2026-11-14: live partner location, vehicle delete guard, partner-rates-owner, public
+tracking and payments are now covered by unit tests and live harnesses (R4). Three of them had
+defects, fixed in `fix/payments-sharing-review`. Still unverified on a physical device (R5).
 
-### 9.8 Suggested next two weeks
+### 9.8 Build order (timeline lifted 2026-11-14)
 
-1. R1, R2, R6 (an afternoon).
-2. R4 and R7, R8 (backend regression and security review of the new endpoints).
-3. R5 (device run) and fix what breaks.
-4. G1 (radius escalation), then G2 (push).
-5. Admin items 1–3.
-6. R3 in parallel (legal) and E1 (CI).
+Code work, in order:
+1. R7 remainder: public link stops after the job ends, plus a rate limit.
+2. G1 radius escalation.
+3. Admin items 1–3: live jobs board with staff cancel, owner/partner management, audit log.
+4. G8 profile edit and G10 account deletion / data export.
+5. G9 partner notifications screen on mobile.
+6. G2 push notifications (device token registry + sender; needs FCM/APNs credentials to go live).
+7. E1 CI.
+
+Needs a person, not code: R1 (real contact values and UPI ID), R2 (rotate Maps key), R3 (lawyer),
+R5 (device run), G3 (money-holding decision and CA sign-off), G5/G7 (provider contracts).
