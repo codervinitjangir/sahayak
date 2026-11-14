@@ -130,7 +130,7 @@ async def add_audit(
     admin_id: Optional[uuid.UUID],
     action: str,
     target_type: str,
-    target_id: uuid.UUID,
+    target_id: Optional[uuid.UUID],
     reason: Optional[str] = None,
     details: Optional[dict] = None,
 ) -> AdminAuditLog:

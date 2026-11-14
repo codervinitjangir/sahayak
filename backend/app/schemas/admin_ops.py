@@ -72,7 +72,7 @@ class AdminAuditEntry(BaseModel):
     admin_id: Optional[uuid.UUID] = None
     action: str
     target_type: str
-    target_id: uuid.UUID
+    target_id: Optional[uuid.UUID] = None
     reason: Optional[str] = None
     details: Optional[dict[str, Any]] = None
     created_at: datetime
@@ -109,3 +109,17 @@ class AdminAlertsResponse(BaseModel):
     no_match_rate: Optional[float] = Field(
         default=None, description="None when the window has too few jobs to state a rate."
     )
+
+
+class AdminServicePriceRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    base_price: Decimal = Field(..., gt=0, le=50000, max_digits=10, decimal_places=2,
+                                description="INR. Applies to requests made after the change.")
+    reason: str = Field(..., min_length=3, max_length=500, description="Required: goes in the audit log.")
+
+
+class AdminServiceItem(BaseModel):
+    id: int
+    code: str
+    name: str
+    base_price: Optional[Decimal] = None

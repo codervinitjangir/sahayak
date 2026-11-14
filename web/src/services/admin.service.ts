@@ -107,11 +107,20 @@ export interface AdminAuditEntry {
   id: string;
   admin_id?: string | null;
   action: string;
-  target_type: 'job' | 'user' | 'partner';
-  target_id: string;
+  target_type: 'job' | 'user' | 'partner' | 'dispute' | 'service';
+  /** Null for a service: its code is in `details.service_code`. */
+  target_id: string | null;
   reason?: string | null;
   details?: Record<string, unknown> | null;
   created_at: string;
+}
+
+export interface AdminCatalogueItem {
+  id: number;
+  code: string;
+  name: string;
+  base_price: string | number | null;
+  category_name?: string | null;
 }
 
 export interface AdminAlert {
@@ -242,6 +251,25 @@ export const adminService = {
 
   async listAudit(params: { target_type?: string; target_id?: string; limit?: number; offset?: number } = {}): Promise<Page<AdminAuditEntry>> {
     const res = await apiClient<Page<AdminAuditEntry>>(`/admin/audit-log${qs(params)}`, { method: 'GET' });
+    return res.data;
+  },
+
+  /**
+   * The catalogue straight from the server. Deliberately not jobsService.listServices():
+   * that one falls back to a seeded list when the call fails, and a price editor
+   * must never show prices the server did not send.
+   */
+  async listCatalogue(): Promise<AdminCatalogueItem[]> {
+    const res = await apiClient<{ items: AdminCatalogueItem[] }>('/services', { method: 'GET' });
+    return res.data.items;
+  },
+
+  /** Applies to requests made after the change; existing jobs keep their estimate. */
+  async setServicePrice(code: string, basePrice: string, reason: string): Promise<AdminCatalogueItem> {
+    const res = await apiClient<AdminCatalogueItem>(`/admin/services/${encodeURIComponent(code)}/price`, {
+      method: 'PATCH',
+      body: JSON.stringify({ base_price: basePrice, reason }),
+    });
     return res.data;
   },
 

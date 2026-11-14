@@ -1,5 +1,6 @@
+from decimal import Decimal
 from typing import Optional, List
-from sqlalchemy import Integer, String, Boolean, ForeignKey
+from sqlalchemy import Integer, Numeric, String, Boolean, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.config.database import Base
 
@@ -32,6 +33,9 @@ class Service(Base):
     requires_vehicle_equipment: Mapped[bool] = mapped_column(
         Boolean, default=False, nullable=True
     )
+    # What POST /jobs writes to jobs.price_estimate. Staff-editable (ADR-028);
+    # NULL falls back to job_service.SERVICE_BASE_PRICES.
+    base_price: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)
 
     # Relationships
     category: Mapped[Optional["ServiceCategory"]] = relationship(

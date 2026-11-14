@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
 
-import { JobsBoardPanel, OwnersPanel } from '../../src/pages/admin/BackOfficePanels';
+import { CataloguePanel, JobsBoardPanel, OwnersPanel } from '../../src/pages/admin/BackOfficePanels';
 import { adminService } from '../../src/services/admin.service';
 
 vi.mock('../../src/services/admin.service', async (orig) => {
@@ -12,7 +12,7 @@ vi.mock('../../src/services/admin.service', async (orig) => {
   return {
     ...real,
     adminService: {
-      listJobs: vi.fn(), getAlerts: vi.fn(), cancelJob: vi.fn(), listUsers: vi.fn(), setUserSuspension: vi.fn(), listAudit: vi.fn(),
+      listJobs: vi.fn(), getAlerts: vi.fn(), listCatalogue: vi.fn(), setServicePrice: vi.fn(), cancelJob: vi.fn(), listUsers: vi.fn(), setUserSuspension: vi.fn(), listAudit: vi.fn(),
     },
   };
 });
@@ -78,5 +78,32 @@ describe('OwnersPanel', () => {
     expect(await screen.findByText('Suspended')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /reinstate/i }));
     await waitFor(() => expect(adminService.setUserSuspension).toHaveBeenCalledWith('u1', false, undefined));
+  });
+});
+
+
+describe('CataloguePanel', () => {
+  const item = { id: 3, code: 'flat_tyre', name: 'Flat tyre', base_price: '399.00', category_name: 'Mechanical' };
+  beforeEach(() => {
+    vi.mocked(adminService.listCatalogue).mockResolvedValue([item]);
+    vi.mocked(adminService.setServicePrice).mockResolvedValue({ ...item, base_price: '450' });
+  });
+
+  it('will not save a price without a reason, an unchanged price, or an implausible one', async () => {
+    const user = userEvent.setup();
+    wrap(<CataloguePanel />);
+    await user.click(await screen.findByRole('button', { name: /change price of flat tyre/i }));
+    const save = screen.getByRole('button', { name: 'Save price' });
+    const amount = screen.getByLabelText(/base price/i);
+    await user.type(screen.getByLabelText(/reason/i), 'fuel costs up');
+    expect(save).toBeDisabled(); // unchanged at 399
+    await user.clear(amount);
+    await user.type(amount, '0');
+    expect(save).toBeDisabled();
+    await user.clear(amount);
+    await user.type(amount, '450');
+    expect(save).not.toBeDisabled();
+    await user.click(save);
+    await waitFor(() => expect(adminService.setServicePrice).toHaveBeenCalledWith('flat_tyre', '450', 'fuel costs up'));
   });
 });

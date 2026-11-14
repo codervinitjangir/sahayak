@@ -1238,3 +1238,21 @@ The second bug was blunter: `partner_supply` filtered on `p.is_verified`, a bool
 5. Receipts (Phase 3 D): `GET /payments/{id}/receipt`, same access rule as reading the payment, only for `paid`/`refunded`. `is_tax_invoice` is false: there is no GSTIN on record, so no tax line is invented.
 
 **Not done.** Owner is not notified of the resolution; no web/mobile UI for disputes or receipts yet; partner payouts (C) wait on the money-holding decision.
+
+---
+
+# ADR-028: A service's base price is a column staff can change; the job keeps the price it was created with
+
+**Date:** 2026-11-14 · **Status:** Accepted
+
+**Context.** The base price of each service was a constant in `job_service.SERVICE_BASE_PRICES`. Changing a price meant a code change and a deploy, and the admin backlog asked for a pricing editor. Three places read the constant: `POST /jobs` (writes `jobs.price_estimate`), `GET /services` and the partner's service list.
+
+**Decision.**
+1. `services.base_price numeric(10,2)`, nullable, `CHECK (> 0)` (alembic/0008), backfilled from the constant only where NULL so a re-run never undoes a staff edit.
+2. **One reader.** `job_service.base_price_for(service)` returns the column when set and the constant otherwise. All three call sites use it, so the price an owner is shown and the estimate stored on their job cannot differ. The constant stays as the fallback for a NULL column, which also keeps the previous backend working against the new schema during a deploy.
+3. **Only the price is editable.** `PATCH /admin/services/{code}/price` (admin, body `{base_price, reason}`). Names and codes stay migration-only: a code is part of the client contract and of partner coverage rows.
+4. **A change never reprices an existing job.** `price_estimate` is copied onto the job at creation; the edit touches only the catalogue row. The final-price cap (`PRICE_FINAL_OUT_OF_RANGE`) is computed from the job's own estimate, so it is unaffected too.
+5. **Audited in the same transaction** (ADR-024): action `service_price_changed`, target_type `service`. A service has an integer id, so `admin_audit_log.target_id` becomes nullable and `details` carries `{service_code, from, to}`. The service row is read `FOR UPDATE`, so two concurrent edits serialise and each audit row records the price it really replaced. Setting the same price writes nothing.
+6. Bounds: greater than 0, at most 50000 (the absolute final-price cap), two decimals. Enforced by the request schema and, for the lower bound, by the database.
+
+**Not done.** No scheduled or time-limited prices, no distance or surge component, no per-city price. Service create, rename and retire are still migrations. Categories are not editable.

@@ -2,9 +2,9 @@
 
 SQL only, like every repository here: no HTTP errors, no transaction control.
 
-The catalogue is seeded by db/seed.sql and changed by migration. Nothing in the
-API writes it, which is why there is no create/update here — a service code is
-part of the contract (`POST /jobs` takes `service_code`, `POST /partners/{id}/
+The catalogue is seeded by db/seed.sql and changed by migration. The one thing the
+API writes is `base_price` (ADR-028, staff only). There is still no create or
+rename here — a service code is part of the contract (`POST /jobs` takes `service_code`, `POST /partners/{id}/
 services` takes a list of them), and codes that can be invented at runtime would
 make that contract unknowable to a client.
 """
@@ -45,4 +45,11 @@ async def get_service_by_id(db: AsyncSession, service_id: int) -> Service | None
     table of its own.
     """
     result = await db.execute(select(Service).where(Service.id == service_id))
+    return result.scalar_one_or_none()
+
+
+async def get_service_by_code_for_update(db: AsyncSession, code: str) -> Service | None:
+    """Row-locked read for the price edit, so two staff edits serialise and each
+    audit row records the price it actually replaced."""
+    result = await db.execute(select(Service).where(Service.code == code).with_for_update())
     return result.scalar_one_or_none()

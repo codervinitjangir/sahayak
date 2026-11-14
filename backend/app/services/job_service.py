@@ -72,6 +72,23 @@ SERVICE_BASE_PRICES: dict[str, Decimal] = {
     "fuel_delivery": Decimal("449.00"),
 }
 
+# Used when a service has neither a stored price nor an entry above.
+DEFAULT_BASE_PRICE = Decimal("499.00")
+
+
+def base_price_for(service) -> Optional[Decimal]:
+    """The one place a service's base price is read (ADR-028).
+
+    `services.base_price` wins when staff have set it; the constant above is the
+    fallback for a row whose column is NULL. GET /services, the partner's
+    service list and POST /jobs all call this, so they cannot disagree.
+    """
+    stored = getattr(service, "base_price", None)
+    if isinstance(stored, Decimal):
+        return stored
+    return SERVICE_BASE_PRICES.get(getattr(service, "code", None))
+
+
 # The status every job starts in; dispatch moves it on from here.
 INITIAL_JOB_STATUS = "requested"
 
@@ -280,7 +297,7 @@ async def create_job(
         raise BadRequestError(ErrorCode.INVALID_SERVICE_CODE, "Invalid service_code")
 
     pickup_location = _build_pickup_point(payload.pickup_lat, payload.pickup_lng)
-    estimated_price = SERVICE_BASE_PRICES.get(payload.service_code, Decimal("499.00"))
+    estimated_price = base_price_for(service) or DEFAULT_BASE_PRICE
 
     try:
         job = await job_repository.create_job_row(

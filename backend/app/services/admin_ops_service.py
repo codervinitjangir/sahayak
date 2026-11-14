@@ -14,7 +14,7 @@ from sqlalchemy import func
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.repositories import admin_ops_repository, job_repository
+from app.repositories import admin_ops_repository, job_repository, service_repository
 from app.schemas.admin_ops import (
     AdminAlert,
     AdminAlertsResponse,
@@ -22,6 +22,7 @@ from app.schemas.admin_ops import (
     AdminAuditListResponse,
     AdminJobItem,
     AdminJobListResponse,
+    AdminServiceItem,
     AdminUserItem,
     AdminUserListResponse,
 )
@@ -303,3 +304,47 @@ async def get_alerts(db: AsyncSession) -> AdminAlertsResponse:
     on_duty, verified = await admin_ops_repository.partner_duty_counts(db)
     return evaluate_alerts(now=now, live_jobs=live, window_counts=counts,
                            partners_on_duty=on_duty, partners_verified=verified)
+
+
+# ---------------------------------------------------------------------------
+# Catalogue pricing (ADR-028)
+# ---------------------------------------------------------------------------
+async def set_service_price(
+    db: AsyncSession, service_code: str, base_price, reason: str, identity: Identity
+) -> AdminServiceItem:
+    """Change what new requests for this service are estimated at.
+
+    Jobs already created keep the price_estimate they were given: the estimate
+    is stored on the job at creation, so this never rewrites a price an owner
+    has already been shown. The change and its audit row commit together.
+    """
+    from app.services.job_service import base_price_for
+
+    service = await service_repository.get_service_by_code_for_update(db, service_code)
+    if service is None:
+        raise NotFoundError(ErrorCode.INVALID_SERVICE_CODE, "Service not found")
+
+    previous = base_price_for(service)
+    item = AdminServiceItem(id=service.id, code=service.code, name=service.name, base_price=base_price)
+    if previous == base_price:
+        await db.rollback()          # release the row lock; nothing changed, nothing to audit
+        return item
+    try:
+        service.base_price = base_price
+        await db.flush()
+        await admin_ops_repository.add_audit(
+            db, admin_id=identity.local_id, action="service_price_changed", target_type="service",
+            target_id=None, reason=reason,
+            details={"service_code": item.code,
+                     "from": str(previous) if previous is not None else None, "to": str(base_price)},
+        )
+        await db.commit()
+    except SQLAlchemyError as exc:
+        await db.rollback()
+        log_event("admin_service_price_failed", level=logging.ERROR, service_code=item.code,
+                  error_type=type(exc).__name__, outcome="failure")
+        raise InternalError("Could not change the price") from exc
+
+    log_event("admin_service_price_changed", service_code=item.code, admin_id=str(identity.local_id),
+              outcome="success")
+    return item

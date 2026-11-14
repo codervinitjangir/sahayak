@@ -29,7 +29,7 @@ from app.config.database import get_db
 from app.repositories import service_repository
 from app.schemas.common import ApiResponse, ErrorResponse, envelope
 from app.schemas.service import ServiceCatalogItem, ServiceCatalogResponse
-from app.services.job_service import SERVICE_BASE_PRICES
+from app.services.job_service import base_price_for
 
 _ERROR_RESPONSES = {
     500: {"model": ErrorResponse, "description": "Unexpected server error"},
@@ -58,7 +58,7 @@ async def list_services(
     nothing, which the layering convention exists to prevent rather than require.
     The same argument is made at GET /api/v1/auth/me.
 
-    `base_price` is the same constant POST /jobs uses to populate
+    `base_price` is the same value (job_service.base_price_for) POST /jobs uses to populate
     jobs.price_estimate, so a client can show the amount the backend will
     actually charge instead of maintaining a second price table that drifts.
     It is the base before any future distance or surge adjustment — the field
@@ -71,7 +71,7 @@ async def list_services(
             code=service.code,
             name=service.name,
             requires_vehicle_equipment=bool(service.requires_vehicle_equipment),
-            base_price=SERVICE_BASE_PRICES.get(service.code),
+            base_price=base_price_for(service),
             category_id=service.category_id,
             category_code=category.code if category else None,
             category_name=category.name if category else None,

@@ -2297,3 +2297,10 @@ All `require_admin`; anyone else 403. Every write is audited in the same transac
 * Web: root `ErrorBoundary` (`src/app/ErrorBoundary.tsx`); optional `VITE_ERROR_REPORT_URL` receives render crashes. `public/robots.txt` and `public/sitemap.xml` added (placeholder domain, R1).
 * Mobile: `friendlyMessage()` in `services/identity.ts`; the login screen never shows transport text such as "Not Found".
 * Route fixtures re-exported for both clients (63 routes).
+
+### 19.1 Catalogue pricing (ADR-028, 2026-11-14)
+
+* `PATCH /api/v1/admin/services/{service_code}/price` (admin) body `{base_price, reason}` → `{id, code, name, base_price}`. `base_price` > 0, ≤ 50000, at most two decimals (else 422). `reason` 3–500 chars. Unknown code → 404 `INVALID_SERVICE_CODE`. Extra fields → 422.
+* `GET /api/v1/services` is unchanged in shape; `base_price` now comes from the database and can change between calls. **Do not cache it across sessions or hard-code prices.** A job's `price_estimate` is fixed when the job is created.
+* Audit: `GET /api/v1/admin/audit-log?target_type=service` is valid. For these rows **`target_id` is `null`** and `details` is `{service_code, from, to}`. Any client that renders `target_id` must handle null.
+* Web: Admin console tab **Pricing** (`/admin/catalogue`).

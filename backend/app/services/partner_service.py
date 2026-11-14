@@ -518,7 +518,7 @@ async def get_partner_services(
                 service_id=service.id,
                 code=service.code,
                 name=service.name,
-                base_price=job_service.SERVICE_BASE_PRICES.get(service.code),
+                base_price=job_service.base_price_for(service),
             )
             for service in services
         ],

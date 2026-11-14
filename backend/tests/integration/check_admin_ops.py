@@ -82,6 +82,9 @@ def counts():
     return out
 
 
+ORIGINAL_PRICES: dict = {}
+
+
 def purge():
     q = conn.cursor()
     if DELETED_OWNERS:
@@ -95,7 +98,10 @@ def purge():
     q.execute("BEGIN")
     q.execute("ALTER TABLE admin_audit_log DISABLE TRIGGER trg_admin_audit_log_append_only")
     q.execute(f"DELETE FROM admin_audit_log WHERE target_id IN {job_ids} OR target_id IN {user_ids} "
-              f"OR target_id IN {partner_ids}", params)
+              f"OR target_id IN {partner_ids} OR (target_type = 'service' AND reason LIKE %(tag)s)", params)
+    # Section 5c changes a price; put back whatever it replaced, even after a crash.
+    for code, price in ORIGINAL_PRICES.items():
+        q.execute("UPDATE services SET base_price = %(p)s WHERE code = %(c)s", {"p": price, "c": code})
     q.execute("ALTER TABLE admin_audit_log ENABLE TRIGGER trg_admin_audit_log_append_only")
     q.execute("COMMIT")
     q.execute(f"DELETE FROM device_push_tokens WHERE owner_id IN {user_ids} OR owner_id IN {partner_ids}"
@@ -255,6 +261,31 @@ async def main():
         d = r.json().get("data") or {}
         check("audit-log endpoint filters by target", r.status_code == 200
               and [i["action"] for i in d.get("items", [])] == ["user_reinstated", "user_suspended"], f"{d.get('items')}")
+
+        section("5c. Catalogue pricing (ADR-028)")
+        code = "flat_tyre"
+        before = one("SELECT base_price FROM services WHERE code=%(c)s", {"c": code})["base_price"]
+        ORIGINAL_PRICES[code] = before
+        new_price = "412.50" if str(before) != "412.50" else "413.50"
+        r = await c.patch(f"/api/v1/admin/services/{code}/price",
+                          json={"base_price": new_price, "reason": TAG + " price test"})
+        stored = one("SELECT base_price FROM services WHERE code=%(c)s", {"c": code})["base_price"]
+        check("PATCH price is stored", r.status_code == 200 and str(stored) == new_price, f"HTTP {r.status_code} {stored}")
+        a = one("SELECT admin_id, target_id, details FROM admin_audit_log WHERE target_type='service' "
+                "AND reason=%(r)s", {"r": TAG + " price test"})
+        check("audit row carries the code and both prices", a is not None and a["target_id"] is None
+              and a["details"] == {"service_code": code, "from": str(before), "to": new_price}, f"{a}")
+        r = await c.get("/api/v1/services")
+        listed = {i["code"]: i["base_price"] for i in (r.json().get("data") or {}).get("items", [])}
+        check("the public catalogue shows the new price", str(listed.get(code)) == new_price, f"{listed.get(code)}")
+        r = await c.patch(f"/api/v1/admin/services/{code}/price", json={"base_price": "0", "reason": TAG + " zero"})
+        check("a zero price is refused", r.status_code == 422, f"HTTP {r.status_code}")
+        r = await c.patch("/api/v1/admin/services/no_such_service/price",
+                          json={"base_price": "100", "reason": TAG + " missing"})
+        check("an unknown service is 404", r.status_code == 404, f"HTTP {r.status_code}")
+        r = await c.get("/api/v1/admin/audit-log", params={"target_type": "service"})
+        check("audit-log lists service rows with a null target_id", r.status_code == 200
+              and any(i["target_id"] is None for i in (r.json().get("data") or {}).get("items", [])), f"HTTP {r.status_code}")
 
         section("5b. Owner self-service: profile, export, deletion (ADR-025)")
         auth2 = uuid.uuid4()

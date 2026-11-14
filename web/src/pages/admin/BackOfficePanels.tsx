@@ -7,7 +7,7 @@ import { ErrorState } from '../../components/ui/ErrorState';
 import { Modal } from '../../components/ui/Modal';
 import { StatusPill } from '../../components/ui/StatusPill';
 import { ApiError } from '../../services/api';
-import { adminService, AdminJobItem, AdminUserItem } from '../../services/admin.service';
+import { adminService, AdminCatalogueItem, AdminJobItem, AdminUserItem } from '../../services/admin.service';
 
 // Back office (ADR-024). Every write here is audited server-side in the same
 // transaction as the change; these panels only display and request.
@@ -422,13 +422,134 @@ export const AuditPanel: React.FC = () => {
                 <span className="font-semibold text-[#0F172A]">{ACTION_LABELS[a.action] ?? a.action}</span>
                 <time className="text-xs text-slate-500" dateTime={a.created_at}>{when(a.created_at)}</time>
               </div>
-              <div className="text-xs text-slate-500 font-mono">{a.target_type} {a.target_id.slice(0, 8)}</div>
+              <div className="text-xs text-slate-500 font-mono">{a.target_type} {a.target_id ? a.target_id.slice(0, 8) : String(a.details?.service_code ?? '')}</div>
               {a.reason && <p className="mt-0.5 text-slate-700">{a.reason}</p>}
             </li>
           ))}
         </ol>
       )}
       {audit.data && <Pager total={audit.data.total} offset={offset} onOffset={setOffset} />}
+    </section>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// Catalogue pricing (ADR-028)
+
+const PRICE_MAX = 50000;
+
+const PriceDialog: React.FC<{
+  item: AdminCatalogueItem;
+  busy: boolean;
+  error: string | null;
+  onClose: () => void;
+  onConfirm: (price: string, reason: string) => void;
+}> = ({ item, busy, error, onClose, onConfirm }) => {
+  const [price, setPrice] = useState(item.base_price != null ? String(Number(item.base_price)) : '');
+  const [reason, setReason] = useState('');
+  const amount = Number(price);
+  const priceOk = /^\d+(\.\d{1,2})?$/.test(price) && amount > 0 && amount <= PRICE_MAX;
+  const changed = item.base_price == null || amount !== Number(item.base_price);
+  const ok = priceOk && changed && reason.trim().length >= 3;
+  return (
+    <Modal
+      isOpen
+      onClose={onClose}
+      title={`Change the price of ${item.name}`}
+      description="Applies to requests made after you save. Requests already made keep the estimate the owner was shown."
+      maxWidth="md"
+    >
+      <label htmlFor="price-amount" className="text-xs font-bold uppercase tracking-wider text-slate-500">
+        Base price (₹)
+      </label>
+      <input
+        id="price-amount"
+        inputMode="decimal"
+        value={price}
+        onChange={(e) => setPrice(e.target.value.trim())}
+        className="mt-1 w-full min-h-[44px] rounded-[10px] border border-[#EEF2F6] px-3 text-sm tnum"
+      />
+      {price !== '' && !priceOk && (
+        <p className="mt-1 text-xs text-red-700">Enter an amount from 1 to {PRICE_MAX}, with at most two decimals.</p>
+      )}
+      <label htmlFor="price-reason" className="mt-3 block text-xs font-bold uppercase tracking-wider text-slate-500">
+        Reason (required, recorded in the audit log)
+      </label>
+      <textarea
+        id="price-reason"
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+        rows={3}
+        maxLength={500}
+        className="mt-1 w-full rounded-[10px] border border-[#EEF2F6] p-2 text-sm"
+      />
+      {error && <p role="alert" className="mt-2 text-sm text-red-700">{error}</p>}
+      <div className="mt-4 flex justify-end gap-2">
+        <Button variant="outline" onClick={onClose}>Back</Button>
+        <Button disabled={!ok || busy} isLoading={busy} onClick={() => onConfirm(price, reason.trim())}>
+          Save price
+        </Button>
+      </div>
+    </Modal>
+  );
+};
+
+export const CataloguePanel: React.FC = () => {
+  const qc = useQueryClient();
+  const [editing, setEditing] = useState<AdminCatalogueItem | null>(null);
+  const catalogue = useQuery({ queryKey: ['admin', 'catalogue'], queryFn: () => adminService.listCatalogue() });
+  const save = useMutation({
+    mutationFn: ({ code, price, reason }: { code: string; price: string; reason: string }) =>
+      adminService.setServicePrice(code, price, reason),
+    onSuccess: () => {
+      setEditing(null);
+      void qc.invalidateQueries({ queryKey: ['admin', 'catalogue'] });
+      void qc.invalidateQueries({ queryKey: ['admin', 'audit'] });
+      void qc.invalidateQueries({ queryKey: ['services'] });
+    },
+  });
+
+  if (catalogue.isError) return <ErrorState message={errText(catalogue.error)} onRetry={() => catalogue.refetch()} />;
+  if (catalogue.isLoading) return <p className="text-sm text-slate-500">Loading the catalogue…</p>;
+  const items = catalogue.data ?? [];
+  if (items.length === 0) {
+    return <EmptyState icon={ClipboardList} title="No services" description="The catalogue is empty." />;
+  }
+
+  return (
+    <section aria-label="Service catalogue" className="space-y-3">
+      <ul className="divide-y divide-[#EEF2F6] rounded-[14px] border border-[#EEF2F6] bg-white">
+        {items.map((item) => (
+          <li key={item.code} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+            <div className="min-w-0">
+              <div className="font-semibold text-[#0F172A]">{item.name}</div>
+              <div className="text-xs text-slate-500 font-mono break-all">
+                {item.code}{item.category_name ? ` · ${item.category_name}` : ''}
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-bold tnum text-[#0F172A]">
+                {item.base_price != null ? `₹${Number(item.base_price)}` : 'No price set'}
+              </span>
+              <Button size="sm" variant="outline" onClick={() => { save.reset(); setEditing(item); }} aria-label={`Change price of ${item.name}`}>
+                Change
+              </Button>
+            </div>
+          </li>
+        ))}
+      </ul>
+      <p className="text-xs text-[#475569]">
+        Service names and codes are fixed: the apps and partner coverage refer to them. Only the base price can be changed here.
+      </p>
+      {editing && (
+        <PriceDialog
+          item={editing}
+          busy={save.isPending}
+          error={save.isError ? errText(save.error) : null}
+          onClose={() => setEditing(null)}
+          onConfirm={(price, reason) => save.mutate({ code: editing.code, price, reason })}
+        />
+      )}
     </section>
   );
 };

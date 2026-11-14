@@ -52,6 +52,9 @@ def main() -> int:
 
     path = MIGRATIONS / args[0]
     if not path.is_file():
+        # Migrations since 2026-11 live beside the backend, in backend/alembic/.
+        path = Path(__file__).resolve().parents[1] / "alembic" / args[0]
+    if not path.is_file():
         print(f"FAIL  no such migration: {path}")
         return 2
 

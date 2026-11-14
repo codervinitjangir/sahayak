@@ -38,6 +38,7 @@
     "GET /health",
     "PATCH /api/v1/admin/disputes/{dispute_id}",
     "PATCH /api/v1/admin/partners/{partner_id}/verify",
+    "PATCH /api/v1/admin/services/{service_code}/price",
     "PATCH /api/v1/admin/users/{user_id}/suspension",
     "PATCH /api/v1/partners/me",
     "PATCH /api/v1/partners/{partner_id}/availability",

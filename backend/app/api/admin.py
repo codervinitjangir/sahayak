@@ -61,6 +61,8 @@ from app.schemas.analytics import (
 )
 from app.schemas.common import ApiResponse, ErrorResponse, envelope
 from app.schemas.admin_ops import (
+    AdminServiceItem,
+    AdminServicePriceRequest,
     AdminAlertsResponse,
     AdminAuditListResponse,
     AdminJobCancelRequest,
@@ -436,7 +438,7 @@ async def admin_set_user_suspension(
     summary="Staff actions, newest first",
 )
 async def admin_audit_log(
-    target_type: Optional[str] = Query(None, pattern="^(job|user|partner|dispute)$"),
+    target_type: Optional[str] = Query(None, pattern="^(job|user|partner|dispute|service)$"),
     target_id: Optional[uuid.UUID] = Query(None),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
@@ -459,3 +461,21 @@ async def admin_alerts(
     """Computed on every read; nothing is stored. An empty `alerts` list still
     carries the figures it was judged from."""
     return envelope(await admin_ops_service.get_alerts(db))
+
+
+@admin_ops_router.patch(
+    "/services/{service_code}/price",
+    response_model=ApiResponse[AdminServiceItem],
+    summary="Change a service's base price (reason required, audited)",
+)
+async def admin_set_service_price(
+    service_code: str,
+    payload: AdminServicePriceRequest,
+    identity: Identity = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[AdminServiceItem]:
+    """Applies to requests created after the change; existing jobs keep their
+    estimate. 404 INVALID_SERVICE_CODE for an unknown code. Read the catalogue
+    with GET /services."""
+    return envelope(await admin_ops_service.set_service_price(
+        db, service_code, payload.base_price, payload.reason, identity))

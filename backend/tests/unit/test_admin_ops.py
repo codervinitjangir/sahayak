@@ -144,3 +144,65 @@ def test_no_match_rate_needs_enough_jobs_to_mean_anything():
 def test_partner_cover_alerts():
     assert [a.code for a in _alerts(partners_on_duty=0).alerts] == ["NO_PARTNERS_ON_DUTY"]
     assert [a.code for a in _alerts(partners_on_duty=2).alerts] == ["LOW_PARTNERS_ON_DUTY"]
+
+
+# --- Catalogue pricing (ADR-028) --------------------------------------------
+from decimal import Decimal  # noqa: E402
+
+from pydantic import ValidationError  # noqa: E402
+
+from app.models.service import Service  # noqa: E402
+from app.schemas.admin_ops import AdminServicePriceRequest  # noqa: E402
+from app.services import job_service  # noqa: E402
+
+
+def test_stored_price_wins_and_the_constant_is_only_a_fallback():
+    assert job_service.base_price_for(Service(code="flat_tyre", base_price=Decimal("450.00"))) == Decimal("450.00")
+    assert job_service.base_price_for(Service(code="flat_tyre", base_price=None)) == Decimal("399.00")
+    assert job_service.base_price_for(Service(code="brand_new", base_price=None)) is None
+    # A test double with no real column must not leak a mock into a price.
+    assert job_service.base_price_for(MagicMock(code="flat_tyre")) == Decimal("399.00")
+
+
+@pytest.mark.parametrize("bad", ["0", "-5", "50000.01", "10.999"])
+def test_price_request_refuses_implausible_amounts(bad):
+    with pytest.raises(ValidationError):
+        AdminServicePriceRequest(base_price=bad, reason="typo test")
+
+
+def test_price_request_needs_a_reason():
+    with pytest.raises(ValidationError):
+        AdminServicePriceRequest(base_price="450", reason="")
+
+
+@pytest.mark.asyncio
+async def test_price_change_writes_the_audit_row_in_the_same_commit():
+    svc = Service(id=3, code="flat_tyre", name="Flat tyre", base_price=Decimal("399.00"))
+    db = AsyncMock()
+    with patch("app.repositories.service_repository.get_service_by_code_for_update", AsyncMock(return_value=svc)), \
+         patch("app.repositories.admin_ops_repository.add_audit", AsyncMock()) as audit:
+        out = await admin_ops_service.set_service_price(db, "flat_tyre", Decimal("450.00"), "fuel costs up", ADMIN)
+    assert out.base_price == Decimal("450.00") and svc.base_price == Decimal("450.00")
+    kw = audit.await_args.kwargs
+    assert kw["action"] == "service_price_changed" and kw["target_type"] == "service" and kw["target_id"] is None
+    assert kw["details"] == {"service_code": "flat_tyre", "from": "399.00", "to": "450.00"}
+    db.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_setting_the_same_price_changes_and_audits_nothing():
+    svc = Service(id=3, code="flat_tyre", name="Flat tyre", base_price=Decimal("399.00"))
+    db = AsyncMock()
+    with patch("app.repositories.service_repository.get_service_by_code_for_update", AsyncMock(return_value=svc)), \
+         patch("app.repositories.admin_ops_repository.add_audit", AsyncMock()) as audit:
+        await admin_ops_service.set_service_price(db, "flat_tyre", Decimal("399.00"), "no change", ADMIN)
+    audit.assert_not_awaited()
+    db.commit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_unknown_service_is_404():
+    with patch("app.repositories.service_repository.get_service_by_code_for_update", AsyncMock(return_value=None)):
+        with pytest.raises(AppError) as exc:
+            await admin_ops_service.set_service_price(AsyncMock(), "nope", Decimal("1"), "x reason", ADMIN)
+    assert exc.value.status_code == 404
