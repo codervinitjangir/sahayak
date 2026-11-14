@@ -17,7 +17,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from pydantic import ValidationError  # noqa: E402
-from sqlalchemy import delete, select  # noqa: E402
+from sqlalchemy import delete, select, text  # noqa: E402
 
 from app.api.admin import get_partner_detail, list_partners, verify_partner  # noqa: E402
 from app.config.database import AsyncSessionLocal  # noqa: E402
@@ -26,7 +26,9 @@ from app.schemas.admin import AdminPartnerVerificationRequest  # noqa: E402
 from app.services.auth_service import Identity  # noqa: E402
 from app.utils.errors import NotFoundError  # noqa: E402
 
-ADMIN = Identity(auth_user_id=uuid.uuid4(), role="admin", local_id=uuid.uuid4())
+# Verification writes an audit row whose admin_id is a foreign key to admins
+# (ADR-024), so the identity must be a real admins row, not a random uuid.
+ADMIN: Identity | None = None
 PHONE = "+919000000951"
 FAILED: list[str] = []
 PASSED = 0
@@ -43,6 +45,11 @@ def check(label: str, ok: bool, detail: str = "") -> None:
 
 async def purge(db) -> None:
     ids = select(Partner.id).where(Partner.phone == PHONE)
+    # Audit rows are append-only by trigger; cleanup lifts it for its own rows only.
+    await db.execute(text("ALTER TABLE admin_audit_log DISABLE TRIGGER trg_admin_audit_log_append_only"))
+    await db.execute(text("DELETE FROM admin_audit_log WHERE target_type = 'partner' AND target_id IN "
+                          "(SELECT id FROM partners WHERE phone = :p)"), {"p": PHONE})
+    await db.execute(text("ALTER TABLE admin_audit_log ENABLE TRIGGER trg_admin_audit_log_append_only"))
     await db.execute(delete(PartnerDocument).where(PartnerDocument.partner_id.in_(ids)))
     await db.execute(delete(PartnerEquipment).where(PartnerEquipment.partner_id.in_(ids)))
     await db.execute(delete(Partner).where(Partner.phone == PHONE))
@@ -50,7 +57,10 @@ async def purge(db) -> None:
 
 
 async def main() -> None:
+    global ADMIN
     async with AsyncSessionLocal() as db:
+        admin_id = (await db.execute(text("SELECT id FROM admins ORDER BY name LIMIT 1"))).scalar_one()
+        ADMIN = Identity(auth_user_id=uuid.uuid4(), role="admin", local_id=admin_id)
         await purge(db)
         try:
             partner = Partner(name="Admin QA Partner", phone=PHONE)

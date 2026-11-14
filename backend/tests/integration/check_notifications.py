@@ -906,7 +906,7 @@ async def main() -> None:                          # noqa: C901 - one linear scr
         check("no unknown event reached the column",
               written <= set(NOTIFICATION_EVENTS),
               f"unknown: {sorted(written - set(NOTIFICATION_EVENTS))}")
-        # Seven of the eight defined events, by name. The absent one is
+        # Seven of the nine defined events, by name. One absent one is
         # job_no_match_found, which needs a job nobody is eligible for —
         # check_dispatch_flow.py's territory, and it would mean making both
         # partners unavailable in the middle of this run.
@@ -914,11 +914,12 @@ async def main() -> None:                          # noqa: C901 - one linear scr
             "job_offered", "job_accepted", "job_partner_en_route", "job_in_progress",
             "job_completed", "job_cancelled_by_owner", "job_cancelled_by_partner",
         }
-        check("this run exercised seven of the eight defined events, by name",
+        check("this run exercised seven of the nine defined events, by name",
               written == expected,
               f"missing {sorted(expected - written)}, extra {sorted(written - expected)}")
-        check("the eighth is job_no_match_found, and nothing here claimed it",
-              set(NOTIFICATION_EVENTS) - written == {"job_no_match_found"},
+        # job_cancelled_by_support (ADR-024, staff cancel) is check_admin_ops.py's.
+        check("the rest are job_no_match_found and job_cancelled_by_support, and nothing here claimed them",
+              set(NOTIFICATION_EVENTS) - written == {"job_no_match_found", "job_cancelled_by_support"},
               f"{sorted(set(NOTIFICATION_EVENTS) - written)}")
 
         channels = {row["channel"] for row in rows(
