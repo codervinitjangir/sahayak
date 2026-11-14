@@ -18,6 +18,7 @@ import { jobsService } from '../../src/services/jobs.service';
  * Step 0 of the partner wizard is a real phone OTP. Supabase is mocked so these
  * tests cover the wizard's steps without putting an SMS in the loop.
  */
+const sessionRef: { current: unknown } = { current: null };
 const sendPhoneOtp = vi.fn(async () => ({ ok: true }));
 const verifyPhoneOtp = vi.fn(async () => ({ ok: true, accessToken: 'partner-access-token' }));
 
@@ -28,7 +29,7 @@ vi.mock('../../src/services/supabase', () => ({
   toE164: (dial: string, local: string) => `${dial}${local.replace(/\D/g, '')}`,
   getSupabase: () => ({
     auth: {
-      getSession: async () => ({ data: { session: null } }),
+      getSession: async () => ({ data: { session: sessionRef.current } }),
       onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => undefined } } }),
     },
   }),
@@ -106,6 +107,19 @@ describe('Partner Flow', () => {
   };
 
   describe('PartnerSignup', () => {
+    it('skips the phone step for someone who is already signed in (N4)', async () => {
+      sessionRef.current = { access_token: 'tok', user: { phone: '919876543210' } };
+      resolveIdentity.mockResolvedValue({ kind: 'needs-signup' } as never);
+      try {
+        withProviders(<PartnerSignup />);
+        expect(await screen.findByRole('heading', { name: /about you|tell us/i })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Send code/i })).not.toBeInTheDocument();
+        expect(sendPhoneOtp).not.toHaveBeenCalled();
+      } finally {
+        sessionRef.current = null;
+      }
+    });
+
     it('renders the phone step and requests a real code', async () => {
       withProviders(<PartnerSignup />);
 

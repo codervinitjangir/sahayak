@@ -61,6 +61,7 @@ from app.schemas.analytics import (
 )
 from app.schemas.common import ApiResponse, ErrorResponse, envelope
 from app.schemas.admin_ops import (
+    AdminAlertsResponse,
     AdminAuditListResponse,
     AdminJobCancelRequest,
     AdminJobItem,
@@ -444,3 +445,17 @@ async def admin_audit_log(
 ) -> ApiResponse[AdminAuditListResponse]:
     return envelope(await admin_ops_service.list_audit(
         db, target_type=target_type, target_id=target_id, limit=limit, offset=offset))
+
+
+@admin_ops_router.get(
+    "/alerts",
+    response_model=ApiResponse[AdminAlertsResponse],
+    summary="Operational alerts: stuck jobs, no-match rate, partners on duty",
+)
+async def admin_alerts(
+    identity: Identity = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[AdminAlertsResponse]:
+    """Computed on every read; nothing is stored. An empty `alerts` list still
+    carries the figures it was judged from."""
+    return envelope(await admin_ops_service.get_alerts(db))

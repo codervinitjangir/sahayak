@@ -1,0 +1,12 @@
+# Signed-in areas and private share links are not for indexing.
+User-agent: *
+Allow: /
+Disallow: /owner
+Disallow: /partner/
+Disallow: /admin
+Disallow: /track/
+Allow: /owner/signup
+Allow: /partner/signup
+
+# sahayak.app is a placeholder domain (docs/REMAINING-WORK.md R1); replace with the real one.
+Sitemap: https://sahayak.app/sitemap.xml

@@ -202,7 +202,14 @@ export const LoginPage: React.FC = () => {
 
       switch (resolution.kind) {
         case 'registered':
-          setRole(resolution.identity.role === 'partner' ? 'partner' : 'owner');
+          // An admin must get the ops role: /admin/:tab is guarded on it.
+          setRole(
+            resolution.identity.role === 'partner'
+              ? 'partner'
+              : resolution.identity.role === 'admin'
+                ? 'ops'
+                : 'owner'
+          );
           navigate(
             resolution.identity.role === 'user' && redirectTo
               ? redirectTo

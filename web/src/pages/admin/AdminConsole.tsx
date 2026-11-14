@@ -173,7 +173,7 @@ export const AdminConsole: React.FC = () => {
       </aside>
 
       {/* ── Main Canvas ── */}
-      <main className="partner-main-canvas flex flex-col">
+      <main className="partner-main-canvas flex flex-col min-w-0">
         {/* Executive Header & Filter Bar */}
         <div className="w-full flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 pb-4 border-b border-[#EEF2F6]">
           <div>
@@ -198,7 +198,7 @@ export const AdminConsole: React.FC = () => {
               <div
                 role="group"
                 aria-label="Time window"
-                className="flex items-center gap-1 bg-white p-1 rounded-[12px] border border-[#EEF2F6] shadow-2xs"
+                className="flex flex-wrap items-center gap-1 bg-white p-1 rounded-[12px] border border-[#EEF2F6] shadow-2xs"
               >
                 {WINDOW_PRESETS.map((p) => (
                   <button
@@ -235,7 +235,7 @@ export const AdminConsole: React.FC = () => {
 
         {/* Subnav Tabs & Scope Status */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 border-b border-[#EEF2F6] pb-3">
-          <nav aria-label="Reports" className="flex items-center gap-2">
+          <nav aria-label="Reports" className="flex items-center gap-2 min-w-0 max-w-full overflow-x-auto">
             {TABS.map((t) => (
               <button
                 key={t.id}
@@ -243,7 +243,7 @@ export const AdminConsole: React.FC = () => {
                 onClick={() => navigate(`/admin/${t.id}`)}
                 aria-current={active === t.id ? 'page' : undefined}
                 title={t.blurb}
-                className={`px-3.5 py-1.5 text-xs font-semibold rounded-[8px] transition-all ${
+                className={`shrink-0 whitespace-nowrap px-3.5 py-1.5 text-xs font-semibold rounded-[8px] transition-all ${
                   active === t.id
                     ? 'bg-[#0F172A] text-white shadow-2xs'
                     : 'text-[#475569] hover:text-[#0F172A] hover:bg-[#F6F8FA]'

@@ -4,6 +4,7 @@
     "DELETE /api/v1/devices/push-token",
     "DELETE /api/v1/users/me",
     "DELETE /api/v1/vehicles/{vehicle_id}",
+    "GET /api/v1/admin/alerts",
     "GET /api/v1/admin/analytics/dispatch",
     "GET /api/v1/admin/analytics/matching",
     "GET /api/v1/admin/analytics/overview",

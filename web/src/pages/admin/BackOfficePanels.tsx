@@ -99,6 +99,59 @@ const JOB_FILTERS = [
   { id: 'all', label: 'All' },
 ] as const;
 
+/**
+ * What needs a human now. Sits above the board because the board answers "which
+ * jobs exist" and this answers "which of them is in trouble". The figures line
+ * is always shown, so no alerts reads as "checked and fine".
+ */
+export const AlertsStrip: React.FC = () => {
+  const alerts = useQuery({
+    queryKey: ['admin', 'alerts'],
+    queryFn: () => adminService.getAlerts(),
+    refetchInterval: 30000,
+  });
+  // A failed alerts read must not hide the board; it says so in one line instead.
+  if (alerts.isError) {
+    return (
+      <p role="status" className="text-xs text-[#92400E]">
+        Alerts could not be loaded. The board below is still current.
+      </p>
+    );
+  }
+  if (!alerts.data) return null;
+  const d = alerts.data;
+  return (
+    <div aria-label="Operational alerts" className="space-y-2">
+      {d.alerts.map((a) => (
+        <div
+          key={a.code}
+          role="alert"
+          className={`rounded-[12px] border px-3.5 py-2.5 text-sm font-medium ${
+            a.severity === 'critical'
+              ? 'border-[#FECACA] bg-[#FEF2F2] text-[#991B1B]'
+              : 'border-[#FDE68A] bg-[#FFFBEB] text-[#92400E]'
+          }`}
+        >
+          {a.message}
+          {a.job_ids.length > 0 && (
+            <span className="block mt-0.5 text-xs font-normal break-words">
+              Requests: {a.job_ids.map((id) => id.slice(0, 8)).join(', ')}
+            </span>
+          )}
+        </div>
+      ))}
+      <p className="text-xs text-[#475569]">
+        {d.alerts.length === 0 ? 'No alerts. ' : ''}
+        {d.live_jobs} live {d.live_jobs === 1 ? 'job' : 'jobs'} · {d.partners_on_duty} of {d.partners_verified} verified
+        partners on duty ·{' '}
+        {d.no_match_rate === null
+          ? `too few requests in the last ${d.window_minutes} min to state a no-match rate`
+          : `${Math.round(d.no_match_rate * 100)}% no-match in the last ${d.window_minutes} min`}
+      </p>
+    </div>
+  );
+};
+
 export const JobsBoardPanel: React.FC = () => {
   const qc = useQueryClient();
   const [filter, setFilter] = useState<string>('live');
@@ -125,6 +178,7 @@ export const JobsBoardPanel: React.FC = () => {
 
   return (
     <section aria-label="Live jobs board" className="space-y-3">
+      <AlertsStrip />
       <div className="flex flex-wrap items-center gap-2">
         <div role="group" aria-label="Job filter" className="flex gap-1 rounded-[12px] border border-[#EEF2F6] bg-white p-1">
           {JOB_FILTERS.map((f) => (

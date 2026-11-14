@@ -256,6 +256,12 @@ export const JobTrackingPage: React.FC = () => {
 
         {/* Dynamic Status Progress Description */}
         <div className="p-4 rounded-control bg-slate-50 border border-line space-y-2">
+          {job.status === 'cancelled' && (
+            <p className="text-sm text-ink-soft font-medium">
+              This request was cancelled. Nothing is owed for it. You can start a new request from Home at any time.
+            </p>
+          )}
+
           {job.status === 'matching' && (
             <div className="flex items-center gap-3">
               <div className="w-3 h-3 rounded-full bg-amber-500 animate-ping" />
@@ -384,7 +390,7 @@ export const JobTrackingPage: React.FC = () => {
                 </div>
               </div>
 
-              {partnerPhone && (
+              {partnerPhone && job.status !== 'cancelled' && job.status !== 'completed' && (
                 <a
                   href={`tel:${partnerPhone}`}
                   className="inline-flex items-center gap-1.5 px-4 min-h-[48px] bg-brand-700 text-white rounded-control text-sm font-semibold hover:bg-brand-800"

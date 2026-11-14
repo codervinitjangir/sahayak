@@ -114,7 +114,7 @@ NEAR_LAT = PICKUP_LAT + 1.0 / KM_PER_DEG_LAT
 # Distinct from every other harness's numbers, domain and tag, so two runs can
 # never purge each other's rows out from under one another.
 QA_DOMAIN = "sahayak-raceqa.invalid"
-PARTNER_PHONE = "+919000000951"
+PARTNER_PHONE = "+919000000861"
 JOB_TAG = "RACE-QA"
 
 # Six trials, not one. A single pass can succeed by accident: if the event loop

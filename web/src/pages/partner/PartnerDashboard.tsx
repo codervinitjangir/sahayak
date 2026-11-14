@@ -304,6 +304,8 @@ interface LiveZoneMapProps {
   onGoOnline: () => void;
   /** Whole seconds since the last position fix, or null when never located. */
   locationAgeSeconds: number | null;
+  /** Why the last position read failed; see usePartnerAvailability. */
+  locationProblem?: 'denied' | 'unavailable' | 'unsupported' | null;
   onRefreshLocation: () => void;
 }
 
@@ -322,6 +324,7 @@ const LiveZoneMap: React.FC<LiveZoneMapProps> = ({
   activeJob,
   onGoOnline,
   locationAgeSeconds,
+  locationProblem = null,
   onRefreshLocation,
 }) => {
   const navigate = useNavigate();
@@ -409,14 +412,31 @@ const LiveZoneMap: React.FC<LiveZoneMapProps> = ({
               ) : (
                 <li role="alert" data-testid="no-gps-fix" className="flex items-start gap-2 text-status-warning">
                   <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" aria-hidden="true" />
-                  <span>
-                    No GPS fix yet, so dispatch cannot see you and will not send offers. Allow
-                    location in your browser, then tap{' '}
-                    <button type="button" onClick={onRefreshLocation} className="font-semibold underline">
-                      Share location
-                    </button>
-                    .
-                  </span>
+                  {locationProblem === 'denied' ? (
+                    <span data-testid="gps-denied">
+                      Your browser is blocking location for Sahayak, so dispatch cannot see you and
+                      will not send offers. Open the site settings from the lock icon in the address
+                      bar, set Location to Allow, then tap{' '}
+                      <button type="button" onClick={onRefreshLocation} className="font-semibold underline">
+                        Share location
+                      </button>
+                      . You can also go on duty from the Sahayak mobile app.
+                    </span>
+                  ) : locationProblem === 'unsupported' ? (
+                    <span>
+                      This browser cannot share location, so dispatch cannot see you. Use the Sahayak
+                      mobile app or a current browser to receive offers.
+                    </span>
+                  ) : (
+                    <span>
+                      No GPS fix yet, so dispatch cannot see you and will not send offers. Allow
+                      location in your browser, then tap{' '}
+                      <button type="button" onClick={onRefreshLocation} className="font-semibold underline">
+                        Share location
+                      </button>
+                      .
+                    </span>
+                  )}
                 </li>
               )}
             </ul>
@@ -883,7 +903,7 @@ const PartnerStandingCard: React.FC<{ profile: PartnerProfile }> = ({ profile })
  */
 export const PartnerDashboard: React.FC<{ embedded?: boolean }> = ({ embedded = false }) => {
   const profile = usePartnerProfile();
-  const { isAvailable, setAvailable, locationAgeSeconds, refreshLocation } = usePartnerAvailability();
+  const { isAvailable, setAvailable, locationAgeSeconds, refreshLocation, locationProblem } = usePartnerAvailability();
 
   const activeJobQuery = useActiveJob();
   const activeJob = activeJobQuery.data ?? null;
@@ -922,6 +942,7 @@ export const PartnerDashboard: React.FC<{ embedded?: boolean }> = ({ embedded = 
             activeJob={activeJob}
             onGoOnline={() => setAvailable(true)}
             locationAgeSeconds={locationAgeSeconds}
+            locationProblem={locationProblem}
             onRefreshLocation={refreshLocation}
           />
         </div>

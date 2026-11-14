@@ -7,7 +7,8 @@ asked about, and an audit row for an action that rolled back is a lie.
 """
 import logging
 import uuid
-from typing import Optional
+from datetime import datetime, timedelta, timezone
+from typing import Optional, Sequence
 
 from sqlalchemy import func
 from sqlalchemy.exc import SQLAlchemyError
@@ -15,6 +16,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.repositories import admin_ops_repository, job_repository
 from app.schemas.admin_ops import (
+    AdminAlert,
+    AdminAlertsResponse,
     AdminAuditEntry,
     AdminAuditListResponse,
     AdminJobItem,
@@ -210,3 +213,93 @@ async def list_audit(
         ],
         total=total, limit=limit, offset=offset,
     )
+
+
+# ---------------------------------------------------------------------------
+# Operational alerts
+# ---------------------------------------------------------------------------
+# How long a job may sit in one status before a human should look. The search
+# window is 10 minutes (ADR-023), so a job still searching after 12 has outlived
+# the client that drives it. The others are deliberately generous: an alert
+# that fires on ordinary jobs gets ignored.
+STUCK_AFTER_MINUTES: dict[str, int] = {
+    "requested": 5,
+    "matching": 12,
+    "no_match_found": 15,
+    "assigned": 20,
+    "partner_en_route": 90,
+    "in_progress": 240,
+}
+NO_MATCH_WINDOW_MINUTES = 60
+NO_MATCH_RATE_THRESHOLD = 0.30
+NO_MATCH_MIN_JOBS = 5          # below this a rate is noise, so none is stated
+LOW_PARTNERS_ON_DUTY = 3
+_MAX_ALERT_JOB_IDS = 20
+
+
+def evaluate_alerts(
+    *,
+    now: datetime,
+    live_jobs: Sequence[tuple[uuid.UUID, str, datetime, Optional[datetime]]],
+    window_counts: dict[str, int],
+    partners_on_duty: int,
+    partners_verified: int,
+) -> AdminAlertsResponse:
+    """Pure: turn the three reads into alerts. Tested without a database."""
+    alerts: list[AdminAlert] = []
+
+    stuck: list[tuple[datetime, uuid.UUID]] = []
+    for job_id, status, requested_at, last_change in live_jobs:
+        limit = STUCK_AFTER_MINUTES.get(status)
+        since = last_change or requested_at
+        if limit is not None and since is not None and now - since > timedelta(minutes=limit):
+            stuck.append((since, job_id))
+    if stuck:
+        stuck.sort()
+        alerts.append(AdminAlert(
+            code="STUCK_JOBS", severity="critical", count=len(stuck),
+            message=(f"{len(stuck)} job(s) have not moved for longer than expected. "
+                     "Open the jobs board and call the owner."),
+            job_ids=[job_id for _, job_id in stuck[:_MAX_ALERT_JOB_IDS]],
+        ))
+
+    jobs_in_window = sum(window_counts.values())
+    no_match = window_counts.get("no_match_found", 0)
+    rate = (no_match / jobs_in_window) if jobs_in_window >= NO_MATCH_MIN_JOBS else None
+    if rate is not None and rate >= NO_MATCH_RATE_THRESHOLD:
+        alerts.append(AdminAlert(
+            code="HIGH_NO_MATCH_RATE", severity="warning", count=no_match,
+            message=(f"{no_match} of {jobs_in_window} requests in the last "
+                     f"{NO_MATCH_WINDOW_MINUTES} minutes found no partner."),
+        ))
+
+    if partners_on_duty == 0:
+        alerts.append(AdminAlert(
+            code="NO_PARTNERS_ON_DUTY", severity="critical", count=0,
+            message="No verified partner is on duty. Every new request will find nobody.",
+        ))
+    elif partners_on_duty < LOW_PARTNERS_ON_DUTY:
+        alerts.append(AdminAlert(
+            code="LOW_PARTNERS_ON_DUTY", severity="warning", count=partners_on_duty,
+            message=f"Only {partners_on_duty} verified partner(s) on duty.",
+        ))
+
+    return AdminAlertsResponse(
+        generated_at=now, alerts=alerts, live_jobs=len(live_jobs),
+        partners_on_duty=partners_on_duty, partners_verified=partners_verified,
+        window_minutes=NO_MATCH_WINDOW_MINUTES, jobs_in_window=jobs_in_window,
+        no_match_in_window=no_match, no_match_rate=round(rate, 3) if rate is not None else None,
+    )
+
+
+async def get_alerts(db: AsyncSession) -> AdminAlertsResponse:
+    """Read-only. "On duty" is the availability flag, not a live GPS fix: zone
+    coverage lives in Redis and is not judged here."""
+    now = datetime.now(timezone.utc)
+    live = await admin_ops_repository.live_jobs_with_status_age(
+        db, statuses=admin_ops_repository.LIVE_JOB_STATUSES)
+    counts = await admin_ops_repository.job_status_counts_since(
+        db, now - timedelta(minutes=NO_MATCH_WINDOW_MINUTES))
+    on_duty, verified = await admin_ops_repository.partner_duty_counts(db)
+    return evaluate_alerts(now=now, live_jobs=live, window_counts=counts,
+                           partners_on_duty=on_duty, partners_verified=verified)

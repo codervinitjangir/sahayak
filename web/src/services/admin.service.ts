@@ -114,6 +114,26 @@ export interface AdminAuditEntry {
   created_at: string;
 }
 
+export interface AdminAlert {
+  code: 'STUCK_JOBS' | 'HIGH_NO_MATCH_RATE' | 'NO_PARTNERS_ON_DUTY' | 'LOW_PARTNERS_ON_DUTY' | string;
+  severity: 'critical' | 'warning';
+  message: string;
+  count: number;
+  job_ids: string[];
+}
+
+export interface AdminAlerts {
+  generated_at: string;
+  alerts: AdminAlert[];
+  live_jobs: number;
+  partners_on_duty: number;
+  partners_verified: number;
+  window_minutes: number;
+  jobs_in_window: number;
+  no_match_in_window: number;
+  no_match_rate: number | null;
+}
+
 export interface Page<T> {
   items: T[];
   total: number;
@@ -222,6 +242,12 @@ export const adminService = {
 
   async listAudit(params: { target_type?: string; target_id?: string; limit?: number; offset?: number } = {}): Promise<Page<AdminAuditEntry>> {
     const res = await apiClient<Page<AdminAuditEntry>>(`/admin/audit-log${qs(params)}`, { method: 'GET' });
+    return res.data;
+  },
+
+  /** Stuck jobs, no-match rate and partner cover, computed by the server on each read. */
+  async getAlerts(): Promise<AdminAlerts> {
+    const res = await apiClient<AdminAlerts>('/admin/alerts', { method: 'GET' });
     return res.data;
   },
 };

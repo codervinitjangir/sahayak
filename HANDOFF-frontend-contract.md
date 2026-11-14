@@ -2274,3 +2274,26 @@ All `require_admin`; anyone else 403. Every write is audited in the same transac
 * `GET /api/v1/jobs/{job_id}/disputes` (owner) → list.
 * `GET /api/v1/admin/disputes?status=open` and `PATCH /api/v1/admin/disputes/{id}` body `{resolution: resolved|rejected|refunded, note}`. 409 `DISPUTE_ALREADY_CLOSED`, 409 `INVALID_PAYMENT_STATE` (refund with nothing paid). New error code `DISPUTE_NOT_FOUND`. `/admin/audit-log?target_type=dispute` is now valid.
 * Mobile registers its Expo push token after sign-in (`services/push.ts`). No UI change.
+
+
+## 19. Changes from the 2026-11-14 live run and the production pass (2026-11-14)
+
+**Changed behaviour you must handle**
+
+* **New error code `PRICE_FINAL_OUT_OF_RANGE` (400)** on `POST /api/v1/jobs/{job_id}/status` with `status: "completed"`. The final price may not exceed `min(absolute cap, max(estimate × multiple, floor))`; the constants are `FINAL_PRICE_*` in `backend/app/services/job_service.py`. The message states the allowed maximum. Clients should cap the field before submit and show the message if the server still refuses. Both clients already do.
+* **Owner job reads carry no partner name, phone or id until the partner accepts** (ADR-017). While an offer is only *offered*, `current_assignment.partner_*` and `partner` are absent. Do not render a partner card or a Call button from an offered assignment.
+* **`/admin/:tab` on web needs the `ops` role.** Login stores `ops` for an account whose `/auth/me` role is `admin`.
+* **CORS is now configuration.** The API reads `CORS_ALLOWED_ORIGINS` (comma-separated; default `*` for local work). In production it lists the deployed web origin(s); a web build served from any other origin will fail preflight. Native apps are unaffected.
+
+**New endpoint**
+
+* `GET /api/v1/admin/alerts` (admin) → `{generated_at, alerts: [{code, severity, message, count, job_ids}], live_jobs, partners_on_duty, partners_verified, window_minutes, jobs_in_window, no_match_in_window, no_match_rate}`. Codes: `STUCK_JOBS` (critical; `job_ids` oldest first, max 20), `HIGH_NO_MATCH_RATE` (warning), `NO_PARTNERS_ON_DUTY` (critical), `LOW_PARTNERS_ON_DUTY` (warning). `no_match_rate` is `null` when the last hour has fewer than 5 requests. Computed on each read; nothing is stored. "On duty" is the availability flag, not a live GPS fix. Web shows it above the Jobs board, refreshed every 30 s.
+
+**Client changes made in this pass (web and mobile)**
+
+* Web cancelled-job page: no Call button on a cancelled or completed job; the status box says the request was cancelled.
+* Web partner sign-up: an already signed-in person skips the phone and code step (a partner goes to the console; an owner's number stays on the phone step).
+* Web partner dashboard: `usePartnerAvailability` now returns `locationProblem` (`denied` | `unavailable` | `unsupported` | `null`); a blocked browser gets instructions instead of a generic "no GPS fix".
+* Web: root `ErrorBoundary` (`src/app/ErrorBoundary.tsx`); optional `VITE_ERROR_REPORT_URL` receives render crashes. `public/robots.txt` and `public/sitemap.xml` added (placeholder domain, R1).
+* Mobile: `friendlyMessage()` in `services/identity.ts`; the login screen never shows transport text such as "Not Found".
+* Route fixtures re-exported for both clients (63 routes).

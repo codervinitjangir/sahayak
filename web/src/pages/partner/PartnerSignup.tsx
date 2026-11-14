@@ -11,7 +11,7 @@ import { StepIndicator } from './components/StepIndicator';
 import { partnerService } from '../../services/partner.service';
 import { setAuthToken } from '../../services/authToken';
 import { identityService } from '../../services/identity.service';
-import { IS_SUPABASE_CONFIGURED, sendPhoneOtp, toE164, verifyPhoneOtp } from '../../services/supabase';
+import { IS_SUPABASE_CONFIGURED, getSupabase, sendPhoneOtp, toE164, verifyPhoneOtp } from '../../services/supabase';
 import { CATEGORIES, DEFAULT_PARTNER_PROFILE, saveStoredPartnerProfile, type PartnerCategory } from '../../types/partner';
 import './partner.css';
 
@@ -70,6 +70,40 @@ export const PartnerSignup: React.FC = () => {
     const id = setTimeout(() => navigate('/partner/verification', { replace: true }), 2500);
     return () => clearTimeout(id);
   }, [done, navigate]);
+
+  /**
+   * Someone who is already signed in has proved their number; asking for a
+   * second code is friction and a second SMS. Reuse the session: a partner goes
+   * to the console, a new number starts at "About you". A number that already
+   * belongs to an owner stays on the phone step so they can use another one.
+   */
+  useEffect(() => {
+    if (!IS_SUPABASE_CONFIGURED) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { data } = await getSupabase().auth.getSession();
+        const session = data.session;
+        const verified = session?.user?.phone;
+        if (!session?.access_token || !verified || cancelled) return;
+        setAuthToken(session.access_token);
+        const resolution = await identityService.resolve();
+        if (cancelled) return;
+        if (resolution.kind === 'registered' && resolution.identity.role === 'partner') {
+          navigate('/partner/dashboard', { replace: true });
+          return;
+        }
+        if (resolution.kind === 'registered') return;
+        setPhone(verified.replace(/^\+?91/, ''));
+        setStep((current) => (current === 0 ? 1 : current));
+      } catch {
+        // No usable session; the phone step is shown as before.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [navigate]);
 
   const phoneDigits = phone.replace(/\D/g, '');
 

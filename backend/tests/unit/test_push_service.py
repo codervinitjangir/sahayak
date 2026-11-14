@@ -44,3 +44,24 @@ def test_accepts_expo_tokens(token):
 def test_rejects_anything_else(token):
     with pytest.raises(ValidationError):
         PushTokenRequest(token=token)
+
+
+@pytest.mark.asyncio
+async def test_drain_waits_for_in_flight_deliveries():
+    # N1 (2026-11-14): a delivery borrows a pooled connection after commit; shutdown
+    # and the pool-measuring harness must be able to wait for it.
+    import asyncio
+
+    done = []
+
+    async def slow():
+        await asyncio.sleep(0.05)
+        done.append(1)
+
+    task = asyncio.get_running_loop().create_task(slow())
+    push_service._tasks.add(task)
+    task.add_done_callback(push_service._tasks.discard)
+
+    assert await push_service.drain() == 1
+    assert done == [1]
+    assert await push_service.drain() == 0

@@ -209,7 +209,7 @@ Missing, in suggested order:
 5. **Support inbox / disputes**, tied to payments item E.
 6. **Catalogue and pricing editor** (`base_price`, services, categories).
 7. **Payments back office**: collections, commission, payout runs, reconciliation.
-8. **Alerts**: no-match rate, partners on duty by zone, stuck jobs.
+8. [x] **Alerts** (2026-11-14): stuck jobs, no-match rate, partners on duty, at `GET /admin/alerts`. Not by zone; nobody is notified.
 
 ### 9.4 Mobile specifics
 
@@ -238,10 +238,10 @@ Missing, in suggested order:
 | E2 | [x] (2026-11-14, 62 routes) Backend: re-export `backend-routes.json` fixtures for **both** clients after the new routes (per project memory) and keep the route-inventory tests green |
 | E3 | Mobile tests only cover pure logic. Add component tests for the owner flow and partner offer flow (React Native Testing Library) |
 | E4 | End-to-end smoke test against a staging backend (sign in with a test number, request, accept, complete) |
-| E5 | Staging and production environments, secrets management, and a rollback plan |
+| E5 | [~] (runbook in `docs/DEPLOYMENT.md`, CORS configurable; no staging yet) Staging and production environments, secrets management, and a rollback plan |
 | E6 | Backups and restore drill (the project database was paused once already) |
 | E7 | Observability: structured logs exist; add metrics, alerts and a status page |
-| E8 | Update `HANDOFF-frontend-contract.md` and `docs/FRONTEND-GUIDE.md` for the redesign and the new endpoints, and tell Adarsh |
+| E8 | [x] (2026-11-14, HANDOFF section 19; Adarsh not yet told) Update `HANDOFF-frontend-contract.md` and `docs/FRONTEND-GUIDE.md` for the redesign and the new endpoints, and tell Adarsh |
 
 ### 9.7 Claims in this document not verified by me
 

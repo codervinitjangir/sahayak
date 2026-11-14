@@ -4,16 +4,21 @@ Written 2026-11-14, after the live end-to-end run (commit `d290dc3`).
 Sources: `docs/NEXT-STEPS.md` section 9 (the audit) and the defects found in that run.
 Completion figures are my estimate from item counts, not an official measure.
 
+**Updated 2026-11-14 (production pass).** Section C is closed except N6. Also done: admin
+alerts, configurable CORS, a root error boundary, robots and sitemap, the contract docs (E8),
+and a deployment, rollback and backup runbook (`docs/DEPLOYMENT.md`). Nothing in section A
+has moved: those items need a person. See section F for what this pass did not do.
+
 ## Where things stand
 
 | Area | State |
 |---|---|
 | Core flow (login, request, dispatch, accept, decline, cancel, start code, complete, cash payment, rating) | Done. Passed live on web on 2026-11-14 |
 | Admin: analytics, partner verification, live jobs board, owner/partner management, audit log | Done |
-| Race and concurrency protections | Done. 9 of 10 live harnesses green (see item N1) |
-| Launch readiness | About 35-40%. 12 of 35 audit items done, 2 partial |
+| Race and concurrency protections | Done. 17 of 17 live harnesses green, 869 checks (N1 closed) |
+| Launch readiness | About 45%. Code hygiene moved; every section A item is still open |
 
-Verified on 2026-11-14: backend 528 unit tests, web 136, mobile 23, live harnesses as above.
+Verified on 2026-11-14 (production pass): backend 537 unit tests, web 141, mobile 27, live harnesses as above.
 Not verified: any physical phone (mobile was run through its web target only).
 
 ---
@@ -34,13 +39,14 @@ Not verified: any physical phone (mobile was run through its web target only).
 
 ## B. Code still to build
 
-### Admin panel (3 of 8 built)
+### Admin panel (4 of 8 built)
 
 - [ ] Staff accounts and roles (support, ops, finance) with an invite flow. An admin is linked to a login by editing the database today
 - [ ] Support inbox and disputes (tied to payments item E)
 - [ ] Catalogue and pricing editor (`base_price`, services, categories)
 - [ ] Payments back office: collections, commission, payout runs, reconciliation
-- [ ] Alerts: no-match rate, partners on duty by zone, stuck jobs
+- [x] Alerts: stuck jobs, no-match rate, partners on duty (`GET /admin/alerts`, shown above the Jobs board). Not by zone: zone cover lives in Redis and is not judged. Nobody is notified; staff must have the board open
+- [ ] Catalogue and pricing editor is larger than it looks: `base_price` is a code constant (`SERVICE_BASE_PRICES`), not a column, so this needs a migration and a change to the price read in `POST /jobs` (money path, full regression, its own ADR)
 - [ ] Manual reassign on the live jobs board
 
 ### Product gaps
@@ -55,34 +61,38 @@ Not verified: any physical phone (mobile was run through its web target only).
 
 - [ ] E3 Mobile component tests for the owner flow and partner offer flow
 - [ ] E4 Automated end-to-end smoke test against staging (done by hand on 2026-11-14, not automated)
-- [ ] E5 Staging and production environments, secrets management, rollback plan
-- [ ] E6 Backups and a restore drill (the project database was paused once already)
-- [ ] E7 Metrics, alerts and a status page
-- [ ] E8 Update `HANDOFF-frontend-contract.md` and `docs/FRONTEND-GUIDE.md` for the redesign, the new endpoints and the new error code `PRICE_FINAL_OUT_OF_RANGE`, and tell Adarsh
+- [~] E5 Runbook written (`docs/DEPLOYMENT.md`: environments, secrets, release checklist, rollback). CORS is now configuration (`CORS_ALLOWED_ORIGINS`) and `backend/.dockerignore` keeps `.env` out of the image. No staging environment exists yet: that needs accounts
+- [~] E6 `scripts/restore_db.sh` added (refuses to target the live database). No backup schedule and no drill has been run
+- [~] E7 Admin alerts endpoint only. No uptime monitor, log alerting or status page
+- [x] E8 `HANDOFF-frontend-contract.md` section 19 and a changes table in `docs/FRONTEND-GUIDE.md`. **Adarsh has not been told**: that is yours to do
 
 ### Mobile and web launch items
 
 - [ ] Store assets: screenshots, iOS privacy-nutrition labels, Android data-safety form, listing copy, EAS build profiles and signing
-- [ ] Crash and error reporting (Sentry or similar) and analytics, mobile and web
+- [~] Crash and error reporting: web has a root error boundary that can POST crashes to `VITE_ERROR_REPORT_URL` (unset by default). Mobile has none. Sentry and analytics need an account
 - [ ] Replace stock photographs in the web landing collage (they show people who are not Sahayak partners)
-- [ ] SEO basics: sitemap, robots, social preview image
-- [ ] Uptime monitoring and error-boundary reporting on web
+- [~] SEO basics: `robots.txt` and `sitemap.xml` added with the placeholder domain (R1). No social preview image
+- [ ] Uptime monitoring on web (the error boundary is done, see above)
 - [ ] Re-check `npx expo install --check` before each store build
 
 ---
 
-## C. Found in the 2026-11-14 live run (not yet fixed)
+## C. Found in the 2026-11-14 live run
 
-| # | Item | Detail |
+| # | Item | State |
 |---|---|---|
-| N1 | `check_dispatch_capacity` fails 1 of 49 | "no connection was left checked out: 1 still checked out". Identical on three reruns and on the original code, so it predates today's changes. May be a real pool leak or a harness artifact. Needs its own investigation |
-| N2 | Harnesses collide with manual testing | Harnesses reuse test numbers `+919000000901` and `+919000000902`. A harness run deleted the hand-made partner and orphaned the owner profile (the profile pointed at a recreated Supabase user, so `/auth/me` returned 403 and re-registration said the phone was taken). Give the harnesses their own numbers |
-| N3 | Cancelled-job page on web | Still shows a Call button and an empty bordered box |
-| N4 | Partner sign-up asks for phone and OTP again | The wizard repeats step 1 even when the person is already signed in |
-| N5 | Admin console on a 340px screen | Scrolls sideways |
-| N6 | Mobile request flow, partner screens, push | Not run in this session. Need real GPS and a device (covered by R5) |
-| N7 | Mobile login screen shows raw API text | A failed call showed a bare "Not Found". Map API errors to plain messages |
-| N8 | Geolocation denied: no fallback for partners | By design there is no fallback coordinate, and the dashboard now says so. Decide what a partner should do when the browser blocks location |
+| N1 | `check_dispatch_capacity` 48 of 49 | **Not a leak.** A push delivery (ADR-026) runs after commit and borrows a pooled connection; the check sometimes read the pool while one was in flight. Reproduced, then green on every run once the harness waits for deliveries (`push_service.drain()`, also called on shutdown). ADR-026 amended. Open risk noted there: deliveries are unbounded and share a 3+2 pool |
+| N2 | Harnesses collide with manual testing | **Fixed.** `+91900000090x` is reserved for manual testing. `check_user_registration` moved to 88x, `check_dispatch_flow` to 89x. Three other overlaps between harnesses removed (vehicle 84x, job race 861, admin partners 862) |
+| N3 | Cancelled-job page on web | **Fixed.** No Call button on a cancelled or completed job; the box says the request was cancelled. Type-checked, not looked at in a browser with a real cancelled job |
+| N4 | Partner sign-up asks for phone and OTP again | **Fixed.** A signed-in person starts at "About you". Unit test added |
+| N5 | Admin console on a 340px screen | **Fixed.** Checked in a browser at 340px: no sideways page scroll on any of the seven tabs. Checked with empty tables (no backend running), not with rows |
+| N6 | Mobile request flow, partner screens, push | Open. Needs a device (R5) |
+| N7 | Mobile login screen shows raw API text | **Fixed.** `friendlyMessage()` in `mobile/src/services/identity.ts`, 4 tests |
+| N8 | Geolocation denied: no fallback for partners | **Decided and built.** Still no fallback coordinate. A blocked browser now gets instructions to allow location for the site, or to use the mobile app |
+
+Also found in this pass: two jobs are sitting in a live status in the shared database
+(`1cadc5c7`, `fb907e38`). The new alerts endpoint flags them as stuck. They look like leftovers
+from the manual run; I did not delete them.
 
 ## D. Fixed on 2026-11-14 (for the record)
 
@@ -90,12 +100,23 @@ Final price now capped (`400 PRICE_FINAL_OUT_OF_RANGE`) with a guarded form fiel
 
 Evidence: `docs/evidence/mentor-report.html`, `docs/evidence/screenshots/`, `docs/evidence/harness-results.txt`.
 
+## F. Not done in the production pass
+
+Each of these is real work, not a quick fix, and none was started:
+
+- Staff accounts and roles, manual reassign (auth and dispatch engine: high risk, each needs an ADR)
+- Catalogue and pricing editor (see the admin list above for why)
+- Payments back office, gateway, webhooks, integer paise (blocked on G3)
+- G4 partner document upload, G6 Hindi and Kannada, G11 offline queue
+- E3 mobile component tests, E4 automated staging smoke test (no staging exists)
+- Store assets, replacing the stock photographs, social preview image
+- Everything in section A
+
 ## E. Suggested order
 
-1. N2 and N1: they decide whether regression results can be trusted.
-2. E8: Adarsh needs the contract changes before he touches the clients again.
-3. N3, N4, N7: small UI fixes.
-4. R1, R2, R3: no code, long lead time, so start them now.
-5. R5 and G2: one device session covers both.
-6. E5, E6, E7: staging, backups and monitoring before any real user.
-7. G4 and the remaining admin items, then G3 once the money decision is made.
+1. R1, R2, R3: no code, long lead time, so start them now. Tell Adarsh about HANDOFF section 19.
+2. Create the staging environment and take the first backup (`docs/DEPLOYMENT.md`), then run one restore drill.
+3. R5 and G2: one device session covers both, and closes N6.
+4. An uptime monitor on `/health` and the web origin, and Sentry for mobile.
+5. G4, staff roles, and the pricing editor, each with its own ADR and full regression.
+6. G3 once the money decision is made, then the payments back office.

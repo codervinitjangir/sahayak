@@ -5,13 +5,14 @@ Every query here is ORM/Core with typed bind parameters, never raw text, so
 asyncpg's PREPARE-before-bind never sees an untyped parameter.
 """
 import uuid
+from datetime import datetime
 from typing import Optional, Sequence
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.admin_audit import AdminAuditLog
-from app.models.job import Job, JobAssignment
+from app.models.job import Job, JobAssignment, JobStatusHistory
 from app.models.partner import Partner
 from app.models.service import Service
 from app.models.user import User
@@ -164,3 +165,46 @@ async def list_audit(
         base.order_by(AdminAuditLog.created_at.desc(), AdminAuditLog.id).limit(limit).offset(offset)
     )
     return list(result.scalars().all()), int(total)
+
+
+# ---------------------------------------------------------------------------
+# Operational alerts (read-only; computed live, nothing stored - principle 1)
+# ---------------------------------------------------------------------------
+async def live_jobs_with_status_age(
+    db: AsyncSession, *, statuses: Sequence[str], limit: int = 500
+) -> Sequence[tuple[uuid.UUID, str, datetime, Optional[datetime]]]:
+    """(job id, status, requested_at, when it last changed status) for live jobs.
+
+    The last change is the newest job_status_history row. A job with no history
+    row (should not exist, principle 4) falls back to requested_at in the service.
+    """
+    last_change = func.max(JobStatusHistory.changed_at)
+    result = await db.execute(
+        select(Job.id, Job.status, Job.requested_at, last_change)
+        .outerjoin(JobStatusHistory, JobStatusHistory.job_id == Job.id)
+        .where(Job.status.in_(tuple(statuses)))
+        .group_by(Job.id, Job.status, Job.requested_at)
+        .order_by(Job.requested_at)
+        .limit(limit)
+    )
+    return [tuple(r) for r in result.all()]
+
+
+async def job_status_counts_since(db: AsyncSession, since: datetime) -> dict[str, int]:
+    """How many jobs requested since `since` are in each status now."""
+    result = await db.execute(
+        select(Job.status, func.count()).where(Job.requested_at >= since).group_by(Job.status)
+    )
+    return {status: int(n) for status, n in result.all()}
+
+
+async def partner_duty_counts(db: AsyncSession) -> tuple[int, int]:
+    """(verified partners on duty, verified partners in total)."""
+    result = await db.execute(
+        select(
+            func.count().filter(Partner.is_available.is_(True)),
+            func.count(),
+        ).where(Partner.verification_status == "verified")
+    )
+    on_duty, total = result.one()
+    return int(on_duty or 0), int(total or 0)

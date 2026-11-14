@@ -95,3 +95,52 @@ async def test_unknown_board_filter_is_400():
     with pytest.raises(AppError) as exc:
         await admin_ops_service.list_jobs(AsyncMock(), status="bogus", q=None, limit=10, offset=0)
     assert exc.value.status_code == 400
+
+
+# --- Operational alerts (GET /admin/alerts) ---------------------------------
+from datetime import timedelta  # noqa: E402
+
+NOW = datetime(2026, 11, 14, 12, 0, tzinfo=timezone.utc)
+
+
+def _alerts(**kw):
+    base = dict(now=NOW, live_jobs=[], window_counts={}, partners_on_duty=5, partners_verified=9)
+    base.update(kw)
+    return admin_ops_service.evaluate_alerts(**base)
+
+
+def test_quiet_system_raises_nothing_but_still_reports_its_figures():
+    r = _alerts()
+    assert r.alerts == [] and r.partners_on_duty == 5 and r.no_match_rate is None
+
+
+def test_a_job_is_stuck_only_past_its_own_status_limit():
+    fresh, stuck = uuid.uuid4(), uuid.uuid4()
+    r = _alerts(live_jobs=[
+        (fresh, "matching", NOW - timedelta(minutes=30), NOW - timedelta(minutes=11)),
+        (stuck, "matching", NOW - timedelta(minutes=30), NOW - timedelta(minutes=13)),
+        # 13 minutes en route is ordinary; the limit there is 90.
+        (uuid.uuid4(), "partner_en_route", NOW - timedelta(minutes=40), NOW - timedelta(minutes=13)),
+    ])
+    (alert,) = r.alerts
+    assert alert.code == "STUCK_JOBS" and alert.severity == "critical"
+    assert alert.job_ids == [stuck] and alert.count == 1
+
+
+def test_a_job_without_history_is_aged_from_its_request_time():
+    job = uuid.uuid4()
+    r = _alerts(live_jobs=[(job, "requested", NOW - timedelta(minutes=6), None)])
+    assert r.alerts[0].job_ids == [job]
+
+
+def test_no_match_rate_needs_enough_jobs_to_mean_anything():
+    few = _alerts(window_counts={"no_match_found": 3, "completed": 1})
+    assert few.no_match_rate is None and few.alerts == []
+    many = _alerts(window_counts={"no_match_found": 3, "completed": 7})
+    assert many.no_match_rate == 0.3
+    assert [a.code for a in many.alerts] == ["HIGH_NO_MATCH_RATE"]
+
+
+def test_partner_cover_alerts():
+    assert [a.code for a in _alerts(partners_on_duty=0).alerts] == ["NO_PARTNERS_ON_DUTY"]
+    assert [a.code for a in _alerts(partners_on_duty=2).alerts] == ["LOW_PARTNERS_ON_DUTY"]

@@ -18,8 +18,10 @@ from app.api.services import router as services_router
 from app.api.users import router as users_router
 from app.api.vehicles import router as vehicles_router
 from app.config.redis_client import close_redis
+from app.config.settings import get_settings
 from app.middlewares.error_handlers import register_error_handlers
 from app.middlewares.request_id import RequestIdMiddleware
+from app.services import push_service
 from app.utils.logging import configure_logging, log_event
 
 configure_logging()
@@ -33,6 +35,7 @@ async def lifespan(app: FastAPI):
     # is ending — but an un-awaited connection produces a noisy "Task was
     # destroyed but it is pending" on shutdown, and a clean exit is worth more
     # than the two lines it costs.
+    await push_service.drain()
     await close_redis()
     log_event("app_stopped", outcome="success")
 
@@ -44,11 +47,15 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS middleware allowing all origins (development only)
+# CORS: origins come from CORS_ALLOWED_ORIGINS ("*" by default, for local
+# development). Auth is a bearer header, never a cookie, so credentials are only
+# allowed once the origin list is explicit; "*" with credentials would let any
+# site make credentialed calls.
+_cors_origins = get_settings().cors_origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=_cors_origins,
+    allow_credentials=_cors_origins != ["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )

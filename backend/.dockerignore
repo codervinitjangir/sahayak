@@ -1,0 +1,11 @@
+# Secrets and local state must never be baked into the image (Dockerfile does COPY . .).
+.env
+.env.*
+!.env.example
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+backend.log
+tests/
+sahayak_backend_context.txt

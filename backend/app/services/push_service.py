@@ -69,6 +69,19 @@ def _after_rollback(session: Session) -> None:
     session.info.pop(_INFO_KEY, None)
 
 
+async def drain(timeout: float = 15.0) -> int:
+    """Wait for in-flight deliveries; returns how many were still pending.
+
+    Called on shutdown so a deploy does not drop pushes that were already
+    committed to, and by harnesses that measure the connection pool (each
+    delivery borrows a pooled connection for its token lookup).
+    """
+    pending = list(_tasks)
+    if pending:
+        await asyncio.wait(pending, timeout=timeout)
+    return len(pending)
+
+
 def build_messages(items: Iterable[dict], tokens_by_owner: dict[tuple[str, uuid.UUID], list[str]]) -> list[dict]:
     """One Expo message per (staged push, device). Pure, for testing."""
     out = []

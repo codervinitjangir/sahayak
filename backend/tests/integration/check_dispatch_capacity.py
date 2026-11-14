@@ -1055,6 +1055,13 @@ async def main() -> None:                          # noqa: C901 - one linear scr
         # The pool was cut from 5+10 to 3+2 in this task. The stated
         # justification was that single-worker usage never approaches five
         # concurrent connections; these are the numbers rather than the claim.
+        # N1 (2026-11-14): a push delivery (ADR-026) runs after commit as a
+        # background task and borrows a pooled connection for its token lookup.
+        # Section 8's job was still delivering when this was read, which showed
+        # as "1 still checked out". Wait for deliveries; a real leak survives it.
+        from app.services import push_service as _push
+        in_flight = await _push.drain()
+        print(f"      background push deliveries awaited: {in_flight}")
         await watch.stop()
         print(f"      sequential sections (1-5):        peak {sequential_peak} "
               f"of {watch.capacity} checked out")
@@ -1071,8 +1078,18 @@ async def main() -> None:                          # noqa: C901 - one linear scr
               f"peak {max(race_peak, fleet_peak)} of {watch.capacity}; "
               f"a burst larger than the pool queues at pool_timeout rather than "
               f"failing")
+        # A connection in flight is not a leak; one that never comes back is.
+        # Give in-flight work a bounded time to finish and report how long it took.
+        at_read = watch.checked_out()
+        waited = 0.0
+        while watch.checked_out() != 0 and waited < 10.0:
+            await asyncio.sleep(0.05)
+            waited += 0.05
+        print(f"      checked out when first read: {at_read}; "
+              f"returned to 0 after {waited:.2f}s")
         check("no connection was left checked out", watch.checked_out() == 0,
-              f"{watch.checked_out()} still checked out")
+              f"{watch.checked_out()} still checked out after {waited:.2f}s "
+              f"(was {at_read} when first read)")
 
         # ------------------------------------------------------------------
         section("11. Cleanup")

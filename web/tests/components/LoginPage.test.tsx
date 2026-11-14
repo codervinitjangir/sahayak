@@ -267,6 +267,25 @@ describe('LoginPage', () => {
     });
   });
 
+  it('gives an admin account the ops role so the guarded admin console opens', async () => {
+    // Found 2026-11-14: login stored 'owner' for every non-partner, so once
+    // /admin/:tab required ops the admin was bounced to the owner home.
+    resolveIdentity.mockResolvedValue({
+      kind: 'registered',
+      identity: { role: 'admin', id: 'adm-1' },
+    });
+    renderLogin();
+    await advanceToVerifyStep();
+
+    await act(async () => {
+      fireEvent.paste(otpBoxes()[0], { clipboardData: { getData: () => '333333' } });
+    });
+
+    await waitFor(() => expect(localStorage.getItem('sahayak_role')).toBe('ops'), {
+      timeout: 3000,
+    });
+  });
+
   it('sends a verified account with no profile to signup rather than reporting an error', async () => {
     resolveIdentity.mockResolvedValue({ kind: 'needs-signup' });
     renderLogin();

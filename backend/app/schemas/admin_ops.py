@@ -83,3 +83,29 @@ class AdminAuditListResponse(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class AdminAlert(BaseModel):
+    """One condition staff should look at now. Computed on read, never stored."""
+
+    code: str = Field(..., description="STUCK_JOBS | HIGH_NO_MATCH_RATE | NO_PARTNERS_ON_DUTY | LOW_PARTNERS_ON_DUTY")
+    severity: str = Field(..., description="'critical' or 'warning'")
+    message: str
+    count: int = 0
+    job_ids: list[uuid.UUID] = Field(default_factory=list, description="For STUCK_JOBS: oldest first, at most 20.")
+
+
+class AdminAlertsResponse(BaseModel):
+    generated_at: datetime
+    alerts: list[AdminAlert]
+    # The numbers the alerts were judged from, shown even when nothing fires so
+    # an empty list reads as "checked and fine", not "not checked".
+    live_jobs: int
+    partners_on_duty: int
+    partners_verified: int
+    window_minutes: int
+    jobs_in_window: int
+    no_match_in_window: int
+    no_match_rate: Optional[float] = Field(
+        default=None, description="None when the window has too few jobs to state a rate."
+    )

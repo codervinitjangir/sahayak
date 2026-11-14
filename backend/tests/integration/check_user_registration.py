@@ -57,14 +57,16 @@ SUPA = S.SUPABASE_URL.rstrip("/")
 SEC = S.SUPABASE_SECRET_KEY
 PUB = S.SUPABASE_PUBLISHABLE_KEY
 
-# A range of its own, so a crashed check_auth_flow.py run (+9190000008xx) and a
+# +91900000090x is RESERVED for manual testing (Sahayak_Manual_Testing_Guide.md);
+# no harness may use it (N2, 2026-11-14: a harness purge orphaned a hand-made owner).
+# A range of its own (+91900000088x), so a crashed check_auth_flow.py run (+91900000080x) and a
 # crashed run of this file cannot purge each other's leftovers.
-PHONE_A = "+919000000901"          # registers successfully
-PHONE_B = "+919000000902"          # A's second attempt, on a different number
-PHONE_C = "+919000000903"          # a second account, re-submitting A's number
-PHONE_MISMATCH = "+919000000904"   # submitted by an account that verified PHONE_D
-PHONE_D = "+919000000905"
-PHONE_PARTNER = "+919000000906"    # an unclaimed mechanic profile, never registered
+PHONE_A = "+919000000881"          # registers successfully
+PHONE_B = "+919000000882"          # A's second attempt, on a different number
+PHONE_C = "+919000000883"          # a second account, re-submitting A's number
+PHONE_MISMATCH = "+919000000884"   # submitted by an account that verified PHONE_D
+PHONE_D = "+919000000885"
+PHONE_PARTNER = "+919000000886"    # an unclaimed mechanic profile, never registered
 QA_PHONES = (PHONE_A, PHONE_B, PHONE_C, PHONE_MISMATCH, PHONE_D, PHONE_PARTNER)
 
 QA_DOMAIN = "sahayak-regqa.invalid"

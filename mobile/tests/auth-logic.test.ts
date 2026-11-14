@@ -20,7 +20,7 @@
  */
 import { describe, expect, it, vi } from "vitest";
 
-import { resolutionFromError } from "../src/services/identity";
+import { friendlyMessage, resolutionFromError } from "../src/services/identity";
 import { toE164 } from "../src/services/phone";
 
 vi.mock("../src/services/api/client", () => ({
@@ -95,5 +95,26 @@ describe("resolutionFromError", () => {
     // future endpoint returning that string with a different status cannot
     // accidentally reroute sign-in.
     expect(resolutionFromError(400, "USER_NOT_REGISTERED", "x").kind).toBe("error");
+  });
+});
+
+describe("friendlyMessage (N7)", () => {
+  it("never shows transport text for a response without our envelope", () => {
+    const msg = friendlyMessage(404, undefined, undefined);
+    expect(msg).not.toMatch(/not found/i);
+    expect(msg).toMatch(/try again/i);
+  });
+
+  it("names the connection when there was no response at all", () => {
+    expect(friendlyMessage(undefined, undefined, undefined)).toMatch(/connection/i);
+  });
+
+  it("keeps the backend's own sentence when it came with an error code", () => {
+    expect(friendlyMessage(409, "PHONE_ALREADY_REGISTERED", "This number is already registered."))
+      .toBe("This number is already registered.");
+  });
+
+  it("does not repeat a server-side failure message", () => {
+    expect(friendlyMessage(500, "INTERNAL_ERROR", "Could not read identity")).not.toMatch(/identity/i);
   });
 });

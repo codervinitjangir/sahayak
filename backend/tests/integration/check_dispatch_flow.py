@@ -100,7 +100,7 @@ FAR_LAT = PICKUP_LAT + 6.0 / KM_PER_DEG_LAT
 REMOTE_LAT, REMOTE_LNG = 23.2200, 72.6500
 
 QA_DOMAIN = "sahayak-dispatchqa.invalid"
-QA_PHONES = ("+919000000901", "+919000000902", "+919000000903")
+QA_PHONES = ("+919000000891", "+919000000892", "+919000000893")
 
 _results: list[tuple[bool, str, str]] = []
 

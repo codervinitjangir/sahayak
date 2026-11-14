@@ -12,7 +12,7 @@ vi.mock('../../src/services/admin.service', async (orig) => {
   return {
     ...real,
     adminService: {
-      listJobs: vi.fn(), cancelJob: vi.fn(), listUsers: vi.fn(), setUserSuspension: vi.fn(), listAudit: vi.fn(),
+      listJobs: vi.fn(), getAlerts: vi.fn(), cancelJob: vi.fn(), listUsers: vi.fn(), setUserSuspension: vi.fn(), listAudit: vi.fn(),
     },
   };
 });
@@ -29,7 +29,20 @@ const job = {
 describe('JobsBoardPanel', () => {
   beforeEach(() => {
     vi.mocked(adminService.listJobs).mockResolvedValue({ items: [job], total: 1, limit: 50, offset: 0 });
+    vi.mocked(adminService.getAlerts).mockResolvedValue({
+      generated_at: '2026-11-14T12:00:00Z',
+      alerts: [{ code: 'STUCK_JOBS', severity: 'critical', message: '1 job(s) have not moved for longer than expected.', count: 1, job_ids: ['abcdef12-0000'] }],
+      live_jobs: 1, partners_on_duty: 2, partners_verified: 4, window_minutes: 60,
+      jobs_in_window: 0, no_match_in_window: 0, no_match_rate: null,
+    });
     vi.mocked(adminService.cancelJob).mockResolvedValue({ ...job, status: 'cancelled' });
+  });
+
+  it('shows operational alerts above the board, with the figures they came from', async () => {
+    wrap(<JobsBoardPanel />);
+    expect(await screen.findByRole('alert')).toHaveTextContent(/have not moved/i);
+    expect(screen.getByText(/2 of 4 verified\s+partners on duty/i)).toBeInTheDocument();
+    expect(screen.getByText(/too few requests/i)).toBeInTheDocument();
   });
 
   it('lists a stranded owner with a call link', async () => {

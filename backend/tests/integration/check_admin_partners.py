@@ -29,7 +29,7 @@ from app.utils.errors import NotFoundError  # noqa: E402
 # Verification writes an audit row whose admin_id is a foreign key to admins
 # (ADR-024), so the identity must be a real admins row, not a random uuid.
 ADMIN: Identity | None = None
-PHONE = "+919000000951"
+PHONE = "+919000000862"
 FAILED: list[str] = []
 PASSED = 0
 

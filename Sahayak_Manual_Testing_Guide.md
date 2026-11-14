@@ -39,7 +39,7 @@ In Postman, create an Environment named **"Sahayak Local"** (or click the eye ic
 Real endpoints require a Supabase-issued JWT. To get tokens without sending real SMS:
 
 1. **Supabase Dashboard** → your project → **Authentication → Providers → Phone** → Ensure Phone is enabled.
-2. Under **Test phone numbers**, add:
+2. Under **Test phone numbers**, add (the `+91900000090x` range is reserved for manual testing; no automated harness uses or deletes it):
    * `+919000000901` with OTP `123456` (For Vehicle Owner)
    * `+919000000902` with OTP `123456` (For Partner / Mechanic)
 

@@ -74,11 +74,11 @@ NEAR_LAT = PICKUP_LAT + 1.0 / KM_PER_DEG_LAT
 # Distinct from every other harness's numbers, domain and tag, so two runs can
 # never purge each other's rows out from under one another.
 QA_DOMAIN = "sahayak-vehicleqa.invalid"
-OWNER_A_PHONE = "+919000000941"
-OWNER_B_PHONE = "+919000000942"
-OWNER_C_PHONE = "+919000000943"   # the untouched owner of section 8
+OWNER_A_PHONE = "+919000000841"
+OWNER_B_PHONE = "+919000000842"
+OWNER_C_PHONE = "+919000000843"   # the untouched owner of section 8
 OWNER_PHONES = (OWNER_A_PHONE, OWNER_B_PHONE, OWNER_C_PHONE)
-PARTNER_PHONE = "+919000000944"
+PARTNER_PHONE = "+919000000844"
 JOB_TAG = "VEHICLE-QA"
 
 # Set once section 9's purge has run, so the emergency cleanup in __main__ can

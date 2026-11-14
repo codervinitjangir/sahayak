@@ -57,6 +57,21 @@ export function resolutionFromError(status: number | undefined, code: string | u
   return { kind: "error", message, code };
 }
 
+/**
+ * Words a person can act on, never transport text (N7: a failed call once put a
+ * bare "Not Found" on the login screen). The backend's own message is used only
+ * when it came in our error envelope with a code; anything else is a proxy,
+ * a wrong base URL or the network, and gets a plain sentence.
+ */
+export function friendlyMessage(status: number | undefined, code: string | undefined,
+                                envelopeMessage: string | undefined): string {
+  if (status === undefined) return "We could not reach Sahayak. Check your connection and try again.";
+  if (status === 401) return "Your session expired. Please sign in again.";
+  if (status === 429) return "Too many attempts. Wait a minute and try again.";
+  if (code && envelopeMessage && status < 500) return envelopeMessage;
+  return "Something went wrong on our side. Please try again in a moment.";
+}
+
 export const identityService = {
   /**
    * Resolve the stored bearer token to a local profile.
@@ -74,7 +89,7 @@ export const identityService = {
       return resolutionFromError(
         axiosError.response?.status,
         envelope?.error?.code,
-        envelope?.error?.message ?? axiosError.message ?? "Could not load your profile."
+        friendlyMessage(axiosError.response?.status, envelope?.error?.code, envelope?.error?.message)
       );
     }
   },

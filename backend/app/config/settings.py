@@ -79,6 +79,17 @@ class Settings(BaseSettings):
     # every share link already sent. See job_service.share_token_for.
     SHARE_LINK_SECRET: str = ""
 
+    # Browser origins allowed to call the API, comma-separated. "*" is for local
+    # development only; production must list the deployed web origin(s), e.g.
+    # "https://sahayak.app,https://www.sahayak.app". Native apps are unaffected
+    # (CORS is a browser rule).
+    CORS_ALLOWED_ORIGINS: str = "*"
+
+    @property
+    def cors_origins(self) -> list[str]:
+        origins = [o.strip().rstrip("/") for o in self.CORS_ALLOWED_ORIGINS.split(",") if o.strip()]
+        return origins or ["*"]
+
     # Push notifications via Expo (ADR-026). PUSH_ENABLED=false stops all
     # sends (rows still land in the in-app feed). EXPO_ACCESS_TOKEN is only
     # needed if "enhanced push security" is turned on in the Expo project.

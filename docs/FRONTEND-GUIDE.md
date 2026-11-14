@@ -869,10 +869,26 @@ shortly — but not today, and a screen built against a stub will encode the stu
 
 ---
 
+## Changes since this guide was written (updated 2026-11-14)
+
+Sections 1 to 6 describe the contract as of 2026-10-08. Everything since is in
+`HANDOFF-frontend-contract.md`, which is the source of truth where the two differ:
+
+| Topic | Where |
+|---|---|
+| UI redesign (one design system for web and mobile) | `docs/REDESIGN-2026-11-13.md`, `docs/DESIGN-SYSTEM.md` |
+| Live partner location, vehicle edit/delete, public tracking, payments | HANDOFF section 17 |
+| Extended search (`retry-search`), admin back office, profile, export, deletion, push | HANDOFF 17.5 to 17.8 |
+| Receipts and disputes | HANDOFF section 18 |
+| `PRICE_FINAL_OUT_OF_RANGE`, partner fields withheld until accept, admin alerts, CORS | HANDOFF section 19 |
+
+Section 5.2 ("the partner surface is complete UI over a mock") no longer holds: both
+clients authenticate and the partner screens call the real endpoints.
+
 ## Where to look next
 
 - `HANDOFF-frontend-contract.md` — exact request/response bodies, error codes, and the change
-  log. §13 is the newest (notifications).
+  log. §19 is the newest (2026-11-14).
 - `docs/adr/ADR.md` — why the backend works the way it does. The ones that explain behaviour
   you'll see from the client: **ADR-016** (`no_match_found` sharing a status with a dispatch
   outage, §3.3), **ADR-017** (why an offer carries no customer contact details, §4.2),

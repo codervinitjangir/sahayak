@@ -17,3 +17,39 @@ exit=0  44/44 checks passed
 ### check_notifications
 exit=0  79/79 checks passed
 ### DONE
+
+## Production pass, 2026-11-14 (after N1/N2 fixes): 17 of 17 green, 869 checks
+### check_token_rules
+exit=0  30/30 checks passed
+### check_job_race
+exit=0  43/43 checks passed
+### check_dispatch_race
+exit=0  69/69 checks passed
+### check_partner_offers
+exit=0  28/28 checks passed
+### check_dispatch_flow
+exit=0  50/50 checks passed
+### check_dispatch_capacity
+exit=0  49/49 checks passed
+### check_job_lifecycle
+exit=0  78/78 checks passed
+### check_payments_and_sharing
+exit=0  29/29 checks passed
+### check_ratings
+exit=0  44/44 checks passed
+### check_notifications
+exit=0  79/79 checks passed
+### check_job_cancellation
+exit=0  54/54 checks passed
+### check_vehicle_registration
+exit=0  54/54 checks passed
+### check_admin_partners
+exit=0  16/16 checks passed
+### check_admin_analytics
+exit=0  99/99 checks passed
+### check_admin_ops
+exit=0  34/34 checks passed
+### check_auth_flow
+exit=0  77/77 checks passed
+### check_user_registration
+exit=0  36/36 checks passed

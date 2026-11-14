@@ -19,7 +19,15 @@ export interface PartnerAvailability {
   /** Null when there has never been a fix — that is "unknown", not "stale". */
   freshness: LocationFreshness | null;
   refreshLocation: () => void;
+  /**
+   * Why the last attempt to read a position failed, or null. 'denied' means the
+   * browser is blocking location for this site and retrying will not help until
+   * the partner changes the site permission (N8).
+   */
+  locationProblem: LocationProblem | null;
 }
+
+export type LocationProblem = 'denied' | 'unavailable' | 'unsupported';
 
 /** Default coordinates for Bengaluru center when GPS is disabled in browser */
 
@@ -37,6 +45,7 @@ export function usePartnerAvailability(): PartnerAvailability {
   const lastLocationAt = usePartnerStore((s) => s.lastLocationAt);
 
   const [, forceTick] = useState(0);
+  const [locationProblem, setLocationProblem] = useState<LocationProblem | null>(null);
 
   // Freshness clock ticking every second while on duty
   useEffect(() => {
@@ -53,7 +62,10 @@ export function usePartnerAvailability(): PartnerAvailability {
     const postCoords = (lat: number, lng: number) => {
       partnerService
         .reportLocation(lat, lng)
-        .then(() => recordLocationFix())
+        .then(() => {
+          setLocationProblem(null);
+          recordLocationFix();
+        })
         .catch((err) => {
           console.warn('[usePartnerAvailability] Location beacon failed:', err);
         });
@@ -62,9 +74,15 @@ export function usePartnerAvailability(): PartnerAvailability {
     if (typeof navigator !== 'undefined' && navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => postCoords(pos.coords.latitude, pos.coords.longitude),
-        (err) => console.warn('[usePartnerAvailability] GPS unavailable — location not reported:', err.message),
+        (err) => {
+          // code 1 is PERMISSION_DENIED; 2 and 3 are "no position" and "timed out".
+          setLocationProblem(err.code === 1 ? 'denied' : 'unavailable');
+          console.warn('[usePartnerAvailability] GPS unavailable — location not reported:', err.message);
+        },
         { enableHighAccuracy: true, timeout: 10000 }
       );
+    } else {
+      setLocationProblem('unsupported');
     }
   }, []);
 
@@ -109,6 +127,7 @@ export function usePartnerAvailability(): PartnerAvailability {
     locationAgeSeconds,
     freshness: locationAgeSeconds === null ? null : locationFreshness(locationAgeSeconds),
     refreshLocation: reportLocationFix,
+    locationProblem,
   };
 }
 

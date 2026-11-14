@@ -1220,6 +1220,8 @@ The second bug was blunter: `partner_supply` filtered on `p.is_verified`, a bool
 **Consequences / not done.** Amended 2026-11-14: the mobile app now registers on sign-in and session restore and unregisters on logout (`mobile/src/services/push.ts`, lazy-imported from `authStore`). It no-ops without an EAS project id, on simulators and when permission is denied. Delivery still needs `eas init` and FCM/APNs credentials on the Expo account. Delivery receipts (Expo's second "getReceipts" step) are not polled.
 
 
+**Amendment 2026-11-14 (N1): deliveries are awaited, not abandoned.** Each delivery borrows one pooled connection for its token lookup after the request has returned. `check_dispatch_capacity` read the pool while such a delivery was in flight and reported "1 still checked out" intermittently; it was never a leak (the connection returns in well under a second). `push_service.drain()` waits for in-flight deliveries; the app calls it on shutdown so a deploy does not drop pushes already committed to, and the harness calls it before reading the pool, then allows a bounded wait so only a connection that never returns fails the check. Deliveries are still unbounded in number; with a pool of 3+2 a large burst of pushes competes with requests for connections. Not changed here: bound it with a semaphore or a queue before real push volume.
+
 ---
 
 # ADR-027: A dispute is an owner report on a completed job; a refund is recorded, not executed
