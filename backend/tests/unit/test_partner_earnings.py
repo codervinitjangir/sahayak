@@ -16,7 +16,7 @@ No database: the repository reads are stubbed.
 """
 import asyncio
 import uuid
-from datetime import datetime, timezone
+from datetime import timezone
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 

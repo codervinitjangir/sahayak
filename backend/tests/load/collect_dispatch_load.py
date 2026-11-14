@@ -349,7 +349,7 @@ def report(scenario: str) -> None:
                         pool_hits += 1
                         break
 
-        print(f"\nwhat the server returned (its own log, since the --mark)")
+        print("\nwhat the server returned (its own log, since the --mark)")
         for c, n in sorted(codes.items(), key=lambda kv: -kv[1]):
             print(f"  HTTP {c}   {n:>6}")
         print(f"  responses emitted in total  {sum(codes.values()):>6}")

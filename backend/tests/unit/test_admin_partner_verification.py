@@ -1,6 +1,7 @@
 """
 Unit tests for admin partner verification: listing roster and updating verification status.
 """
+import asyncio
 from datetime import datetime
 from decimal import Decimal
 import uuid
@@ -57,7 +58,6 @@ class FakeSession:
         self.refreshed = True
 
 
-import asyncio
 
 AUDITS: list = []
 

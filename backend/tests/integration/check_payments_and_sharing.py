@@ -45,7 +45,6 @@ import fakeredis.aioredis  # noqa: E402
 import httpx  # noqa: E402
 import psycopg2  # noqa: E402
 import psycopg2.extras  # noqa: E402
-from sqlalchemy import text  # noqa: E402
 
 from app.config.redis_client import set_redis_client  # noqa: E402
 from app.config.settings import get_settings  # noqa: E402

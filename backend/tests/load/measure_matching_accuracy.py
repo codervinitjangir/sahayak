@@ -63,7 +63,6 @@ import argparse
 import json
 import math
 import random
-import statistics
 import sys
 import time
 import uuid
@@ -384,7 +383,7 @@ def report(r):
           f"{100 - r['divergence_pct']:5.1f} %")
     if r["unmatched"]:
         print(f"    excluded, no candidate at all  {r['unmatched']:>6}")
-    print(f"\n  score component variance across those offers")
+    print("\n  score component variance across those offers")
     print(f"    rating_score  distinct values {r['rating_score_distinct']:>3}   "
           f"range {r['rating_score_min']} … {r['rating_score_max']}")
     print(f"    load_score    distinct values {r['load_score_distinct']:>3}   "
