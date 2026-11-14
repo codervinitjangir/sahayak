@@ -4,7 +4,7 @@ Written 2026-11-14, after the live end-to-end run (commit `d290dc3`).
 Sources: `docs/NEXT-STEPS.md` section 9 (the audit) and the defects found in that run.
 Completion figures are my estimate from item counts, not an official measure.
 
-**Updated 2026-11-14 (production pass).** Section C is closed except N6. Also done: admin
+**Updated 2026-11-14 (second pass): pricing editor, staff roles and invites, and manual reassign are built (ADR-028, 029, 030).** Earlier the same day (production pass): Section C is closed except N6. Also done: admin
 alerts, configurable CORS, a root error boundary, robots and sitemap, the contract docs (E8),
 and a deployment, rollback and backup runbook (`docs/DEPLOYMENT.md`). Nothing in section A
 has moved: those items need a person. See section F for what this pass did not do.
@@ -59,7 +59,7 @@ Not verified: any physical phone (mobile was run through its web target only).
 ### Engineering hygiene
 
 - [ ] E3 Mobile component tests for the owner flow and partner offer flow
-- [ ] E4 Automated end-to-end smoke test against staging (done by hand on 2026-11-14, not automated)
+- [~] E4 `backend/tests/smoke/smoke_e2e.py` drives one job from request to rating over real HTTP with two Supabase test numbers. **Not yet seen passing**: run locally it signed the owner number in and then Supabase refused the partner test number (HTTP 403), so everything after sign-in is unverified. It needs the two test numbers set up as its docstring says
 - [~] E5 Runbook written (`docs/DEPLOYMENT.md`: environments, secrets, release checklist, rollback). CORS is now configuration (`CORS_ALLOWED_ORIGINS`) and `backend/.dockerignore` keeps `.env` out of the image. No staging environment exists yet: that needs accounts
 - [~] E6 `scripts/restore_db.sh` added (refuses to target the live database). No backup schedule and no drill has been run
 - [~] E7 Admin alerts endpoint only. No uptime monitor, log alerting or status page
@@ -105,7 +105,7 @@ Each of these is real work, not a quick fix, and none was started:
 
 - Payments back office, gateway, webhooks, integer paise (blocked on G3)
 - G4 partner document upload, G6 Hindi and Kannada, G11 offline queue
-- E3 mobile component tests, E4 automated staging smoke test (no staging exists)
+- E3 mobile component tests (the mobile suite runs pure logic under vitest; rendering React Native components needs a test renderer set up first)
 - Store assets, replacing the stock photographs, social preview image
 - Everything in section A
 

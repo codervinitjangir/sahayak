@@ -67,7 +67,11 @@ key that has been pasted into a chat or a log.
 | Data was damaged | Restore the last backup into a **new** database (section 6), verify, then repoint `DATABASE_URL`. Jobs created after the backup are lost; say so to support |
 | Mobile release is bad | A store build cannot be recalled. Keep the previous backend contract working for one release, and ship a fixed build |
 
-## 5. Smoke test (staging, by hand until E4 automates it)
+## 5. Smoke test (staging)
+
+Automated: `backend/tests/smoke/smoke_e2e.py` (see its docstring for the six environment
+variables and the two test numbers it needs). It has not been seen passing end to end yet.
+By hand, the same path:
 
 Sign in with a staging test number as an owner, add a vehicle, request help; sign in as a
 verified partner on duty with a location, accept, enter the start code, complete with a
