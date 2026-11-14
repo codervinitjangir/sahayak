@@ -10,7 +10,7 @@ import uuid
 from decimal import Decimal
 from typing import Optional, Sequence
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.job import Job, JobAssignment, JobStatusHistory
@@ -269,11 +269,36 @@ async def get_responsible_assignment(
     descending means that if a data fault ever did produce two, the later one
     wins rather than the result being arbitrary.
     """
+    # Amended 2026-11-14 (ADR-030). Staff reassign made two things possible that
+    # the paragraph above assumed away, and a live test showed both going wrong:
+    #
+    #   * a 'cancelled' row on a job that is still running (the partner was
+    #     released and the job re-offered). That partner is no longer
+    #     responsible, so a cancelled row counts only once the job itself is over;
+    #   * a 'cancelled' row that was never accepted (an offer withdrawn, or an
+    #     owner cancelling while an offer was pending). Its accepted_at is NULL,
+    #     and Postgres sorts NULL *first* in DESC order, so it outranked the
+    #     partner who really accepted afterwards: they got 403 on their own job
+    #     and the released partner could drive it. A never-accepted row is not
+    #     responsible at all.
+    #
+    # A live or completed row always outranks a cancelled one, then newest wins.
     result = await db.execute(
         select(JobAssignment)
+        .join(Job, Job.id == JobAssignment.job_id)
         .where(JobAssignment.job_id == job_id)
-        .where(JobAssignment.status.in_(RESPONSIBLE_ASSIGNMENT_STATUSES))
-        .order_by(JobAssignment.accepted_at.desc())
+        .where(or_(
+            JobAssignment.status.in_(("accepted", "completed")),
+            and_(
+                JobAssignment.status == "cancelled",
+                JobAssignment.accepted_at.is_not(None),
+                Job.status.in_(("cancelled", "completed")),
+            ),
+        ))
+        .order_by(
+            case((JobAssignment.status == "cancelled", 1), else_=0),
+            JobAssignment.accepted_at.desc().nulls_last(),
+        )
         .limit(1)
     )
     return result.scalar_one_or_none()

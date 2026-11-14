@@ -107,12 +107,41 @@ export interface AdminAuditEntry {
   id: string;
   admin_id?: string | null;
   action: string;
-  target_type: 'job' | 'user' | 'partner' | 'dispute' | 'service';
+  target_type: 'job' | 'user' | 'partner' | 'dispute' | 'service' | 'admin';
   /** Null for a service: its code is in `details.service_code`. */
   target_id: string | null;
   reason?: string | null;
   details?: Record<string, unknown> | null;
   created_at: string;
+}
+
+export type StaffRole = 'super_admin' | 'ops' | 'support' | 'finance';
+
+export interface StaffMember {
+  id: string;
+  name?: string | null;
+  role: StaffRole | string;
+  phone?: string | null;
+  has_login: boolean;
+  disabled_at?: string | null;
+  created_at?: string | null;
+  is_you: boolean;
+}
+
+export interface StaffInvite {
+  id: string;
+  name: string;
+  role: StaffRole | string;
+  phone: string;
+  created_at?: string | null;
+  expires_at: string;
+  expired: boolean;
+}
+
+export interface StaffList {
+  staff: StaffMember[];
+  invites: StaffInvite[];
+  your_role: string;
 }
 
 export interface AdminCatalogueItem {
@@ -236,6 +265,18 @@ export const adminService = {
     return res.data;
   },
 
+  /**
+   * Takes the job from its partner and offers it to the next-best one. The
+   * returned status is 'matching' (a new offer is out) or 'no_match_found'.
+   */
+  async reassignJob(jobId: string, reason: string): Promise<AdminJobItem> {
+    const res = await apiClient<AdminJobItem>(`/admin/jobs/${jobId}/reassign`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    });
+    return res.data;
+  },
+
   async listUsers(params: { q?: string; limit?: number; offset?: number } = {}): Promise<Page<AdminUserItem>> {
     const res = await apiClient<Page<AdminUserItem>>(`/admin/users${qs(params)}`, { method: 'GET' });
     return res.data;
@@ -251,6 +292,40 @@ export const adminService = {
 
   async listAudit(params: { target_type?: string; target_id?: string; limit?: number; offset?: number } = {}): Promise<Page<AdminAuditEntry>> {
     const res = await apiClient<Page<AdminAuditEntry>>(`/admin/audit-log${qs(params)}`, { method: 'GET' });
+    return res.data;
+  },
+
+  async listStaff(): Promise<StaffList> {
+    const res = await apiClient<StaffList>('/admin/staff', { method: 'GET' });
+    return res.data;
+  },
+
+  /** The returned `token` is shown once; the server keeps only its hash. */
+  async inviteStaff(body: { name: string; phone: string; role: StaffRole }): Promise<StaffInvite & { token: string }> {
+    const res = await apiClient<StaffInvite & { token: string }>('/admin/invites', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+    return res.data;
+  },
+
+  async revokeInvite(inviteId: string): Promise<void> {
+    await apiClient<{ revoked: boolean }>(`/admin/invites/${inviteId}`, { method: 'DELETE' });
+  },
+
+  async acceptInvite(token: string): Promise<StaffMember> {
+    const res = await apiClient<StaffMember>('/admin/invites/accept', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
+    });
+    return res.data;
+  },
+
+  async updateStaff(adminId: string, body: { role?: StaffRole; disabled?: boolean; reason: string }): Promise<StaffMember> {
+    const res = await apiClient<StaffMember>(`/admin/staff/${adminId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    });
     return res.data;
   },
 

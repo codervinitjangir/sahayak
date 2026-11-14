@@ -999,7 +999,7 @@ Full regression: **307 unit tests** and **646 live assertions** across thirteen 
 
 # ADR-020: An admin is a row in one of our own tables, and there is deliberately no way to claim one
 
-**Status:** Accepted
+**Status:** Accepted; parts 2 and 5 superseded by ADR-029 (2026-11-14), which adds the one-time provisioning token this ADR named as the correct alternative
 
 **Date:** 2026-10-01
 
@@ -1256,3 +1256,52 @@ The second bug was blunter: `partner_supply` filtered on `p.is_verified`, a bool
 6. Bounds: greater than 0, at most 50000 (the absolute final-price cap), two decimals. Enforced by the request schema and, for the lower bound, by the database.
 
 **Not done.** No scheduled or time-limited prices, no distance or surge component, no per-city price. Service create, rename and retire are still migrations. Categories are not editable.
+
+
+---
+
+# ADR-029: Staff join by a one-time invite bound to a verified phone number; roles gate writes, not reads
+
+**Date:** 2026-11-14 · **Status:** Accepted. Supersedes ADR-020 part 2 ("there is no admin link-auth endpoint") and part 5 ("`admins.role` is not consulted"). The rest of ADR-020 stands.
+
+**Context.** Adding a staff member meant an `UPDATE admins` by someone with database access. ADR-020 chose that on purpose: neither link-auth endpoint of the time tied the caller to the row being claimed, and an unverifiable email claim was not a fix. It named the correct alternative and declined it as scope: a one-time provisioning token. The admin backlog now needs staff accounts with roles (support, ops, finance), which is that scope.
+
+**Decision.**
+1. **Invite.** A super admin calls `POST /admin/invites {name, phone, role}`. The server generates a 256-bit random token, stores only its SHA-256 (`admin_invites.token_hash`, alembic/0009) and returns the token once. It expires after 72 hours. A new invite for a number revokes the open one; a partial unique index allows one open invite per number.
+2. **Accept.** `POST /admin/invites/accept {token}` takes token claims, not an identity (the invitee has no local row yet). It succeeds only if the token is known, unused, unrevoked and unexpired **and the session's verified phone claim equals the invite's phone** (`same_number`, exact digits, as link-auth has done since 2026-10-07). The token alone is not enough, and owning the number alone is not enough. Unlike the email claim ADR-020 rejected, the phone claim is proved by the OTP that created the session.
+3. **One answer for every failure.** Unknown, used, revoked, expired and wrong-number all return 404 `INVITE_INVALID` with the same message, so the endpoint cannot be used to probe which tokens exist. The reason is in the server log.
+4. **ADR-020 part 4 is kept.** An account that already resolves to a user, partner or admin row gets 409 `AUTH_ALREADY_LINKED`. A staff member uses a number that is not an owner or partner account.
+5. **Roles gate writes.** `admins.role` is one of `super_admin`, `ops`, `support`, `finance`, carried on `Identity.admin_role` from our own row, never from a claim. `STAFF_WRITE_ROLES` in `app/utils/auth.py` is the whole policy: staff management `super_admin`; job cancel and reassign `super_admin, ops, support`; partner verification and owner suspension `super_admin, ops`; dispute resolution all four; recording a refund and changing prices `super_admin, finance`. Every staff role can read everything through `require_admin`. `require_staff(area)` resolves the area when the route is declared, so a typo is an import error, not an open or closed door.
+6. **Switching access off.** `PATCH /admin/staff/{id} {role?, disabled?, reason}`. A disabled admin gets 403 `ACCOUNT_SUSPENDED` at identity resolution; the row and its audit history stay.
+7. **There is always a working super admin, without counting.** Nobody may change their own account (409 `CANNOT_MODIFY_SELF`), and the actor must still be an active super admin once the super-admin rows are locked (in id order, so two super admins removing each other serialise instead of deadlocking; the second is refused with 403). The target is never the actor, so the actor remains.
+8. Every one of these writes records its audit row in the same transaction (ADR-024, target_type `admin`). The audit row for an invite holds the role and the last four digits of the number, not the token.
+
+**Consequences.** The first super admin is still provisioned by SQL; that is the bootstrap, not a gap. Existing `ops` rows keep every ability they had before today. The two abilities added today, changing prices and recording refunds, need `finance` or `super_admin`. Refund gating is checked in `dispute_service` as well as at the route, because the resolution arrives in the body.
+
+**Not done.** No rate limit on accept (a 256-bit token makes guessing irrelevant, but a limit would reduce log noise). The invite code is delivered by the inviter out of band; the server sends no SMS. No per-role restriction on reads. Roles are a fixed list in code and a CHECK constraint, not editable.
+
+---
+
+# ADR-030: Staff can take a job from its partner; the release commits before the next offer is sought
+
+**Date:** 2026-11-14 · **Status:** Accepted
+
+**Context.** Offers do not expire, and an accepted job has no "the partner went silent" exit except cancelling the owner's request. Support needed a way to move a job without making the owner start again.
+
+**Decision.**
+1. `POST /admin/jobs/{id}/reassign {reason}` (roles: `super_admin, ops, support`). Allowed while the job is `matching` with an unanswered offer, `assigned` or `partner_en_route`, and only if an assignment is open; otherwise 409 `JOB_NOT_REASSIGNABLE`. `in_progress` is excluded: the start code has been used and a half-done repair is not handed over from a console.
+2. **Step one, one transaction under the job row lock:** every open assignment becomes `cancelled` (never `rejected`: the partner did not decline, and the acceptance-rate dimension must not count it against them); a job that had an accepted partner returns to `matching` with a history row "Reassigned by support: ..." (principle 4); notifications; the audit row.
+3. **Step two, after that commit:** the ordinary `_offer_next`. It excludes every partner who has ever had an assignment row for the job, so the released partner is not re-offered, and it ends in `no_match_found` with the usual owner notification when nobody is left. This is the same ordering a partner's own decline uses: the release is durable before a search that touches Redis begins, so an outage cannot leave the old partner holding a job that support took away.
+4. A failed step two does not fail the request or undo step one. The job is correctly `matching` with nobody on it, and `GET /admin/alerts` reports it as stuck after 12 minutes.
+5. Two new notification events that are not status changes: `job_reassigned_by_support` (released partner) and `job_reassigning` (owner, only if they had been told a partner was coming). No names or numbers in either (ADR-019).
+6. Staff do not choose the next partner. Picking by hand would bypass the scoring this project exists to evaluate and would need its own capacity and distance checks.
+
+**Amendment 2026-11-14, found by a live test before this shipped: "responsible" and "may see contact details" had to be redefined.** Reassign creates a state the code had assumed impossible: a `cancelled` assignment on a job that is still running. Three faults followed, each shown failing in `check_admin_ops.py` section 2c before the fix:
+
+1. `get_responsible_assignment` ordered by `accepted_at DESC`. A withdrawn offer is `cancelled` with a NULL `accepted_at`, and Postgres sorts NULL first in descending order, so it outranked the partner who accepted afterwards. That partner got 403 on their own job and the released partner could move it to `partner_en_route`. Now: `accepted` or `completed` rows always count; a `cancelled` row counts only if it had been accepted **and** the job itself is over; live rows outrank cancelled ones; NULLs sort last.
+2. `GET /jobs/{id}` released contact details on any latest assignment in a "responsible" status, which included `cancelled`. After a reassign the owner still saw the released partner's name and number, and that partner still saw the owner's. Now both directions require that the partner *took the job* (same definition as 1).
+3. Two faults in the same lines that predate reassign and are fixed with it: a partner holding only an **offer** was given the owner's name, number and pickup point by `GET /jobs/{id}` (ADR-017 withheld them from the offers list but not from this read), and the owner lost their **own** pickup point and name in the response while an offer was pending, because one flag answered both "may see the owner's details" and "may see the partner's". They are now two flags.
+
+Consequence for callers: a partner whose offer was cancelled before they accepted now gets 403 (not 409) if they try to act on that job, and `current_assignment.partner_*` is null for them.
+
+**Not done.** No "reassign to this partner" option. The released partner's app learns of it from the notification and its next poll; there is no push-specific handling.

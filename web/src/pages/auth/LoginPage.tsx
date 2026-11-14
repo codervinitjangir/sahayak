@@ -61,6 +61,14 @@ function safeOwnerRedirect(raw: string | null): string | null {
   return raw;
 }
 
+const staffJoinPending = (): boolean => {
+  try {
+    return sessionStorage.getItem('sahayak_staff_join') === '1';
+  } catch {
+    return false;
+  }
+};
+
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -222,6 +230,11 @@ export const LoginPage: React.FC = () => {
           // The token is good; there is simply no profile behind it yet. The
           // signup form posts to POST /api/v1/users, which requires exactly this
           // token — so this screen must not be reachable before sign-in.
+          // An invited staff member has, by design, no profile yet (ADR-029).
+          if (staffJoinPending()) {
+            navigate('/staff/join', { replace: true });
+            return;
+          }
           navigate(
             loginRole === 'partner'
               ? '/partner/signup'

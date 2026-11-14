@@ -74,7 +74,7 @@ from app.schemas.admin_ops import (
 )
 from app.services import admin_analytics_service, admin_ops_service
 from app.services.auth_service import Identity
-from app.utils.auth import require_admin
+from app.utils.auth import require_admin, require_staff
 from app.utils.errors import NotFoundError
 
 _ERROR_RESPONSES = {
@@ -332,7 +332,7 @@ async def get_partner_detail(
 async def verify_partner(
     partner_id: uuid.UUID,
     payload: AdminPartnerVerificationRequest,
-    identity: Identity = Depends(require_admin),
+    identity: Identity = Depends(require_staff("partners")),
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[AdminPartnerSummary]:
     """Promote or reject a partner's verification status for dispatch eligibility."""
@@ -394,7 +394,7 @@ async def admin_list_jobs(
 async def admin_cancel_job(
     job_id: uuid.UUID,
     payload: AdminJobCancelRequest,
-    identity: Identity = Depends(require_admin),
+    identity: Identity = Depends(require_staff("jobs")),
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[AdminJobItem]:
     """409 JOB_ALREADY_TERMINAL for a finished job. Owner and partners are notified."""
@@ -424,7 +424,7 @@ async def admin_list_users(
 async def admin_set_user_suspension(
     user_id: uuid.UUID,
     payload: AdminUserSuspensionRequest,
-    identity: Identity = Depends(require_admin),
+    identity: Identity = Depends(require_staff("owners")),
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[AdminUserItem]:
     """A suspended owner's every request answers 403 ACCOUNT_SUSPENDED."""
@@ -471,7 +471,7 @@ async def admin_alerts(
 async def admin_set_service_price(
     service_code: str,
     payload: AdminServicePriceRequest,
-    identity: Identity = Depends(require_admin),
+    identity: Identity = Depends(require_staff("pricing")),
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[AdminServiceItem]:
     """Applies to requests created after the change; existing jobs keep their
@@ -479,3 +479,20 @@ async def admin_set_service_price(
     with GET /services."""
     return envelope(await admin_ops_service.set_service_price(
         db, service_code, payload.base_price, payload.reason, identity))
+
+
+@admin_ops_router.post(
+    "/jobs/{job_id}/reassign",
+    response_model=ApiResponse[AdminJobItem],
+    summary="Take a job from its partner and offer it to the next-best one (reason required, audited)",
+)
+async def admin_reassign_job(
+    job_id: uuid.UUID,
+    payload: AdminJobCancelRequest,
+    identity: Identity = Depends(require_staff("jobs")),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[AdminJobItem]:
+    """409 JOB_NOT_REASSIGNABLE unless the job is matching, assigned or en route
+    with a partner on it. The released partner is never re-offered. The returned
+    status is 'matching' (a new offer is out) or 'no_match_found' (nobody left)."""
+    return envelope(await admin_ops_service.reassign_job(db, job_id, payload.reason, identity))

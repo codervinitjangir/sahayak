@@ -174,6 +174,10 @@ class Identity:
     auth_user_id: uuid.UUID
     role: Role
     local_id: uuid.UUID
+    # admins.role for an admin ('super_admin' | 'ops' | 'support' | 'finance'),
+    # None for everyone else. Read from our own row at resolution, never from a
+    # claim (ADR-020, ADR-029). require_staff() is what consults it.
+    admin_role: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -313,8 +317,20 @@ async def resolve_identity(db: AsyncSession, claims: TokenClaims) -> Identity:
                 code=ErrorCode.ACCOUNT_SUSPENDED,
                 message="This account has been suspended. Contact Sahayak support.",
             )
+        if role == "admin" and getattr(admin, "disabled_at", None) is not None:
+            log_event(
+                "auth_account_suspended",
+                level=logging.WARNING,
+                admin_id=str(local_id),
+                outcome="rejected_disabled_staff",
+            )
+            raise ForbiddenError(
+                code=ErrorCode.ACCOUNT_SUSPENDED,
+                message="This staff account has been switched off.",
+            )
         return Identity(
-            auth_user_id=claims.auth_user_id, role=role, local_id=local_id
+            auth_user_id=claims.auth_user_id, role=role, local_id=local_id,
+            admin_role=getattr(admin, "role", None) if role == "admin" else None,
         )
 
     # Authenticated, but no profile. Which of the two answers this is decides

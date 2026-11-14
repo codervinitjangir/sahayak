@@ -201,13 +201,13 @@ view for verification (`/admin/verify`). Endpoints: `GET /admin/analytics/*`, `G
 
 Missing, in suggested order:
 
-1. [x] **Live jobs board** with filters and staff cancel (2026-11-14, ADR-024). Manual *reassign* not built.
+1. [x] **Live jobs board** with filters and staff cancel (2026-11-14, ADR-024). Manual *reassign* added 2026-11-14 (ADR-030).
 2. [x] **Owner and partner management**: owner search, suspend/reinstate (2026-11-14). Partner suspend already via verify.
 3. [x] **Audit log**: append-only, same-transaction (2026-11-14, ADR-024).
-4. **Staff accounts and roles** (support, ops, finance) and an admin invite flow. Today an admin is
-   linked to a login by editing the database.
+4. [x] **Staff accounts and roles** (super admin, ops, support, finance) and an invite flow (2026-11-14, ADR-029).
+   The first super admin is still set by SQL.
 5. **Support inbox / disputes**, tied to payments item E.
-6. **Catalogue and pricing editor** (`base_price`, services, categories).
+6. [x] **Pricing editor** for `base_price` (2026-11-14, ADR-028). Names, codes and categories stay migration-only.
 7. **Payments back office**: collections, commission, payout runs, reconciliation.
 8. [x] **Alerts** (2026-11-14): stuck jobs, no-match rate, partners on duty, at `GET /admin/alerts`. Not by zone; nobody is notified.
 

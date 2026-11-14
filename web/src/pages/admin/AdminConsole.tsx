@@ -30,10 +30,10 @@ import { OverviewPanel } from './OverviewPanel';
 import { DispatchPanel } from './DispatchPanel';
 import { MatchingPanel } from './MatchingPanel';
 import { PartnersPanel } from './PartnersPanel';
-import { AuditPanel, CataloguePanel, JobsBoardPanel, OwnersPanel } from './BackOfficePanels';
+import { AuditPanel, CataloguePanel, JobsBoardPanel, OwnersPanel, StaffPanel } from './BackOfficePanels';
 import '../partner/partner.css';
 
-type TabId = 'overview' | 'dispatch' | 'matching' | 'jobs' | 'partners' | 'owners' | 'catalogue' | 'audit';
+type TabId = 'overview' | 'dispatch' | 'matching' | 'jobs' | 'partners' | 'owners' | 'catalogue' | 'staff' | 'audit';
 
 const TABS: { id: TabId; label: string; blurb: string; Icon: React.ElementType }[] = [
   { id: 'overview', label: 'Overview', blurb: 'Jobs, completion and partner supply', Icon: BarChart3 },
@@ -43,16 +43,18 @@ const TABS: { id: TabId; label: string; blurb: string; Icon: React.ElementType }
   { id: 'partners', label: 'Partners', blurb: 'Mechanic verification & KYC approval', Icon: ShieldCheck },
   { id: 'owners', label: 'Owners', blurb: 'Search, suspend, reinstate', Icon: Users },
   { id: 'catalogue', label: 'Pricing', blurb: 'Service base prices', Icon: ClipboardList },
+  { id: 'staff', label: 'Staff', blurb: 'Accounts, roles, invites', Icon: Users },
   { id: 'audit', label: 'Audit', blurb: 'Every staff action', Icon: ScrollText },
 ];
 
 // Tabs that are operations, not time-windowed reports.
-const OPS_TABS: TabId[] = ['jobs', 'partners', 'owners', 'catalogue', 'audit'];
+const OPS_TABS: TabId[] = ['jobs', 'partners', 'owners', 'catalogue', 'staff', 'audit'];
 const OPS_COPY: Record<string, { tag: string; title: string; blurb: string }> = {
   jobs: { tag: 'Live Ops', title: 'Live jobs board', blurb: 'Every job still in motion, with who to call. Cancelling here notifies both sides and is recorded in the audit log.' },
   partners: { tag: 'Ops Verification Queue', title: 'Partner Verification & KYC', blurb: 'Review mechanic profiles, inspect workshop credentials and tools, and approve or reject partners on phone or desktop.' },
   owners: { tag: 'Accounts', title: 'Vehicle owners', blurb: 'Search owners and suspend or reinstate an account. Suspension is audited and blocks every request the owner makes.' },
   catalogue: { tag: 'Catalogue', title: 'Service pricing', blurb: 'The base price each new request is estimated at. Every change needs a reason and is recorded in the audit log.' },
+  staff: { tag: 'Access', title: 'Staff accounts', blurb: 'Who can use this console and what each role may change. Invites are single-use and tied to one mobile number.' },
   audit: { tag: 'Compliance', title: 'Audit log', blurb: 'Append-only record of every staff action: who did what, to what, why and when.' },
 };
 
@@ -274,6 +276,8 @@ export const AdminConsole: React.FC = () => {
           <OwnersPanel />
         ) : active === 'catalogue' ? (
           <CataloguePanel />
+        ) : active === 'staff' ? (
+          <StaffPanel />
         ) : active === 'audit' ? (
           <AuditPanel />
         ) : query.isError ? (

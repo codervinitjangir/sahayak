@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from typing import Optional, List
-from sqlalchemy import String, DateTime, CheckConstraint, func
+from sqlalchemy import String, DateTime, CheckConstraint, ForeignKey, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.config.database import Base
@@ -30,9 +30,17 @@ class Admin(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+    # ADR-029. `phone` is the number the invite was bound to. `disabled_at` is a
+    # soft off-switch: resolve_identity answers 403 and the row, with its audit
+    # history, stays.
+    phone: Mapped[Optional[str]] = mapped_column(String(15), nullable=True)
+    invited_by: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("admins.id", ondelete="SET NULL"), nullable=True
+    )
+    disabled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
-        CheckConstraint("role IN ('ops', 'super_admin')", name="check_admin_role"),
+        CheckConstraint("role IN ('ops', 'super_admin', 'support', 'finance')", name="check_admin_role"),
     )
 
     # Relationships

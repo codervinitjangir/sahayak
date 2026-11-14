@@ -97,6 +97,9 @@ def purge():
     params = {"tag": TAG + "%", "p": PHONE_PREFIX + "%"}
     q.execute("BEGIN")
     q.execute("ALTER TABLE admin_audit_log DISABLE TRIGGER trg_admin_audit_log_append_only")
+    q.execute("DELETE FROM admin_audit_log WHERE target_type = 'admin' AND (target_id IN "
+              "(SELECT id FROM admins WHERE phone LIKE %(p)s) OR target_id IN "
+              "(SELECT id FROM admin_invites WHERE phone LIKE %(p)s))", params)
     q.execute(f"DELETE FROM admin_audit_log WHERE target_id IN {job_ids} OR target_id IN {user_ids} "
               f"OR target_id IN {partner_ids} OR (target_type = 'service' AND reason LIKE %(tag)s)", params)
     # Section 5c changes a price; put back whatever it replaced, even after a crash.
@@ -113,6 +116,8 @@ def purge():
     q.execute("DELETE FROM jobs WHERE issue_description LIKE %(tag)s", params)
     q.execute("DELETE FROM partners WHERE phone LIKE %(p)s", params)
     q.execute("DELETE FROM users WHERE phone LIKE %(p)s", params)
+    q.execute("DELETE FROM admin_invites WHERE phone LIKE %(p)s", params)
+    q.execute("DELETE FROM admins WHERE phone LIKE %(p)s", params)
     if DELETED_OWNERS:
         q.execute("DELETE FROM users WHERE id = ANY(%(ids)s::uuid[])", {"ids": [str(i) for i in DELETED_OWNERS]})
 
@@ -124,7 +129,7 @@ async def main():
     from app.config.database import AsyncSessionLocal
     from app.services import auth_service
     from app.services.auth_service import Identity, TokenClaims
-    from app.utils.auth import get_current_identity
+    from app.utils.auth import get_current_identity, get_token_claims
     from app.utils.errors import ForbiddenError
 
     purge()
@@ -142,7 +147,8 @@ async def main():
 
     current = {"identity": None}
     app.dependency_overrides[get_current_identity] = lambda: current["identity"]
-    as_admin = Identity(auth_user_id=uuid.uuid4(), role="admin", local_id=uuid.UUID(str(admin_id)))
+    as_admin = Identity(auth_user_id=uuid.uuid4(), role="admin", local_id=uuid.UUID(str(admin_id)),
+                        admin_role="super_admin")
     as_owner = Identity(auth_user_id=owner_auth, role="user", local_id=uuid.UUID(str(owner)))
 
     transport = httpx.ASGITransport(app=app)
@@ -221,6 +227,92 @@ async def main():
         check("cancelling it again is 409 JOB_ALREADY_TERMINAL", r.status_code == 409
               and r.json()["error"]["code"] == "JOB_ALREADY_TERMINAL", f"HTTP {r.status_code}")
 
+        section("2b. Manual reassign (ADR-030)")
+        rj = one("INSERT INTO jobs (user_id, vehicle_id, vehicle_number, service_id, status, pickup_location, "
+                 "pickup_address_text, issue_description, price_estimate) "
+                 "SELECT user_id, vehicle_id, vehicle_number, service_id, 'assigned', pickup_location, "
+                 "pickup_address_text, %(d)s, price_estimate FROM jobs WHERE id=%(i)s RETURNING id",
+                 {"i": job_id, "d": TAG + " reassign"})["id"]
+        q = conn.cursor()
+        q.execute("INSERT INTO job_status_history (job_id, status, note) VALUES (%(j)s, 'assigned', 'QA setup')", {"j": rj})
+        q.execute("INSERT INTO job_assignments (job_id, partner_id, status, assignment_rank) "
+                  "VALUES (%(j)s, %(p)s, 'accepted', 1)", {"j": rj, "p": partner})
+        r = await c.post(f"/api/v1/admin/jobs/{rj}/reassign", json={"reason": "partner unreachable"})
+        st = (r.json().get("data") or {}).get("status")
+        a_row = one("SELECT status FROM job_assignments WHERE job_id=%(j)s", {"j": rj})
+        check("reassign releases the partner as 'cancelled', never 'rejected'", r.status_code == 200
+              and a_row["status"] == "cancelled", f"HTTP {r.status_code} {a_row} {r.text[:160]}")
+        hist = [h["status"] for h in rows("SELECT status FROM job_status_history WHERE job_id=%(j)s ORDER BY changed_at, id", {"j": rj})]
+        check("the job went back to matching, then (nobody else nearby) to no_match_found, each with a history row",
+              st == "no_match_found" and hist[-2:] == ["matching", "no_match_found"], f"status={st} history={hist}")
+        n_offers = one("SELECT count(*) AS n FROM job_assignments WHERE job_id=%(j)s", {"j": rj})["n"]
+        check("the released partner was not offered the job again", n_offers == 1, f"{n_offers} assignment rows")
+        ev = {(n["recipient_type"], n["event"]) for n in rows(
+            "SELECT recipient_type, event FROM notifications WHERE job_id=%(j)s", {"j": rj})}
+        check("partner and owner are each told in their own words",
+              ("partner", "job_reassigned_by_support") in ev and ("user", "job_reassigning") in ev, f"{ev}")
+        a = one("SELECT action, details FROM admin_audit_log WHERE target_id=%(j)s", {"j": rj})
+        check("audit row records who was released", a is not None and a["action"] == "job_reassigned"
+              and a["details"]["released_partners"] == [str(partner)], f"{a}")
+        r = await c.post(f"/api/v1/admin/jobs/{rj}/reassign", json={"reason": "again"})
+        check("a job with nobody on it cannot be reassigned", r.status_code == 409
+              and (r.json().get("error") or {}).get("code") == "JOB_NOT_REASSIGNABLE", f"HTTP {r.status_code}")
+
+        section("2c. Reassign: who is responsible and who sees whom afterwards (ADR-030, ADR-017)")
+        rj2 = one("INSERT INTO jobs (user_id, vehicle_id, vehicle_number, service_id, status, pickup_location, "
+                  "pickup_address_text, issue_description, price_estimate) "
+                  "SELECT user_id, vehicle_id, vehicle_number, service_id, 'matching', pickup_location, "
+                  "pickup_address_text, %(d)s, price_estimate FROM jobs WHERE id=%(i)s RETURNING id",
+                  {"i": job_id, "d": TAG + " reassign offered"})["id"]
+        q.execute("INSERT INTO job_status_history (job_id, status, note) VALUES (%(j)s, 'matching', 'QA setup')", {"j": rj2})
+        q.execute("INSERT INTO job_assignments (job_id, partner_id, status, assignment_rank) "
+                  "VALUES (%(j)s, %(p)s, 'offered', 1)", {"j": rj2, "p": partner})
+        as_partner_a = Identity(auth_user_id=uuid.uuid4(), role="partner", local_id=uuid.UUID(str(partner)))
+
+        current["identity"] = as_partner_a
+        r = await c.get(f"/api/v1/jobs/{rj2}")
+        check("a partner who has only been offered the job is not given the owner's number or pickup point",
+              r.status_code == 200 and OWNER_PHONE not in r.text and (r.json()["data"].get("pickup_lat") is None),
+              f"HTTP {r.status_code} phone_in_body={OWNER_PHONE in r.text}")
+        current["identity"] = as_owner
+        r = await c.get(f"/api/v1/jobs/{rj2}")
+        d = r.json().get("data") or {}
+        check("the owner always sees their own pickup point, and no partner details while it is only an offer",
+              d.get("pickup_lat") is not None and "Admin QA partner" not in r.text, f"pickup_lat={d.get('pickup_lat')}")
+
+        current["identity"] = as_admin
+        r = await c.post(f"/api/v1/admin/jobs/{rj2}/reassign", json={"reason": "offer not answered"})
+        check("an unanswered offer can be withdrawn", r.status_code == 200, f"HTTP {r.status_code} {r.text[:160]}")
+        hist2 = [h["status"] for h in rows("SELECT status FROM job_status_history WHERE job_id=%(j)s", {"j": rj2})]
+        check("withdrawing an offer adds no 'matching' history row (the status did not change)",
+              hist2.count("matching") == 1, f"{hist2}")
+        current["identity"] = as_owner
+        r = await c.get(f"/api/v1/jobs/{rj2}")
+        check("the owner is not shown the partner whose offer was withdrawn",
+              r.status_code == 200 and "Admin QA partner" not in r.text and PARTNER_PHONE not in r.text, f"HTTP {r.status_code}")
+
+        # The next partner accepts. Set up by SQL: this harness has no second
+        # partner with a live location, and the point is the lookup, not dispatch.
+        partner_b = one("INSERT INTO partners (name, phone, verification_status) VALUES "
+                        "('Admin QA partner B', %(p)s, 'verified') RETURNING id", {"p": PHONE_PREFIX + "3"})["id"]
+        q.execute("INSERT INTO job_assignments (job_id, partner_id, status, assignment_rank, accepted_at) "
+                  "VALUES (%(j)s, %(p)s, 'accepted', 2, now())", {"j": rj2, "p": partner_b})
+        q.execute("UPDATE jobs SET status='assigned' WHERE id=%(j)s", {"j": rj2})
+        q.execute("INSERT INTO job_status_history (job_id, status, note) VALUES (%(j)s, 'assigned', 'QA setup')", {"j": rj2})
+        as_partner_b = Identity(auth_user_id=uuid.uuid4(), role="partner", local_id=uuid.UUID(str(partner_b)))
+        current["identity"] = as_partner_a
+        r = await c.post(f"/api/v1/jobs/{rj2}/status", json={"status": "partner_en_route"})
+        check("the released partner cannot drive the job", r.status_code == 403, f"HTTP {r.status_code}")
+        r = await c.get(f"/api/v1/jobs/{rj2}")
+        check("the released partner no longer sees the owner's number", OWNER_PHONE not in r.text, "leaked")
+        current["identity"] = as_partner_b
+        r = await c.post(f"/api/v1/jobs/{rj2}/status", json={"status": "partner_en_route"})
+        check("the partner who accepted after the reassign is the responsible one",
+              r.status_code == 200, f"HTTP {r.status_code} {r.text[:160]}")
+        r = await c.get(f"/api/v1/jobs/{rj2}")
+        check("...and sees the owner's number, as an accepted partner does", OWNER_PHONE in r.text, "withheld")
+        current["identity"] = as_admin
+
         section("3. The audit log is append-only at the database")
         q = conn.cursor()
         try:
@@ -249,8 +341,8 @@ async def main():
         check("reinstated owner resolves again", r.status_code == 200 and ident.role == "user")
         r = await c.get("/api/v1/admin/users", params={"q": OWNER_PHONE})
         d = r.json().get("data") or {}
-        check("owner list finds them with job_count 1", r.status_code == 200 and d.get("items")
-              and d["items"][0]["job_count"] == 1 and d["items"][0]["suspended_at"] is None, f"{d}")
+        check("owner list finds them with job_count 3 (board job + two reassign jobs)", r.status_code == 200 and d.get("items")
+              and d["items"][0]["job_count"] == 3 and d["items"][0]["suspended_at"] is None, f"{d}")
 
         section("5. Partner verification is audited")
         r = await c.patch(f"/api/v1/admin/partners/{partner}/verify", json={"verification_status": "verified"})
@@ -286,6 +378,93 @@ async def main():
         r = await c.get("/api/v1/admin/audit-log", params={"target_type": "service"})
         check("audit-log lists service rows with a null target_id", r.status_code == 200
               and any(i["target_id"] is None for i in (r.json().get("data") or {}).get("items", [])), f"HTTP {r.status_code}")
+
+        section("5d. Staff roles and invites (ADR-029)")
+        staff_phone = PHONE_PREFIX + "8"
+        sup = one("SELECT id FROM admins WHERE role='super_admin' AND auth_user_id IS NOT NULL "
+                  "AND disabled_at IS NULL ORDER BY id LIMIT 1")
+        if sup is None:
+            print("      SKIP: no linked super admin in this database")
+        else:
+            as_super = Identity(auth_user_id=uuid.uuid4(), role="admin", local_id=uuid.UUID(str(sup["id"])),
+                                admin_role="super_admin")
+            as_ops = Identity(auth_user_id=uuid.uuid4(), role="admin", local_id=uuid.UUID(str(admin_id)),
+                              admin_role="ops")
+            invite_body = {"name": "Staff QA", "phone": staff_phone, "role": "support"}
+
+            current["identity"] = as_ops
+            r = await c.post("/api/v1/admin/invites", json=invite_body)
+            check("an ops admin cannot invite staff", r.status_code == 403, f"HTTP {r.status_code}")
+
+            current["identity"] = as_super
+            r = await c.post("/api/v1/admin/invites", json=invite_body)
+            token = (r.json().get("data") or {}).get("token") or ""
+            inv = one("SELECT token_hash, role FROM admin_invites WHERE phone=%(p)s AND revoked_at IS NULL", {"p": staff_phone})
+            check("a super admin gets a token once; only its hash is stored", r.status_code == 201 and len(token) >= 40
+                  and inv is not None and inv["token_hash"] != token and len(inv["token_hash"]) == 64, f"HTTP {r.status_code}")
+            r2 = await c.post("/api/v1/admin/invites", json=invite_body)
+            token2 = (r2.json().get("data") or {}).get("token") or ""
+            n_open = one("SELECT count(*) AS n FROM admin_invites WHERE phone=%(p)s AND revoked_at IS NULL "
+                         "AND accepted_at IS NULL", {"p": staff_phone})["n"]
+            check("inviting again replaces the open invite", r2.status_code == 201 and n_open == 1 and token2 != token, f"{n_open}")
+
+            staff_sub = uuid.uuid4()
+            claims = {"value": TokenClaims(auth_user_id=staff_sub, phone="919000000879")}
+            app.dependency_overrides[get_token_claims] = lambda: claims["value"]
+            r = await c.post("/api/v1/admin/invites/accept", json={"token": token2})
+            n = one("SELECT count(*) AS n FROM admins WHERE phone=%(p)s", {"p": staff_phone})["n"]
+            check("the right token with someone else's number is 404 and creates nothing",
+                  r.status_code == 404 and (r.json().get("error") or {}).get("code") == "INVITE_INVALID" and n == 0,
+                  f"HTTP {r.status_code} admins={n}")
+            claims["value"] = TokenClaims(auth_user_id=staff_sub, phone=staff_phone.lstrip("+"))
+            r = await c.post("/api/v1/admin/invites/accept", json={"token": token})
+            check("the replaced token no longer works", r.status_code == 404, f"HTTP {r.status_code}")
+            r = await c.post("/api/v1/admin/invites/accept", json={"token": token2})
+            row = one("SELECT id, role, auth_user_id, invited_by FROM admins WHERE phone=%(p)s", {"p": staff_phone})
+            check("the matching verified number accepts and becomes a support admin", r.status_code == 200
+                  and row is not None and row["role"] == "support" and str(row["auth_user_id"]) == str(staff_sub)
+                  and str(row["invited_by"]) == str(sup["id"]), f"HTTP {r.status_code} {row}")
+            claims["value"] = TokenClaims(auth_user_id=uuid.uuid4(), phone=staff_phone.lstrip("+"))
+            r = await c.post("/api/v1/admin/invites/accept", json={"token": token2})
+            n = one("SELECT count(*) AS n FROM admins WHERE phone=%(p)s", {"p": staff_phone})["n"]
+            check("an invite is single-use", r.status_code == 404 and n == 1, f"HTTP {r.status_code} admins={n}")
+            app.dependency_overrides.pop(get_token_claims, None)
+
+            if row is not None:
+                async with AsyncSessionLocal() as db:
+                    resolved = await auth_service.resolve_identity(db, TokenClaims(auth_user_id=staff_sub))
+                check("the new account resolves as an admin carrying its role",
+                      resolved.role == "admin" and resolved.admin_role == "support", f"{resolved}")
+                current["identity"] = resolved
+                r = await c.patch(f"/api/v1/admin/partners/{partner}/verify", json={"verification_status": "verified"})
+                check("support cannot verify partners", r.status_code == 403, f"HTTP {r.status_code}")
+                r = await c.patch("/api/v1/admin/services/flat_tyre/price", json={"base_price": "1", "reason": TAG + " gate"})
+                check("support cannot change prices", r.status_code == 403, f"HTTP {r.status_code}")
+                r = await c.post(f"/api/v1/admin/jobs/{uuid.uuid4()}/cancel", json={"reason": TAG + " gate"})
+                check("support passes the job-cancel gate (404 for an unknown job, not 403)", r.status_code == 404, f"HTTP {r.status_code}")
+                r = await c.get("/api/v1/admin/staff")
+                body = r.text
+                check("every staff role can read the staff list, and it carries no token",
+                      r.status_code == 200 and token2 not in body and "token" not in body, f"HTTP {r.status_code}")
+                r = await c.patch(f"/api/v1/admin/staff/{sup['id']}", json={"disabled": True, "reason": TAG + " escalation"})
+                check("support cannot switch off a super admin", r.status_code == 403, f"HTTP {r.status_code}")
+
+                current["identity"] = as_super
+                r = await c.patch(f"/api/v1/admin/staff/{sup['id']}", json={"role": "ops", "reason": TAG + " self"})
+                check("a super admin cannot change their own account", r.status_code == 409
+                      and (r.json().get("error") or {}).get("code") == "CANNOT_MODIFY_SELF", f"HTTP {r.status_code}")
+                r = await c.patch(f"/api/v1/admin/staff/{row['id']}", json={"disabled": True, "reason": TAG + " left"})
+                d = one("SELECT disabled_at FROM admins WHERE id=%(i)s", {"i": row["id"]})
+                a = one("SELECT details FROM admin_audit_log WHERE target_id=%(i)s AND action='admin_updated'", {"i": row["id"]})
+                check("switching access off is stored and audited", r.status_code == 200 and d["disabled_at"] is not None
+                      and a is not None and a["details"]["disabled"] is True, f"HTTP {r.status_code} {a}")
+                try:
+                    async with AsyncSessionLocal() as db:
+                        await auth_service.resolve_identity(db, TokenClaims(auth_user_id=staff_sub))
+                    check("a switched-off staff account no longer resolves", False, "resolved")
+                except ForbiddenError as exc:
+                    check("a switched-off staff account no longer resolves", exc.code == "ACCOUNT_SUSPENDED", exc.code)
+            current["identity"] = as_admin
 
         section("5b. Owner self-service: profile, export, deletion (ADR-025)")
         auth2 = uuid.uuid4()

@@ -25,7 +25,7 @@ def _owner():
 
 
 def _admin():
-    return Identity(role="admin", local_id=uuid.uuid4(), auth_user_id="adm")
+    return Identity(role="admin", local_id=uuid.uuid4(), auth_user_id="adm", admin_role="super_admin")
 
 
 def _dispute(job_id, user_id, status="open"):

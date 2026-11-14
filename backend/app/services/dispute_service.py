@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.repositories import admin_ops_repository, dispute_repository, job_repository
 from app.schemas.dispute import DisputeCreate, DisputeListResponse, DisputeResolve, DisputeResponse
 from app.services.auth_service import Identity
-from app.utils.errors import ConflictError, ErrorCode, InternalError, NotFoundError
+from app.utils.errors import ConflictError, ErrorCode, InternalError, NotFoundError, ForbiddenError
 from app.utils.logging import log_event
 
 
@@ -82,6 +82,12 @@ async def resolve_dispute(
 
     details: dict = {"resolution": payload.resolution}
     if payload.resolution == "refunded":
+        # Marking money as returned is a finance decision (ADR-029). Checked
+        # here, not only at the route, because the resolution is in the body.
+        from app.utils.auth import staff_may
+        if not staff_may(identity, "refunds"):
+            await db.rollback()
+            raise ForbiddenError(ErrorCode.FORBIDDEN, "Your staff role cannot record a refund.")
         payment = await dispute_repository.get_paid_payment_for_update(db, dispute.job_id)
         if payment is None:
             await db.rollback()

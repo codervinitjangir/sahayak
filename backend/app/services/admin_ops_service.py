@@ -348,3 +348,105 @@ async def set_service_price(
     log_event("admin_service_price_changed", service_code=item.code, admin_id=str(identity.local_id),
               outcome="success")
     return item
+
+
+# ---------------------------------------------------------------------------
+# Manual reassign (ADR-030)
+# ---------------------------------------------------------------------------
+# A partner holds the job (or an unanswered offer) and work has not started.
+# 'in_progress' is excluded on purpose: a second mechanic cannot take over a
+# half-done repair from a console, and the start code has already been used.
+REASSIGNABLE_STATUSES = ("matching", "assigned", "partner_en_route")
+
+
+async def reassign_job(
+    db: AsyncSession, job_id: uuid.UUID, reason: str, identity: Identity
+) -> AdminJobItem:
+    """Take the job away from whoever holds it and offer it to the next-best partner.
+
+    Two steps, in the order a partner's own decline uses (dispatch_service._reject):
+
+      1. One transaction under the job row lock: every open assignment becomes
+         'cancelled' (not 'rejected': the partner did not decline), the job goes
+         back to 'matching' with a history row if it had left it, both sides are
+         notified, and the audit row is written.
+      2. After that commit, the ordinary re-dispatch. It excludes every partner
+         who has ever had an assignment for this job, so the released partner is
+         never re-offered, and it ends in 'no_match_found' when nobody is left.
+
+    The release is durable before the search starts, so a location-store outage
+    cannot leave the old partner holding a job support has taken away.
+    """
+    from app.services import dispatch_service
+    from app.utils.errors import DispatchUnavailableError
+
+    job = await job_repository.get_job_by_id_for_update(db, job_id)
+    if job is None:
+        raise NotFoundError(ErrorCode.JOB_NOT_FOUND, "Job not found")
+    open_assignments = await job_repository.get_open_assignments(db, job.id)
+    if job.status not in REASSIGNABLE_STATUSES or not open_assignments:
+        status_now = job.status
+        await db.rollback()
+        raise ConflictError(
+            ErrorCode.JOB_NOT_REASSIGNABLE,
+            f"This job is {status_now} with {'no' if not open_assignments else 'a'} partner on it and cannot be reassigned",
+        )
+
+    from_status, job_pk = job.status, job.id
+    released = [a.partner_id for a in open_assignments if a.partner_id is not None]
+    had_accepted_partner = from_status != "matching"
+    try:
+        for assignment in open_assignments:
+            await job_repository.set_assignment_status(
+                db, assignment, TERMINAL_ASSIGNMENT_STATUS["cancelled"]
+            )
+        if had_accepted_partner:
+            await job_repository.update_job_fields(db, job, status="matching")
+            await job_repository.create_status_history_row(
+                db, job_id=job_pk, status="matching", note=f"Reassigned by support: {reason}"
+            )
+        await notification_service.notify_reassignment(
+            db, job=job, released_partner_ids=released, tell_owner=had_accepted_partner
+        )
+        await admin_ops_repository.add_audit(
+            db, admin_id=identity.local_id, action="job_reassigned", target_type="job",
+            target_id=job_pk, reason=reason,
+            details={"from_status": from_status, "released_partners": [str(p) for p in released]},
+        )
+        await db.commit()
+    except SQLAlchemyError as exc:
+        await db.rollback()
+        log_event("admin_job_reassign_failed", level=logging.ERROR, job_id=str(job_pk),
+                  error_type=type(exc).__name__, outcome="failure")
+        raise InternalError("Could not reassign the job") from exc
+
+    log_event("admin_job_reassigned", job_id=str(job_pk), admin_id=str(identity.local_id),
+              from_status=from_status, released=len(released), outcome="success")
+
+    # Step 2. A failure here must not undo or hide step 1: the job is correctly
+    # 'matching' with nobody on it, which the alerts endpoint will flag as stuck.
+    try:
+        await db.refresh(job)
+        await dispatch_service._offer_next(db, job)
+    except DispatchUnavailableError:
+        log_event("admin_reassign_dispatch_unavailable", level=logging.ERROR, job_id=str(job_pk), outcome="failure")
+        try:
+            await dispatch_service.mark_dispatch_unavailable(db, job_pk)
+        except Exception:  # noqa: BLE001 - the release already committed
+            pass
+    except Exception as exc:  # noqa: BLE001 - the release already committed
+        await db.rollback()
+        log_event("admin_reassign_dispatch_failed", level=logging.ERROR, job_id=str(job_pk),
+                  error_type=type(exc).__name__, outcome="failure")
+
+    job_row = await job_repository.get_job_by_id(db, job_pk) or job
+    try:
+        await db.refresh(job_row)      # the re-dispatch may have moved it on
+    except SQLAlchemyError:
+        pass
+    return AdminJobItem(
+        id=job_row.id, status=job_row.status, vehicle_number=job_row.vehicle_number,
+        pickup_address_text=job_row.pickup_address_text, price_estimate=job_row.price_estimate,
+        price_final=job_row.price_final, requested_at=job_row.requested_at,
+        completed_at=job_row.completed_at, cancelled_at=job_row.cancelled_at,
+    )

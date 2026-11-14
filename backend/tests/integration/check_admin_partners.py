@@ -60,7 +60,7 @@ async def main() -> None:
     global ADMIN
     async with AsyncSessionLocal() as db:
         admin_id = (await db.execute(text("SELECT id FROM admins ORDER BY name LIMIT 1"))).scalar_one()
-        ADMIN = Identity(auth_user_id=uuid.uuid4(), role="admin", local_id=admin_id)
+        ADMIN = Identity(auth_user_id=uuid.uuid4(), role="admin", local_id=admin_id, admin_role="super_admin")
         await purge(db)
         try:
             partner = Partner(name="Admin QA Partner", phone=PHONE)

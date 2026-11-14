@@ -2304,3 +2304,30 @@ All `require_admin`; anyone else 403. Every write is audited in the same transac
 * `GET /api/v1/services` is unchanged in shape; `base_price` now comes from the database and can change between calls. **Do not cache it across sessions or hard-code prices.** A job's `price_estimate` is fixed when the job is created.
 * Audit: `GET /api/v1/admin/audit-log?target_type=service` is valid. For these rows **`target_id` is `null`** and `details` is `{service_code, from, to}`. Any client that renders `target_id` must handle null.
 * Web: Admin console tab **Pricing** (`/admin/catalogue`).
+
+
+### 19.2 Staff roles and invites (ADR-029, 2026-11-14)
+
+* `GET /api/v1/auth/me` is unchanged: an admin is still `{role: "admin", id}`. The staff role is in `GET /api/v1/admin/staff` as `your_role`.
+* `GET /api/v1/admin/staff` (any admin) → `{staff: [{id, name, role, phone, has_login, disabled_at, created_at, is_you}], invites: [{id, name, role, phone, created_at, expires_at, expired}], your_role}`. Roles: `super_admin | ops | support | finance`.
+* `POST /api/v1/admin/invites` (super admin) body `{name, phone, role}`, `phone` in E.164 → 201 with the invite plus **`token`, returned this once only**. 409 `STAFF_ALREADY_EXISTS`. A new invite for a number replaces the open one.
+* `DELETE /api/v1/admin/invites/{invite_id}` (super admin) → `{revoked: true}`. 404 `INVITE_INVALID` if not open.
+* `POST /api/v1/admin/invites/accept` body `{token}`. **Needs a Supabase session but no profile** (send the bearer token as usual). The session's phone must be the invited number. → the new staff member. 404 `INVITE_INVALID` for every failure (unknown, used, revoked, expired, wrong number); 409 `AUTH_ALREADY_LINKED` if the account is already an owner or partner.
+* `PATCH /api/v1/admin/staff/{admin_id}` (super admin) body `{role?, disabled?, reason}` → the member. 409 `CANNOT_MODIFY_SELF`, 404 `STAFF_NOT_FOUND`. A disabled staff account gets 403 `ACCOUNT_SUSPENDED` everywhere.
+* **Role gates on existing routes.** A staff role that may not perform a write now gets **403 `FORBIDDEN`**: partner verify and owner suspension need `super_admin` or `ops`; job cancel and reassign need `super_admin`, `ops` or `support`; price change and a dispute resolved as `refunded` need `super_admin` or `finance`. Reads are open to every staff role. Hide or disable the controls from `your_role`; the server is the gate.
+* Web: Admin console tab **Staff** (`/admin/staff`); invitees use `/staff/join` (sign in with the invited number, paste the code). The code is never put in a URL.
+
+### 19.3 Manual reassign (ADR-030, 2026-11-14)
+
+* `POST /api/v1/admin/jobs/{job_id}/reassign` body `{reason}` (3–500 chars) → the job item; `status` is `matching` (a new offer is out) or `no_match_found` (nobody left). 409 `JOB_NOT_REASSIGNABLE` unless the job is `matching`, `assigned` or `partner_en_route` with a partner on it. 404 `JOB_NOT_FOUND`.
+* **The owner's job can go from `assigned` or `partner_en_route` back to `matching`.** Owner clients must render that (the partner card disappears, the searching state returns) and must not treat status as only moving forward.
+* Two new notification events: `job_reassigned_by_support` (to the released partner: drop the job from the active screen) and `job_reassigning` (to the owner).
+* Web: a **Reassign** button on the Jobs board for rows where it applies.
+
+
+### 19.4 Who sees whose details on `GET /api/v1/jobs/{job_id}` (tightened 2026-11-14, ADR-017 / ADR-030)
+
+* **A partner who only holds an offer gets no `owner_name`, `owner_phone`, `pickup_lat` or `pickup_lng` from this read.** They arrive once the partner has accepted. Before today this read returned them to an offered partner; a partner client must not rely on that. Use the offer payload (distance, service, area) to decide.
+* **The owner always gets their own `owner_name`, `owner_phone` and pickup coordinates**, including while the job is `matching`. Before today these were null for the owner while an offer was pending.
+* A partner released by a staff reassign, or whose offer was cancelled before they accepted, sees the job with details withheld and gets **403** (previously 409 in the cancelled-offer case) if they try `POST /jobs/{id}/status`.
+* The owner sees `current_assignment.partner_*` only for a partner who accepted and is still on the job (or was on it when it finished).

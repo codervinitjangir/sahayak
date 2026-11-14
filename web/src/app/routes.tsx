@@ -1,3 +1,4 @@
+import { StaffJoin } from '../pages/admin/StaffJoin';
 import React, { Suspense, lazy } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { OwnerHome } from '../pages/owner/OwnerHome';
@@ -57,6 +58,7 @@ export const AppRoutes: React.FC = () => {
       <Route path="/partner/*" element={<Navigate to="/partner/dashboard" replace />} />
 
       {/* Ops console & partner verification queue */}
+      <Route path="/staff/join" element={<StaffJoin />} />
       <Route path="/admin" element={<Navigate to="/admin/overview" replace />} />
       <Route path="/admin/verify" element={<Navigate to="/admin/partners" replace />} />
       {/* UX gate only: the data is protected server-side (401/403 on every

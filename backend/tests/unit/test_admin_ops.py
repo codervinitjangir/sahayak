@@ -206,3 +206,94 @@ async def test_unknown_service_is_404():
         with pytest.raises(AppError) as exc:
             await admin_ops_service.set_service_price(AsyncMock(), "nope", Decimal("1"), "x reason", ADMIN)
     assert exc.value.status_code == 404
+
+
+# --- Manual reassign (ADR-030) ----------------------------------------------
+def _reassign_patches(job, assignments, order):
+    async def record(name, *a, **k):
+        order.append(name)
+
+    return (
+        patch("app.repositories.job_repository.get_job_by_id_for_update", AsyncMock(return_value=job)),
+        patch("app.repositories.job_repository.get_open_assignments", AsyncMock(return_value=assignments)),
+        patch("app.repositories.job_repository.set_assignment_status",
+              AsyncMock(side_effect=lambda db, a, st: order.append(f"assignment:{st}"))),
+        patch("app.repositories.job_repository.update_job_fields",
+              AsyncMock(side_effect=lambda db, j, **f: order.append(f"job:{f.get('status')}"))),
+        patch("app.repositories.job_repository.create_status_history_row",
+              AsyncMock(side_effect=lambda db, **k: order.append(f"history:{k['status']}"))),
+        patch("app.repositories.job_repository.get_job_by_id", AsyncMock(return_value=job)),
+        patch("app.services.notification_service.notify_reassignment", AsyncMock()),
+        patch("app.repositories.admin_ops_repository.add_audit", AsyncMock()),
+        patch("app.services.dispatch_service._offer_next",
+              AsyncMock(side_effect=lambda db, j: order.append("redispatch"))),
+    )
+
+
+def _job(status):
+    return Job(id=uuid.uuid4(), user_id=uuid.uuid4(), status=status, vehicle_number="KA01AB1234",
+               requested_at=datetime.now(timezone.utc))
+
+
+@pytest.mark.parametrize("status", ["requested", "no_match_found", "in_progress", "completed", "cancelled"])
+@pytest.mark.asyncio
+async def test_reassign_is_refused_outside_the_window_where_a_partner_holds_the_job(status):
+    order: list = []
+    ps = _reassign_patches(_job(status), [JobAssignment(id=uuid.uuid4(), partner_id=uuid.uuid4(), status="accepted")], order)
+    with ps[0], ps[1], ps[2], ps[3], ps[4], ps[5], ps[6], ps[7], ps[8]:
+        with pytest.raises(ConflictError) as exc:
+            await admin_ops_service.reassign_job(AsyncMock(), uuid.uuid4(), "partner unreachable", ADMIN)
+    assert exc.value.code == "JOB_NOT_REASSIGNABLE" and order == []
+
+
+@pytest.mark.asyncio
+async def test_reassign_with_nobody_on_the_job_is_refused():
+    order: list = []
+    ps = _reassign_patches(_job("matching"), [], order)
+    with ps[0], ps[1], ps[2], ps[3], ps[4], ps[5], ps[6], ps[7], ps[8]:
+        with pytest.raises(ConflictError):
+            await admin_ops_service.reassign_job(AsyncMock(), uuid.uuid4(), "partner unreachable", ADMIN)
+    assert order == []
+
+
+@pytest.mark.asyncio
+async def test_reassign_releases_and_commits_before_it_redispatches():
+    order: list = []
+    job = _job("assigned")
+    partner = uuid.uuid4()
+    db = AsyncMock()
+    db.commit = AsyncMock(side_effect=lambda: order.append("commit"))
+    ps = _reassign_patches(job, [JobAssignment(id=uuid.uuid4(), partner_id=partner, status="accepted")], order)
+    with ps[0], ps[1], ps[2], ps[3], ps[4], ps[5], ps[6] as notify, ps[7] as audit, ps[8]:
+        await admin_ops_service.reassign_job(db, job.id, "partner unreachable", ADMIN)
+    # The partner did not decline, so the row is 'cancelled', never 'rejected'.
+    assert order == ["assignment:cancelled", "job:matching", "history:matching", "commit", "redispatch"]
+    assert notify.await_args.kwargs["released_partner_ids"] == [partner] and notify.await_args.kwargs["tell_owner"] is True
+    kw = audit.await_args.kwargs
+    assert kw["action"] == "job_reassigned" and kw["details"] == {"from_status": "assigned", "released_partners": [str(partner)]}
+
+
+@pytest.mark.asyncio
+async def test_withdrawing_an_unanswered_offer_writes_no_history_and_does_not_tell_the_owner():
+    order: list = []
+    job = _job("matching")
+    db = AsyncMock()
+    db.commit = AsyncMock(side_effect=lambda: order.append("commit"))
+    ps = _reassign_patches(job, [JobAssignment(id=uuid.uuid4(), partner_id=uuid.uuid4(), status="offered")], order)
+    with ps[0], ps[1], ps[2], ps[3], ps[4], ps[5], ps[6] as notify, ps[7], ps[8]:
+        await admin_ops_service.reassign_job(db, job.id, "not answering", ADMIN)
+    assert order == ["assignment:cancelled", "commit", "redispatch"]
+    assert notify.await_args.kwargs["tell_owner"] is False
+
+
+@pytest.mark.asyncio
+async def test_a_failed_redispatch_does_not_undo_the_release_or_fail_the_request():
+    order: list = []
+    job = _job("partner_en_route")
+    db = AsyncMock()
+    db.commit = AsyncMock(side_effect=lambda: order.append("commit"))
+    ps = _reassign_patches(job, [JobAssignment(id=uuid.uuid4(), partner_id=uuid.uuid4(), status="accepted")], order)
+    with ps[0], ps[1], ps[2], ps[3], ps[4], ps[5], ps[6], ps[7], \
+         patch("app.services.dispatch_service._offer_next", AsyncMock(side_effect=RuntimeError("redis down"))):
+        out = await admin_ops_service.reassign_job(db, job.id, "partner unreachable", ADMIN)
+    assert "commit" in order and out.id == job.id

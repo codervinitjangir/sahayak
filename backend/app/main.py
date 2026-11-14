@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.admin import router as admin_router, admin_partners_router, admin_ops_router
+from app.api.admin_staff import admin_staff_router
 from app.api.auth import router as auth_router
 from app.api.disputes import admin_disputes_router, router as disputes_router
 from app.api.health import router as health_router
@@ -124,6 +125,7 @@ app.include_router(services_router)
 app.include_router(admin_router)
 app.include_router(admin_partners_router)
 app.include_router(admin_ops_router)
+app.include_router(admin_staff_router)
 
 # Problem reports and the staff dispute queue (ADR-027)
 app.include_router(disputes_router)

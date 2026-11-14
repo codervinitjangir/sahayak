@@ -511,23 +511,38 @@ async def get_job_with_status(
     is_owner = identity.role == "user" and identity.local_id == job.user_id
 
     current_assignment = None
-    may_see_contact_details = is_owner
+    # Two separate questions (split 2026-11-14; one flag used to answer both,
+    # which hid the owner's own pickup point from them while an offer was pending):
+    #   may_see_owner_details   - the owner's name, number and pickup point
+    #   may_see_contact_details - the partner's name, number and id
+    may_see_owner_details = is_owner
+    may_see_contact_details = False
     assignment = await job_repository.get_latest_assignment(db, job.id)
     if assignment is not None:
+        # "Took the job": accepted it, and has not since been released from a
+        # job that is still running (ADR-030). An offer alone releases nothing
+        # in either direction (ADR-017), and neither does an offer that was
+        # cancelled before anyone accepted it.
+        job_is_over = job.status in TERMINAL_JOB_STATUSES
+        took_job = assignment.status in ("accepted", "completed") or (
+            assignment.status == "cancelled"
+            and getattr(assignment, "accepted_at", None) is not None
+            and job_is_over
+        )
         is_assigned_partner = (
             identity.role == "partner"
             and assignment.partner_id is not None
             and identity.local_id == assignment.partner_id
+            and took_job
         )
         # Release follows the assignment, not just the role (ADR-017): an
         # 'offered' partner has not taken the job and may be replaced by the
         # next candidate, so the owner gets no name, number or id until the
         # partner has accepted. Found 2026-11-14: the owner's page rendered
         # tel:<partner phone> while the offer was still pending.
-        owner_may_see_partner = is_owner and (
-            assignment.status in job_repository.RESPONSIBLE_ASSIGNMENT_STATUSES
-        )
+        owner_may_see_partner = is_owner and took_job
         may_see_contact_details = owner_may_see_partner or is_assigned_partner
+        may_see_owner_details = is_owner or is_assigned_partner
 
         # partner_id is nullable on job_assignments, so an offer can exist
         # without a resolvable partner; the partner fields then stay None
@@ -570,11 +585,11 @@ async def get_job_with_status(
     service = await service_repository.get_service_by_id(db, job.service_id)
 
     owner = None
-    if may_see_contact_details and job.user_id is not None:
+    if may_see_owner_details and job.user_id is not None:
         owner = await user_repository.get_user_by_id(db, job.user_id)
 
     pickup_lat, pickup_lng = (
-        _pickup_coordinates(job) if may_see_contact_details else (None, None)
+        _pickup_coordinates(job) if may_see_owner_details else (None, None)
     )
 
     return JobDetailResponse(

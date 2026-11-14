@@ -206,6 +206,18 @@ class ErrorCode:
     INVALID_PAYMENT_AMOUNT = "INVALID_PAYMENT_AMOUNT"
     INVALID_PAYMENT_STATE = "INVALID_PAYMENT_STATE"
 
+    # ADR-030: staff reassign only applies while a partner holds or is offered
+    # the job and work has not started.
+    JOB_NOT_REASSIGNABLE = "JOB_NOT_REASSIGNABLE"
+
+    # Staff accounts and invites (ADR-029)
+    STAFF_ALREADY_EXISTS = "STAFF_ALREADY_EXISTS"
+    STAFF_NOT_FOUND = "STAFF_NOT_FOUND"
+    # One code for an unknown, used, revoked, expired or wrong-number invite:
+    # distinguishing them would let a caller probe which tokens exist.
+    INVITE_INVALID = "INVITE_INVALID"
+    CANNOT_MODIFY_SELF = "CANNOT_MODIFY_SELF"
+
     # Disputes (ADR-027)
     DISPUTE_NOT_FOUND = "DISPUTE_NOT_FOUND"
     # Only a completed job can be disputed: before that the owner cancels instead.

@@ -11,7 +11,7 @@ from app.schemas.common import ApiResponse, envelope
 from app.schemas.dispute import DisputeCreate, DisputeListResponse, DisputeResolve, DisputeResponse
 from app.services import dispute_service
 from app.services.auth_service import Identity
-from app.utils.auth import require_admin, require_user
+from app.utils.auth import require_admin, require_staff, require_user
 
 router = APIRouter(prefix=f"{API_V1_PREFIX}/jobs", tags=["disputes"])
 admin_disputes_router = APIRouter(
@@ -72,7 +72,7 @@ async def admin_list_disputes(
 async def admin_resolve_dispute(
     dispute_id: uuid.UUID,
     payload: DisputeResolve,
-    identity: Identity = Depends(require_admin),
+    identity: Identity = Depends(require_staff("disputes")),
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[DisputeResponse]:
     """A refund marks the job's paid payment refunded; the money is returned outside the app."""

@@ -15,10 +15,10 @@ has moved: those items need a person. See section F for what this pass did not d
 |---|---|
 | Core flow (login, request, dispatch, accept, decline, cancel, start code, complete, cash payment, rating) | Done. Passed live on web on 2026-11-14 |
 | Admin: analytics, partner verification, live jobs board, owner/partner management, audit log | Done |
-| Race and concurrency protections | Done. 17 of 17 live harnesses green, 869 checks (N1 closed) |
+| Race and concurrency protections | Done. 17 of 17 live harnesses green, 906 checks (N1 closed) |
 | Launch readiness | About 45%. Code hygiene moved; every section A item is still open |
 
-Verified on 2026-11-14 (production pass): backend 537 unit tests, web 141, mobile 27, live harnesses as above.
+Verified on 2026-11-14 (production pass): backend 596 unit tests, web 145, mobile 27, live harnesses as above.
 Not verified: any physical phone (mobile was run through its web target only).
 
 ---
@@ -39,15 +39,14 @@ Not verified: any physical phone (mobile was run through its web target only).
 
 ## B. Code still to build
 
-### Admin panel (4 of 8 built)
+### Admin panel (7 of 8 built)
 
-- [ ] Staff accounts and roles (support, ops, finance) with an invite flow. An admin is linked to a login by editing the database today
+- [x] Staff accounts and roles (super admin, ops, support, finance) with a one-time invite bound to the invitee's verified number (ADR-029). Web: Staff tab and `/staff/join`. The first super admin is still set by SQL
 - [ ] Support inbox and disputes (tied to payments item E)
-- [ ] Catalogue and pricing editor (`base_price`, services, categories)
+- [x] Pricing editor: `services.base_price` is a column staff can change, audited (ADR-028). Web: Pricing tab. Service names, codes and categories are still migration-only
 - [ ] Payments back office: collections, commission, payout runs, reconciliation
 - [x] Alerts: stuck jobs, no-match rate, partners on duty (`GET /admin/alerts`, shown above the Jobs board). Not by zone: zone cover lives in Redis and is not judged. Nobody is notified; staff must have the board open
-- [ ] Catalogue and pricing editor is larger than it looks: `base_price` is a code constant (`SERVICE_BASE_PRICES`), not a column, so this needs a migration and a change to the price read in `POST /jobs` (money path, full regression, its own ADR)
-- [ ] Manual reassign on the live jobs board
+- [x] Manual reassign on the live jobs board (ADR-030). Staff do not pick the next partner; the scoring does
 
 ### Product gaps
 
@@ -104,8 +103,6 @@ Evidence: `docs/evidence/mentor-report.html`, `docs/evidence/screenshots/`, `doc
 
 Each of these is real work, not a quick fix, and none was started:
 
-- Staff accounts and roles, manual reassign (auth and dispatch engine: high risk, each needs an ADR)
-- Catalogue and pricing editor (see the admin list above for why)
 - Payments back office, gateway, webhooks, integer paise (blocked on G3)
 - G4 partner document upload, G6 Hindi and Kannada, G11 offline queue
 - E3 mobile component tests, E4 automated staging smoke test (no staging exists)

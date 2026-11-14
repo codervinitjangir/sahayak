@@ -7,7 +7,7 @@ import { ErrorState } from '../../components/ui/ErrorState';
 import { Modal } from '../../components/ui/Modal';
 import { StatusPill } from '../../components/ui/StatusPill';
 import { ApiError } from '../../services/api';
-import { adminService, AdminCatalogueItem, AdminJobItem, AdminUserItem } from '../../services/admin.service';
+import { adminService, AdminCatalogueItem, AdminJobItem, AdminUserItem, StaffMember, StaffRole } from '../../services/admin.service';
 
 // Back office (ADR-024). Every write here is audited server-side in the same
 // transaction as the change; these panels only display and request.
@@ -158,6 +158,8 @@ export const JobsBoardPanel: React.FC = () => {
   const [q, setQ] = useState('');
   const [offset, setOffset] = useState(0);
   const [cancelling, setCancelling] = useState<AdminJobItem | null>(null);
+  const [reassigning, setReassigning] = useState<AdminJobItem | null>(null);
+  const [reassignNote, setReassignNote] = useState<string | null>(null);
 
   const board = useQuery({
     queryKey: ['admin', 'jobs', filter, q, offset],
@@ -174,7 +176,26 @@ export const JobsBoardPanel: React.FC = () => {
     },
   });
 
+  const reassign = useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) => adminService.reassignJob(id, reason),
+    onSuccess: (job) => {
+      setReassigning(null);
+      setReassignNote(
+        job.status === 'no_match_found'
+          ? 'The partner was released, but no other partner is available. Call the owner.'
+          : 'The partner was released and the job has been offered to the next-best partner.'
+      );
+      void qc.invalidateQueries({ queryKey: ['admin', 'jobs'] });
+      void qc.invalidateQueries({ queryKey: ['admin', 'alerts'] });
+      void qc.invalidateQueries({ queryKey: ['admin', 'audit'] });
+    },
+  });
+
   const finished = (s: string) => s === 'completed' || s === 'cancelled';
+  // A partner holds the job or an unanswered offer, and work has not started (ADR-030).
+  const reassignable = (j: AdminJobItem) =>
+    ['matching', 'assigned', 'partner_en_route'].includes(j.status) &&
+    (j.assignment_status === 'offered' || j.assignment_status === 'accepted');
 
   return (
     <section aria-label="Live jobs board" className="space-y-3">
@@ -247,6 +268,11 @@ export const JobsBoardPanel: React.FC = () => {
                   </td>
                   <td className="px-3 py-2 max-w-[220px] text-xs text-slate-600">{j.pickup_address_text ?? '—'}</td>
                   <td className="px-3 py-2 text-right">
+                    {reassignable(j) && (
+                      <Button size="sm" variant="outline" className="mr-1.5" onClick={() => { reassign.reset(); setReassignNote(null); setReassigning(j); }}>
+                        <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" /> Reassign
+                      </Button>
+                    )}
                     {!finished(j.status) && (
                       <Button size="sm" variant="outline" onClick={() => { cancel.reset(); setCancelling(j); }}>
                         <Ban className="h-3.5 w-3.5" aria-hidden="true" /> Cancel
@@ -260,6 +286,20 @@ export const JobsBoardPanel: React.FC = () => {
         </div>
       )}
       {board.data && <Pager total={board.data.total} offset={offset} onOffset={setOffset} />}
+
+      {reassignNote && <p role="status" className="text-sm font-medium text-[#0F766E]">{reassignNote}</p>}
+
+      {reassigning && (
+        <ReasonDialog
+          title="Reassign this job?"
+          description={`${reassigning.partner_name ?? 'The current partner'} will be told support moved the job, and it will be offered to the next-best partner. They will not be offered it again.`}
+          confirm="Reassign job"
+          busy={reassign.isPending}
+          error={reassign.isError ? errText(reassign.error) : null}
+          onClose={() => setReassigning(null)}
+          onConfirm={(reason) => reassign.mutate({ id: reassigning.id, reason })}
+        />
+      )}
 
       {cancelling && (
         <ReasonDialog
@@ -548,6 +588,199 @@ export const CataloguePanel: React.FC = () => {
           error={save.isError ? errText(save.error) : null}
           onClose={() => setEditing(null)}
           onConfirm={(price, reason) => save.mutate({ code: editing.code, price, reason })}
+        />
+      )}
+    </section>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// Staff accounts and invites (ADR-029)
+
+const ROLE_LABEL: Record<string, string> = {
+  super_admin: 'Super admin',
+  ops: 'Operations',
+  support: 'Support',
+  finance: 'Finance',
+};
+const ROLE_CAN: Record<string, string> = {
+  super_admin: 'Everything, including staff accounts.',
+  ops: 'Cancel jobs, verify partners, suspend owners, resolve disputes.',
+  support: 'Cancel jobs and resolve disputes. No refunds, verification or suspension.',
+  finance: 'Change prices, record refunds, resolve disputes.',
+};
+const ROLES: StaffRole[] = ['ops', 'support', 'finance', 'super_admin'];
+
+export const StaffPanel: React.FC = () => {
+  const qc = useQueryClient();
+  const staff = useQuery({ queryKey: ['admin', 'staff'], queryFn: () => adminService.listStaff() });
+  const [form, setForm] = useState({ name: '', phone: '', role: 'support' as StaffRole });
+  const [issued, setIssued] = useState<{ token: string; name: string; phone: string } | null>(null);
+  const [changing, setChanging] = useState<{ member: StaffMember; body: { role?: StaffRole; disabled?: boolean }; title: string } | null>(null);
+
+  const refresh = () => {
+    void qc.invalidateQueries({ queryKey: ['admin', 'staff'] });
+    void qc.invalidateQueries({ queryKey: ['admin', 'audit'] });
+  };
+  const invite = useMutation({
+    mutationFn: () => adminService.inviteStaff({ name: form.name.trim(), phone: `+91${form.phone}`, role: form.role }),
+    onSuccess: (created) => {
+      setIssued({ token: created.token, name: created.name, phone: created.phone });
+      setForm({ name: '', phone: '', role: 'support' });
+      refresh();
+    },
+  });
+  const revoke = useMutation({ mutationFn: (id: string) => adminService.revokeInvite(id), onSuccess: refresh });
+  const update = useMutation({
+    mutationFn: ({ id, body }: { id: string; body: { role?: StaffRole; disabled?: boolean; reason: string } }) =>
+      adminService.updateStaff(id, body),
+    onSuccess: () => {
+      setChanging(null);
+      refresh();
+    },
+  });
+
+  if (staff.isError) return <ErrorState message={errText(staff.error)} onRetry={() => staff.refetch()} />;
+  if (!staff.data) return <p className="text-sm text-slate-500">Loading staff…</p>;
+  const canManage = staff.data.your_role === 'super_admin';
+  const formOk = form.name.trim().length >= 2 && /^\d{10}$/.test(form.phone);
+
+  return (
+    <section aria-label="Staff accounts" className="space-y-5">
+      <ul className="divide-y divide-[#EEF2F6] rounded-[14px] border border-[#EEF2F6] bg-white">
+        {staff.data.staff.map((m) => (
+          <li key={m.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+            <div className="min-w-0">
+              <div className="font-semibold text-[#0F172A]">
+                {m.name || 'Unnamed'} {m.is_you && <span className="text-xs font-normal text-slate-500">(you)</span>}
+              </div>
+              <div className="text-xs text-slate-500">
+                {ROLE_LABEL[m.role] ?? m.role}
+                {m.phone ? ` · ${m.phone}` : ''}
+                {!m.has_login ? ' · no sign-in linked' : ''}
+                {m.disabled_at ? ' · access switched off' : ''}
+              </div>
+            </div>
+            {canManage && !m.is_you && (
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="sr-only" htmlFor={`role-${m.id}`}>Role for {m.name || 'this member'}</label>
+                <select
+                  id={`role-${m.id}`}
+                  value={m.role}
+                  onChange={(e) => {
+                    const role = e.target.value as StaffRole;
+                    update.reset();
+                    setChanging({ member: m, body: { role }, title: `Make ${m.name || 'this member'} ${ROLE_LABEL[role]}?` });
+                  }}
+                  className="min-h-[40px] rounded-[10px] border border-[#EEF2F6] bg-white px-2 text-xs"
+                >
+                  {ROLES.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
+                </select>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    update.reset();
+                    setChanging({
+                      member: m,
+                      body: { disabled: !m.disabled_at },
+                      title: m.disabled_at ? `Switch access back on for ${m.name || 'this member'}?` : `Switch off access for ${m.name || 'this member'}?`,
+                    });
+                  }}
+                >
+                  {m.disabled_at ? 'Switch on' : 'Switch off'}
+                </Button>
+              </div>
+            )}
+          </li>
+        ))}
+      </ul>
+
+      {staff.data.invites.length > 0 && (
+        <div>
+          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Open invites</h3>
+          <ul className="divide-y divide-[#EEF2F6] rounded-[14px] border border-[#EEF2F6] bg-white">
+            {staff.data.invites.map((i) => (
+              <li key={i.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm">
+                <span>
+                  {i.name} · {ROLE_LABEL[i.role] ?? i.role} · {i.phone} ·{' '}
+                  {i.expired ? <span className="text-red-700">expired</span> : `expires ${when(i.expires_at)}`}
+                </span>
+                {canManage && (
+                  <Button size="sm" variant="outline" onClick={() => revoke.mutate(i.id)} disabled={revoke.isPending}>
+                    Revoke
+                  </Button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {canManage ? (
+        <form
+          className="rounded-[14px] border border-[#EEF2F6] bg-white p-4 space-y-3"
+          onSubmit={(e) => { e.preventDefault(); if (formOk) invite.mutate(); }}
+        >
+          <h3 className="font-bold text-[#0F172A]">Invite a staff member</h3>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div>
+              <label htmlFor="staff-name" className="text-xs font-semibold text-slate-600">Name</label>
+              <input id="staff-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
+                className="mt-1 w-full min-h-[44px] rounded-[10px] border border-[#EEF2F6] px-3 text-sm" />
+            </div>
+            <div>
+              <label htmlFor="staff-phone" className="text-xs font-semibold text-slate-600">Mobile number (+91)</label>
+              <input id="staff-phone" inputMode="numeric" value={form.phone}
+                onChange={(e) => setForm({ ...form, phone: e.target.value.replace(/\D/g, '').slice(0, 10) })}
+                className="mt-1 w-full min-h-[44px] rounded-[10px] border border-[#EEF2F6] px-3 text-sm tnum" />
+            </div>
+            <div>
+              <label htmlFor="staff-role" className="text-xs font-semibold text-slate-600">Role</label>
+              <select id="staff-role" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as StaffRole })}
+                className="mt-1 w-full min-h-[44px] rounded-[10px] border border-[#EEF2F6] bg-white px-2 text-sm">
+                {ROLES.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
+              </select>
+            </div>
+          </div>
+          <p className="text-xs text-[#475569]">{ROLE_LABEL[form.role]}: {ROLE_CAN[form.role]}</p>
+          {invite.isError && <p role="alert" className="text-sm text-red-700">{errText(invite.error)}</p>}
+          <Button type="submit" disabled={!formOk || invite.isPending} isLoading={invite.isPending}>Create invite</Button>
+        </form>
+      ) : (
+        <p className="text-xs text-[#475569]">Only a super admin can invite staff or change roles.</p>
+      )}
+
+      {issued && (
+        <Modal
+          isOpen
+          onClose={() => setIssued(null)}
+          title={`Invite code for ${issued.name}`}
+          description="This code is shown once. Send it to them over a channel you trust; it only works for their number."
+          maxWidth="md"
+        >
+          <p className="rounded-[10px] border border-[#EEF2F6] bg-[#F6F8FA] p-3 font-mono text-sm break-all" data-testid="invite-token">
+            {issued.token}
+          </p>
+          <p className="mt-3 text-sm text-[#475569]">
+            They sign in at <span className="font-mono">/staff/join</span> with {issued.phone} and enter the code. It expires in 72 hours.
+          </p>
+          <div className="mt-4 flex justify-end gap-2">
+            <Button variant="outline" onClick={() => void navigator.clipboard?.writeText(issued.token)}>Copy code</Button>
+            <Button onClick={() => setIssued(null)}>Done</Button>
+          </div>
+        </Modal>
+      )}
+
+      {changing && (
+        <ReasonDialog
+          title={changing.title}
+          description="Recorded in the audit log with your name."
+          confirm="Confirm"
+          busy={update.isPending}
+          error={update.isError ? errText(update.error) : null}
+          onClose={() => setChanging(null)}
+          onConfirm={(reason) => update.mutate({ id: changing.member.id, body: { ...changing.body, reason } })}
         />
       )}
     </section>

@@ -131,3 +131,41 @@ async def require_admin(
             message="This endpoint is available to platform administrators only.",
         )
     return identity
+
+
+# Which staff roles may perform which kind of WRITE (ADR-029). Reads are open to
+# every staff role through require_admin; this table is the whole of the
+# difference between the roles, in one place a reviewer can read.
+STAFF_WRITE_ROLES: dict[str, tuple[str, ...]] = {
+    "staff": ("super_admin",),                         # invites, roles, switching access off
+    "jobs": ("super_admin", "ops", "support"),         # staff cancel
+    "partners": ("super_admin", "ops"),                # verification
+    "owners": ("super_admin", "ops"),                  # suspend / reinstate
+    "disputes": ("super_admin", "ops", "support", "finance"),
+    "refunds": ("super_admin", "finance"),             # a dispute resolved as refunded
+    "pricing": ("super_admin", "finance"),             # catalogue base prices
+}
+
+
+def staff_may(identity: Identity, area: str) -> bool:
+    return identity.role == "admin" and identity.admin_role in STAFF_WRITE_ROLES[area]
+
+
+def require_staff(area: str):
+    """Dependency: an admin whose role may write in `area`.
+
+    The lookup happens here, when the route is declared, so a misspelt area is a
+    KeyError at import rather than a route that silently admits nobody or
+    everybody. An admin with no role on record is refused.
+    """
+    allowed = STAFF_WRITE_ROLES[area]
+
+    async def dependency(identity: Identity = Depends(get_current_identity)) -> Identity:
+        if identity.role != "admin" or identity.admin_role not in allowed:
+            raise ForbiddenError(
+                code=ErrorCode.FORBIDDEN,
+                message="Your staff role does not allow this action.",
+            )
+        return identity
+
+    return dependency

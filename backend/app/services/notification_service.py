@@ -102,6 +102,9 @@ NOTIFICATION_EVENTS: dict[str, str] = {
     # Staff cancelled it (ADR-024). Both sides hear, since neither of them acted.
     "job_cancelled_by_support": "This job was cancelled by Sahayak support.",
     "job_no_match_found": "We could not find an available partner for your request.",
+    # ADR-030. Neither is a job status change, so neither is in EVENT_FOR_STATUS.
+    "job_reassigned_by_support": "Sahayak support moved this job to another partner.",
+    "job_reassigning": "Sahayak support is finding you another partner.",
 }
 
 # Which event a status change produces. `cancelled` is absent on purpose: it is
@@ -485,3 +488,35 @@ async def mark_all_notifications_read(
         outcome="success",
     )
     return MarkReadResponse(updated=updated, unread_count=0)
+
+
+async def notify_reassignment(
+    db: AsyncSession, *, job, released_partner_ids: Iterable[uuid.UUID], tell_owner: bool
+) -> int:
+    """Staff took a job away from its partner(s) and put it back into matching (ADR-030).
+
+    Not routed through notify_job_status_change: the job's new status is
+    'matching', which is silent by design, and the two audiences need two
+    different sentences. Written in the caller's transaction like every other
+    notification (ADR-019), with no names or numbers in the text.
+
+    The owner is told only when they had been told a partner was coming; an
+    offer nobody accepted was never visible to them (ADR-017).
+    """
+    written = 0
+    for partner_id in released_partner_ids:
+        await _write_notification(
+            db, recipient_type="partner", recipient_id=partner_id,
+            event="job_reassigned_by_support",
+            message=NOTIFICATION_EVENTS["job_reassigned_by_support"],
+            job_id=job.id, channel=CHANNEL_IN_APP,
+        )
+        written += 1
+    if tell_owner and job.user_id is not None:
+        await _write_notification(
+            db, recipient_type="user", recipient_id=job.user_id,
+            event="job_reassigning", message=NOTIFICATION_EVENTS["job_reassigning"],
+            job_id=job.id, channel=CHANNEL_IN_APP,
+        )
+        written += 1
+    return written
