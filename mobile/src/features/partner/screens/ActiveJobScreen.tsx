@@ -5,20 +5,8 @@
 // in_progress is POST /jobs/{id}/start with the owner's code, and completion
 // requires the partner to enter the amount actually charged.
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Platform,
-  StatusBar,
-  Animated,
-  Linking,
-  Pressable,
-  TextInput,
-  Alert,
-  ActivityIndicator,
-} from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, Platform, StatusBar, Animated, Linking, Pressable, TextInput, ActivityIndicator } from "react-native";
+import { showDialog } from "../../../components/ui/AppDialog";
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import { useNavigation, useRoute } from "@react-navigation/native";
@@ -185,7 +173,7 @@ export default function ActiveJobScreen() {
 
   const handleNavigate = () => {
     if (!pickup) {
-      Alert.alert(
+      showDialog(
         "Pickup coordinates unavailable",
         "This job does not include a map position. Call the customer and confirm the address before driving."
       );
@@ -217,7 +205,7 @@ export default function ActiveJobScreen() {
     if (!job) return;
     const code = otp.join("");
     if (code.length !== 4) {
-      Alert.alert(
+      showDialog(
         "Incomplete code",
         "Enter the 4-digit start code shown on the customer's screen."
       );
@@ -234,12 +222,12 @@ export default function ActiveJobScreen() {
       if (codeName === "INVALID_START_CODE") {
         setOtp(["", "", "", ""]);
         otpRefs.current[0]?.focus();
-        Alert.alert(
+        showDialog(
           "Incorrect start code",
           "That code does not match this job. Ask the customer to read the 4 digits on their screen again."
         );
       } else {
-        Alert.alert(
+        showDialog(
           "Could not start the job",
           "Sahayak did not confirm the start code. The job is still active and has not been marked in progress. Check your connection and retry."
         );
@@ -253,7 +241,7 @@ export default function ActiveJobScreen() {
     if (!job) return;
     const amount = Number(finalAmount);
     if (!finalAmount.trim() || !Number.isFinite(amount) || amount <= 0) {
-      Alert.alert(
+      showDialog(
         "Enter the final amount",
         "Type the amount actually charged for this rescue. Sahayak records this as the customer's final price."
       );
@@ -267,13 +255,13 @@ export default function ActiveJobScreen() {
     } catch (err: any) {
       const codeName = errorCodeOf(err);
       if (codeName === "INVALID_STATUS_TRANSITION") {
-        Alert.alert(
+        showDialog(
           "Job cannot be completed",
           "The job is no longer in progress. Refresh the job to see its current state."
         );
         void loadJob(true);
       } else {
-        Alert.alert(
+        showDialog(
           "Could not complete the job",
           "Sahayak did not save the completion. The job remains in progress. Check your connection and retry."
         );

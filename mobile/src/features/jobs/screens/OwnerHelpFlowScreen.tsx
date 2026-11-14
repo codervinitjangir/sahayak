@@ -7,20 +7,8 @@
 // Nothing here is simulated: a request that does not reach the backend says so
 // and stays on the details sheet.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  View,
-  Text,
-  ScrollView,
-  Pressable,
-  TextInput,
-  StyleSheet,
-  Alert,
-  Linking,
-  Animated,
-  KeyboardAvoidingView,
-  Platform,
-  StatusBar,
-} from "react-native";
+import { View, Text, ScrollView, Pressable, TextInput, StyleSheet, Linking, Animated, KeyboardAvoidingView, Platform, StatusBar } from "react-native";
+import { showDialog } from "../../../components/ui/AppDialog";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
@@ -321,14 +309,14 @@ export default function OwnerHelpFlowScreen() {
       setPhase("searching");
       void qc.invalidateQueries({ queryKey: QK.jobs });
     } catch {
-      Alert.alert("Request not sent", "We could not reach Sahayak, so no partner has been requested. Check your connection and try again.");
+      showDialog("Request not sent", "We could not reach Sahayak, so no partner has been requested. Check your connection and try again.");
     } finally {
       setSending(false);
     }
   };
 
   const cancel = () =>
-    Alert.alert(
+    showDialog(
       "Cancel this request?",
       job?.status === "in_progress" ? "Work has already started." : "Your partner will be told and the request will be closed.",
       [
@@ -343,7 +331,7 @@ export default function OwnerHelpFlowScreen() {
               await jobsApi.cancelJob(jobId, "Cancelled by owner");
             } catch (e: any) {
               if (e?.response?.status !== 409) {
-                Alert.alert("Could not cancel", "Please try again.");
+                showDialog("Could not cancel", "Please try again.");
                 setCancelling(false);
                 return;
               }

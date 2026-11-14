@@ -2,18 +2,8 @@
 // Home (shift, offers, active job), Earnings, Account. Every figure on screen
 // comes from the backend; a failed read shows an error, never a zero.
 import React, { useCallback, useEffect, useState } from "react";
-import {
-  View,
-  Text,
-  ScrollView,
-  Pressable,
-  Switch,
-  StyleSheet,
-  Alert,
-  StatusBar,
-  RefreshControl,
-  Linking,
-} from "react-native";
+import { View, Text, ScrollView, Pressable, Switch, StyleSheet, StatusBar, RefreshControl, Linking } from "react-native";
+import { showDialog } from "../../../components/ui/AppDialog";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
@@ -137,7 +127,7 @@ export default function PartnerHomeScreen() {
   const acquireLocation = async () => {
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== "granted") {
-      Alert.alert("Location is off", "Sahayak needs your GPS position to match you with jobs nearby. Allow location access in settings and try again.");
+      showDialog("Location is off", "Sahayak needs your GPS position to match you with jobs nearby. Allow location access in settings and try again.");
       return null;
     }
     const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
@@ -153,7 +143,7 @@ export default function PartnerHomeScreen() {
     if (dutyBusy) return;
     const partnerId = user?.id;
     if (!partnerId) {
-      Alert.alert("Partner account required", "This device is not signed in as a partner, so your shift cannot be changed.");
+      showDialog("Partner account required", "This device is not signed in as a partner, so your shift cannot be changed.");
       return;
     }
     setDutyBusy(true);
@@ -168,7 +158,7 @@ export default function PartnerHomeScreen() {
       if (!val) setOffers([]);
       else void fetchOffers();
     } catch {
-      Alert.alert(
+      showDialog(
         val ? "Could not go on duty" : "Could not go off duty",
         val
           ? "Sahayak could not register your availability. You are still off duty, so no jobs will be sent."
@@ -189,20 +179,20 @@ export default function PartnerHomeScreen() {
         try {
           await partnerApi.reportLocation(user.id, coords.latitude, coords.longitude);
         } catch {
-          Alert.alert("Location not saved", "Your phone found a GPS fix, but Sahayak could not save it. Dispatch keeps using your last saved position.");
+          showDialog("Location not saved", "Your phone found a GPS fix, but Sahayak could not save it. Dispatch keeps using your last saved position.");
           return;
         }
       }
-      Alert.alert("Location updated", isOnline ? "Dispatch has your current position." : "Position saved. Go on duty to start receiving jobs.");
+      showDialog("Location updated", isOnline ? "Dispatch has your current position." : "Position saved. Go on duty to start receiving jobs.");
     } catch {
-      Alert.alert("GPS unavailable", "Could not get a GPS fix. Check that location services are on and try again.");
+      showDialog("GPS unavailable", "Could not get a GPS fix. Check that location services are on and try again.");
     } finally {
       setLocating(false);
     }
   };
 
   const confirmSignOut = () =>
-    Alert.alert("Sign out?", isOnline ? "You are on duty. Signing out does not take you off duty; go off duty first." : "You will need to verify your number again to sign back in.", [
+    showDialog("Sign out?", isOnline ? "You are on duty. Signing out does not take you off duty; go off duty first." : "You will need to verify your number again to sign back in.", [
       { text: "Stay signed in", style: "cancel" },
       { text: "Sign out", style: "destructive", onPress: logout },
     ]);
@@ -570,7 +560,7 @@ export default function PartnerHomeScreen() {
                   title="Navigation app"
                   subtitle={navApp}
                   onPress={() => {
-                    Alert.alert("Select Navigation App", "Choose your default navigation tool for pickups:", [
+                    showDialog("Select Navigation App", "Choose your default navigation tool for pickups:", [
                       { text: "Google Maps", onPress: () => setNavApp("Google Maps") },
                       { text: "Apple Maps", onPress: () => setNavApp("Apple Maps") },
                       { text: "Cancel", style: "cancel" },

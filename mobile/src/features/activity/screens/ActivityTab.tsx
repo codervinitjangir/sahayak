@@ -1,16 +1,6 @@
 import React, { useState } from "react";
-import {
-  View,
-  Text,
-  FlatList,
-  Pressable,
-  Modal,
-  TextInput,
-  StyleSheet,
-  Alert,
-  ScrollView,
-  RefreshControl,
-} from "react-native";
+import { View, Text, FlatList, Pressable, Modal, TextInput, StyleSheet, ScrollView, RefreshControl } from "react-native";
+import { showDialog } from "../../../components/ui/AppDialog";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -171,7 +161,7 @@ function JobSheet({
   };
 
   const confirmCancel = () =>
-    Alert.alert("Cancel this request?", "Your partner will be told and the request will be closed.", [
+    showDialog("Cancel this request?", "Your partner will be told and the request will be closed.", [
       { text: "Keep request", style: "cancel" },
       { text: "Yes, cancel", style: "destructive", onPress: () => void doCancel() },
     ]);

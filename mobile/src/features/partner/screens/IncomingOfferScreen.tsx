@@ -5,16 +5,8 @@
 // fallback job or made-up pickup when that payload is missing â€” a fabricated
 // address here would send a mechanic to the wrong street.
 import React, { useState, useEffect, useRef } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  Animated,
-  StatusBar,
-  Platform,
-  Alert,
-} from "react-native";
+import { View, Text, StyleSheet, ScrollView, Animated, StatusBar, Platform } from "react-native";
+import { showDialog } from "../../../components/ui/AppDialog";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
@@ -98,7 +90,7 @@ export default function IncomingOfferScreen() {
 
   const handleAccept = async () => {
     if (!assignmentId) {
-      Alert.alert(
+      showDialog(
         "Offer unavailable",
         "The assignment reference is missing, so this offer cannot be accepted. Go back and reopen it from the dashboard."
       );
@@ -111,18 +103,18 @@ export default function IncomingOfferScreen() {
     } catch (err: any) {
       const code = err?.response?.data?.error?.code;
       if (code === "PARTNER_AT_CAPACITY") {
-        Alert.alert(
+        showDialog(
           "Limit reached",
           "You are at your concurrent job limit. Complete an existing job before accepting another."
         );
       } else if (code === "ASSIGNMENT_ALREADY_ANSWERED") {
-        Alert.alert(
+        showDialog(
           "Offer expired",
           "This job is no longer available or was taken by another technician.",
           [{ text: "OK", onPress: () => nav.goBack() }]
         );
       } else {
-        Alert.alert(
+        showDialog(
           "Could not accept",
           "Sahayak did not confirm this job. You have not been assigned to it. Check your connection and try again."
         );
@@ -147,7 +139,7 @@ export default function IncomingOfferScreen() {
         // Already answered elsewhere; leaving is correct.
         nav.goBack();
       } else {
-        Alert.alert(
+        showDialog(
           "Could not decline",
           "Sahayak could not record your response. The offer may still be open; try again or let it expire."
         );

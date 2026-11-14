@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { View, Text, ScrollView, StyleSheet, Alert, Linking, Switch, Pressable, Share } from "react-native";
+import { View, Text, ScrollView, StyleSheet, Linking, Switch, Pressable, Share } from "react-native";
+import { showDialog } from "../../../components/ui/AppDialog";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors, Typography, Spacing, Radius } from "../../../constants/theme";
@@ -32,14 +33,14 @@ export default function AccountTab({ onAddVehicle }: { onAddVehicle: () => void 
       const data = await usersApi.exportMe();
       await Share.share({ title: "My Sahayak data", message: JSON.stringify(data, null, 2) });
     } catch {
-      Alert.alert("Could not export", "Check your connection and try again.");
+      showDialog("Could not export", "Check your connection and try again.");
     } finally {
       setExporting(false);
     }
   };
 
   const confirmDeleteAccount = () =>
-    Alert.alert(
+    showDialog(
       "Delete your account?",
       "Your name, phone, email, vehicles and notifications are erased and you are signed out. Past jobs stay on record without your details. This cannot be undone.",
       [
@@ -53,7 +54,7 @@ export default function AccountTab({ onAddVehicle }: { onAddVehicle: () => void 
               logout();
             } catch (err: any) {
               const code = err?.response?.data?.error?.code;
-              Alert.alert(
+              showDialog(
                 "Could not delete",
                 code === "ACCOUNT_HAS_ACTIVE_JOB"
                   ? "Finish or cancel your active request first."
@@ -74,7 +75,7 @@ export default function AccountTab({ onAddVehicle }: { onAddVehicle: () => void 
   const vehicleList = vehicles.data ?? [];
 
   const handleDeleteVehicle = (vehicleId: string, name: string) => {
-    Alert.alert("Remove vehicle?", `Remove ${name} from your account?`, [
+    showDialog("Remove vehicle?", `Remove ${name} from your account?`, [
       { text: "Cancel", style: "cancel" },
       {
         text: "Remove",
@@ -84,7 +85,7 @@ export default function AccountTab({ onAddVehicle }: { onAddVehicle: () => void 
             await vehiclesApi.deleteVehicle(vehicleId);
             void vehicles.refetch();
           } catch (err: any) {
-            Alert.alert(
+            showDialog(
               "Could not remove",
               err?.message || "Cannot delete a vehicle with an active roadside request."
             );
@@ -95,7 +96,7 @@ export default function AccountTab({ onAddVehicle }: { onAddVehicle: () => void 
   };
 
   const confirmSignOut = () =>
-    Alert.alert("Sign out?", "You will need to verify your number again to sign back in.", [
+    showDialog("Sign out?", "You will need to verify your number again to sign back in.", [
       { text: "Stay signed in", style: "cancel" },
       { text: "Sign out", style: "destructive", onPress: logout },
     ]);

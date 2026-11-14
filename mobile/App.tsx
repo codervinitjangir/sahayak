@@ -13,6 +13,7 @@ import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import * as SplashScreen from "expo-splash-screen";
 import RootNavigator from "./src/navigation/RootNavigator";
+import { AppDialogHost } from "./src/components/ui/AppDialog";
 import AppLaunchSequence from "./src/components/splash/AppLaunchSequence";
 import { Colors } from "./src/constants/theme";
 import { useAuthStore } from "./src/store/authStore";
@@ -103,6 +104,7 @@ export default function App() {
           <QueryClientProvider client={queryClient}>
             <StatusBar style="auto" />
             {(fontsLoaded || fontError) && <RootNavigator />}
+            <AppDialogHost />
 
             {/* ── SAHAYAK OPENING LAUNCH SEQUENCE (REVEALS FIRST SCREEN AT 1.76s) ── */}
             {Platform.OS !== "web" && !splashFinished && (

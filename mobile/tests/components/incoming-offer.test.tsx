@@ -11,10 +11,8 @@ vi.mock("@react-navigation/native", () => ({ useNavigation: () => nav, useRoute:
 const respond = vi.fn();
 vi.mock("../../src/services/api/jobs", () => ({ jobsApi: { respondToAssignment: (...a: any[]) => respond(...a) } }));
 const alert = vi.fn();
-vi.mock("react-native-web", async (orig) => {
-  const rn: any = await orig();
-  return { ...rn, Alert: { alert: (...a: any[]) => alert(...a) } };
-});
+// Screens report failures through the in-app dialog; capture its calls.
+vi.mock("../../src/components/ui/AppDialog", () => ({ showDialog: (...a: any[]) => alert(...a) }));
 
 import IncomingOfferScreen from "../../src/features/partner/screens/IncomingOfferScreen";
 
