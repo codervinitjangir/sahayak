@@ -1307,3 +1307,23 @@ The second bug was blunter: `partner_supply` filtered on `p.is_verified`, a bool
 Consequence for callers: a partner whose offer was cancelled before they accepted now gets 403 (not 409) if they try to act on that job, and `current_assignment.partner_*` is null for them.
 
 **Not done.** No "reassign to this partner" option. The released partner's app learns of it from the notification and its next poll; there is no push-specific handling.
+
+---
+
+# ADR-031: The mobile map is MapLibre with OpenFreeMap tiles, not Google Maps
+
+**Date:** 2026-11-14 · **Status:** Accepted
+
+**Context.** The Android map used `react-native-maps`, which renders through the Google Maps SDK. That SDK needs an API key, and Google issues none without a billing account and a card. The team chose not to attach a payment method. The key that was once committed (R2) was the only alternative, and it is public in git history.
+
+**Decision.**
+1. `mobile/src/components/map/RealMap.tsx` renders with `@maplibre/maplibre-react-native` (v11), the open-source fork of the Mapbox GL native engine, through its Expo config plugin.
+2. Tiles and style come from OpenFreeMap (`https://tiles.openfreemap.org/styles/liberty`): OpenStreetMap data, no key, no account, no billing. The URL is one constant, `MAP_STYLE_URL`.
+3. The props of `RealMap` are unchanged, so the two screens that use it did not change. The draggable owner pin is a `ViewAnnotation` (it supports dragging); the partner is a `Marker`; the radar circle and the route are GeoJSON layers. The circle math lives in `map/geo.ts` and is unit-tested.
+4. OpenStreetMap attribution stays visible, as the ODbL requires. `react-native-maps` and the `GOOGLE_MAPS_API_KEY` wiring are removed.
+
+**Rejected.** Google Maps with the old key (public, billed to whoever owns it). Leaflet inside a WebView (reuses `RealMap.web.tsx` but pans and zooms poorly on low-end phones). The `tile.openstreetmap.org` servers (their tile usage policy forbids apps relying on them).
+
+**Consequences.** OpenFreeMap is a donation-funded service with no SLA. If it becomes unreliable, the fallback is MapTiler's free tier (an account, no card) by changing `MAP_STYLE_URL` and adding its key. Routing is unchanged: `useRoute` still draws a straight connector unless `EXPO_PUBLIC_ROUTING_URL` is set.
+
+**Not done.** Not yet seen on a physical device: dragging the pin, the icon rendering inside `ViewAnnotation`, and camera padding against the bottom sheet need one device session (R5). The web preview (`RealMap.web.tsx`) still loads `tile.openstreetmap.org`; acceptable for local development only.

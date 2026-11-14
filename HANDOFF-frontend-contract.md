@@ -2331,3 +2331,10 @@ All `require_admin`; anyone else 403. Every write is audited in the same transac
 * **The owner always gets their own `owner_name`, `owner_phone` and pickup coordinates**, including while the job is `matching`. Before today these were null for the owner while an offer was pending.
 * A partner released by a staff reassign, or whose offer was cancelled before they accepted, sees the job with details withheld and gets **403** (previously 409 in the cancelled-offer case) if they try `POST /jobs/{id}/status`.
 * The owner sees `current_assignment.partner_*` only for a partner who accepted and is still on the job (or was on it when it finished).
+
+### 19.x Mobile map moved off Google (ADR-031), for Adarsh
+
+- `RealMap.tsx` now uses `@maplibre/maplibre-react-native` + OpenFreeMap tiles. Same props; `OwnerHelpFlowScreen` and `ActiveJobScreen` untouched.
+- `react-native-maps` removed; `app.config.js` no longer reads `GOOGLE_MAPS_API_KEY`; `app.json` adds the MapLibre plugin. Expo Go cannot run it: use an EAS build (`eas build -p android --profile preview`).
+- New `mobile/src/components/map/geo.ts` (radar circle) with `tests/map-geo.test.ts`.
+- Also added in the same pass: `mobile/eas.json` (preview = APK, production = AAB) and FCM via `googleServicesFile` (file comes from the `GOOGLE_SERVICES_JSON` EAS variable; `google-services.json` is gitignored).

@@ -50,8 +50,15 @@
           "image": "./assets/splash-icon.png",
           "imageWidth": 160
         }
-      ]
+      ],
+      "@maplibre/maplibre-react-native"
     ],
-    "description": "Emergency roadside assistance"
+    "description": "Emergency roadside assistance",
+    "extra": {
+      "eas": {
+        "projectId": "949314c1-4f1a-4041-802a-3bdc874dc18b"
+      }
+    },
+    "owner": "codervinitjangir"
   }
 }

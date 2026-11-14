@@ -39,7 +39,7 @@ Web build: `VITE_API_BASE_URL`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_
 optional `VITE_ERROR_REPORT_URL`. `VITE_DEMO_MODE` and `VITE_PARTNER_API_MOCK` must be unset.
 
 Mobile build: `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`,
-`EXPO_PUBLIC_API_BASE_URL`, `EXPO_PUBLIC_WEB_URL`, `GOOGLE_MAPS_API_KEY` (as EAS secrets).
+`EXPO_PUBLIC_API_BASE_URL` (Render URL; the app adds `/api/v1`), `EXPO_PUBLIC_WEB_URL`, and the file variable `GOOGLE_SERVICES_JSON` (EAS environment `preview`). No Maps key: ADR-031.
 
 Rotation **[you]**: the Google Maps key that was once committed (R2), and any Supabase secret
 key that has been pasted into a chat or a log.

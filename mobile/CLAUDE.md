@@ -11,7 +11,7 @@ React Native + Expo app for two roles:
 ## Stack
 Expo SDK 57, React Native 0.86, React 19, TypeScript, React Navigation 7 (native stack),
 TanStack Query (owner server state), Zustand (`authStore`, `jobStore`), Axios,
-`react-native-maps` (native) / Leaflet + OpenStreetMap tiles (web preview), Inter via
+MapLibre + OpenFreeMap tiles (native, ADR-031) / Leaflet + OpenStreetMap tiles (web preview), Inter via
 `@expo-google-fonts/inter`, `StyleSheet` with tokens from `src/constants/theme.ts`.
 
 ## Layout (`src/`)
@@ -42,8 +42,7 @@ store/       authStore · jobStore
    backend returns `partner_phone`.
 6. **Accessibility.** 48dp touch targets, `accessibilityRole`/`Label` on every pressable, status
    = icon + word + colour, body text ≥ 15, respect reduced motion.
-7. **Secrets.** `GOOGLE_MAPS_API_KEY` is injected by `app.config.js` from the build
-   environment. Never commit it to `app.json`. Routing uses `EXPO_PUBLIC_ROUTING_URL` if set,
+7. **Secrets.** Maps need no key (ADR-031). `google-services.json` comes from the EAS file variable `GOOGLE_SERVICES_JSON`; never commit it. Routing uses `EXPO_PUBLIC_ROUTING_URL` if set,
    otherwise a straight connector; never the public OSRM demo instance.
 
 ## Authoritative references
