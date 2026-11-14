@@ -1222,6 +1222,8 @@ The second bug was blunter: `partner_supply` filtered on `p.is_verified`, a bool
 
 **Amendment 2026-11-14 (N1): deliveries are awaited, not abandoned.** Each delivery borrows one pooled connection for its token lookup after the request has returned. `check_dispatch_capacity` read the pool while such a delivery was in flight and reported "1 still checked out" intermittently; it was never a leak (the connection returns in well under a second). `push_service.drain()` waits for in-flight deliveries; the app calls it on shutdown so a deploy does not drop pushes already committed to, and the harness calls it before reading the pool, then allows a bounded wait so only a connection that never returns fails the check. Deliveries are still unbounded in number; with a pool of 3+2 a large burst of pushes competes with requests for connections. Not changed here: bound it with a semaphore or a queue before real push volume.
 
+**Amendment 2026-11-14 (2): deliveries are bounded.** `push_service.deliver` takes a per-loop semaphore (`MAX_CONCURRENT = 1`), so at most one delivery holds a pooled connection and requests keep the rest. The backlog is capped at `MAX_PENDING = 500` tasks; beyond that a commit logs `push_dropped` and sends nothing (the in-app row still exists, ADR-019). Trade-off: a burst is delivered serially, so the last push in a 500-deep backlog can be seconds late. Unit tests: `test_deliveries_run_one_at_a_time`, `test_backlog_beyond_cap_is_dropped`.
+
 ---
 
 # ADR-027: A dispute is an owner report on a completed job; a refund is recorded, not executed

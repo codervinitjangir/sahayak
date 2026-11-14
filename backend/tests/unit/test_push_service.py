@@ -65,3 +65,29 @@ async def test_drain_waits_for_in_flight_deliveries():
     assert await push_service.drain() == 1
     assert done == [1]
     assert await push_service.drain() == 0
+
+
+@pytest.mark.asyncio
+async def test_deliveries_run_one_at_a_time(monkeypatch):
+    """Each delivery borrows a pooled connection; never more than MAX_CONCURRENT at once."""
+    import asyncio
+    running = peak = 0
+
+    async def fake(items):
+        nonlocal running, peak
+        running += 1
+        peak = max(peak, running)
+        await asyncio.sleep(0.01)
+        running -= 1
+        return 0
+
+    monkeypatch.setattr(push_service, "_deliver", fake)
+    await asyncio.gather(*(push_service.deliver([]) for _ in range(5)))
+    assert peak == push_service.MAX_CONCURRENT == 1
+
+
+def test_backlog_beyond_cap_is_dropped(monkeypatch):
+    monkeypatch.setattr(push_service, "_tasks", set(range(push_service.MAX_PENDING)))
+    assert push_service._accepting() is False
+    monkeypatch.setattr(push_service, "_tasks", set())
+    assert push_service._accepting() is True

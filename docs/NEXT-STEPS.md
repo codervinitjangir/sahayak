@@ -262,3 +262,14 @@ Code work, in order:
 
 Needs a person, not code: R1 (real contact values and UPI ID), R2 (rotate Maps key), R3 (lawyer),
 R5 (device run), G3 (money-holding decision and CA sign-off), G5/G7 (provider contracts).
+
+### 9.9 Status after 2026-11-14 (second pass)
+
+Built and committed on `feat/push-wiring-payments-cde`: admin alerts, pricing editor (ADR-028),
+staff roles and invites (ADR-029), manual reassign (ADR-030), configurable CORS, web error
+boundary, deployment runbook. Regression: backend 596 unit, web 145, mobile 27, 17 of 17 live
+harnesses (906 checks).
+
+What is not started, what each item is waiting for, the loose ends and the ordered next steps
+are in [REMAINING-WORK.md](REMAINING-WORK.md) sections E, F and G. That file is the current list;
+the tables above in this section are kept for history.

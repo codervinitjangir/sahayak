@@ -32,6 +32,24 @@ EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send"
 _INFO_KEY = "sahayak_push_outbox"
 _CHUNK = 100  # Expo's per-request limit
 _tasks: set[asyncio.Task] = set()  # keep references so tasks are not GC'd mid-flight
+# Bounds (ADR-026 amendment 2): the pool is 3+2 and each delivery borrows one
+# connection, so deliveries run one at a time and the backlog is capped.
+MAX_CONCURRENT = 1
+MAX_PENDING = 500
+_sem: Optional[asyncio.Semaphore] = None
+_sem_loop: Any = None
+
+
+def _semaphore() -> asyncio.Semaphore:
+    global _sem, _sem_loop
+    loop = asyncio.get_running_loop()
+    if _sem is None or _sem_loop is not loop:  # one per event loop (tests make many)
+        _sem, _sem_loop = asyncio.Semaphore(MAX_CONCURRENT), loop
+    return _sem
+
+
+def _accepting() -> bool:
+    return len(_tasks) < MAX_PENDING
 
 
 def stage(db: Any, *, recipient_type: str, recipient_id: uuid.UUID, message: Optional[str],
@@ -59,6 +77,9 @@ def _after_commit(session: Session) -> None:
         loop = asyncio.get_running_loop()
     except RuntimeError:
         return  # a sync caller (scripts); nothing to schedule on
+    if not _accepting():
+        log_event("push_dropped", level=logging.WARNING, messages=len(items), outcome="failure")
+        return  # the in-app feed still has the row (ADR-019)
     task = loop.create_task(deliver(items))
     _tasks.add(task)
     task.add_done_callback(_tasks.discard)
@@ -99,6 +120,12 @@ def build_messages(items: Iterable[dict], tokens_by_owner: dict[tuple[str, uuid.
 
 
 async def deliver(items: list[dict]) -> int:
+    """Bounded entry point: at most MAX_CONCURRENT deliveries hold a connection."""
+    async with _semaphore():
+        return await _deliver(items)
+
+
+async def _deliver(items: list[dict]) -> int:
     """Look up devices, send, prune dead tokens. Returns messages sent. Never raises."""
     from app.config.database import AsyncSessionLocal  # late: avoids an import cycle
 

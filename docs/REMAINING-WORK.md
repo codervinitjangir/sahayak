@@ -18,7 +18,7 @@ has moved: those items need a person. See section F for what this pass did not d
 | Race and concurrency protections | Done. 17 of 17 live harnesses green, 906 checks (N1 closed) |
 | Launch readiness | About 45%. Code hygiene moved; every section A item is still open |
 
-Verified on 2026-11-14 (production pass): backend 596 unit tests, web 145, mobile 27, live harnesses as above.
+Verified on 2026-11-14 (third pass): backend 598 unit tests, web 145, mobile 39 (12 component); live harnesses not re-run in the third pass. Earlier: live harnesses as above.
 Not verified: any physical phone (mobile was run through its web target only).
 
 ---
@@ -51,14 +51,14 @@ Not verified: any physical phone (mobile was run through its web target only).
 ### Product gaps
 
 - [ ] G3 Partner payouts, tax invoices, refunds and disputes (payments C-E), after the money decision
-- [ ] G4 Partner documents and equipment upload with staff review. Towing partners can only be enabled by direct database edit today
+- [ ] G4 Partner documents and equipment upload with staff review (waiting on three decisions, section E). Towing partners can only be enabled by direct database edit today
 - [ ] G6 Hindi and Kannada (English only today)
 - [ ] G11 Offline-tolerant request queue for poor highway signal
 - [ ] R8 Payments hardening, remainder: payment gateway, signature-checked webhooks, integer paise, duplicate and out-of-order tests. Done so far: server-side amount, partner/admin-only confirm, idempotent confirm
 
 ### Engineering hygiene
 
-- [ ] E3 Mobile component tests for the owner flow and partner offer flow
+- [x] E3 Mobile component tests (2026-11-14, third pass): `mobile/tests/components/`, rendered through react-native-web in jsdom. Partner offer: 8 tests (accept, decline, each error code, no invented offer). Owner request: 4 tests (sends only with pin, service and vehicle; idempotency key; failed send). Not native rendering: maps, GPS and gestures still need R5
 - [~] E4 `backend/tests/smoke/smoke_e2e.py` drives one job from request to rating over real HTTP with two Supabase test numbers. **Not yet seen passing**: run locally it signed the owner number in and then Supabase refused the partner test number (HTTP 403), so everything after sign-in is unverified. It needs the two test numbers set up as its docstring says
 - [~] E5 Runbook written (`docs/DEPLOYMENT.md`: environments, secrets, release checklist, rollback). CORS is now configuration (`CORS_ALLOWED_ORIGINS`) and `backend/.dockerignore` keeps `.env` out of the image. No staging environment exists yet: that needs accounts
 - [~] E6 `scripts/restore_db.sh` added (refuses to target the live database). No backup schedule and no drill has been run
@@ -99,21 +99,36 @@ Final price now capped (`400 PRICE_FINAL_OUT_OF_RANGE`) with a guarded form fiel
 
 Evidence: `docs/evidence/mentor-report.html`, `docs/evidence/screenshots/`, `docs/evidence/harness-results.txt`.
 
-## F. Not done in the production pass
+## E. Not started, and what each one is waiting for
 
-Each of these is real work, not a quick fix, and none was started:
+Recorded 2026-11-14 at the end of the second pass. None of these has any code yet.
 
-- Payments back office, gateway, webhooks, integer paise (blocked on G3)
-- G4 partner document upload, G6 Hindi and Kannada, G11 offline queue
-- E3 mobile component tests (the mobile suite runs pure logic under vitest; rendering React Native components needs a test renderer set up first)
-- Store assets, replacing the stock photographs, social preview image
-- Everything in section A
+| Item | What it is waiting for | First step when picked up |
+|---|---|---|
+| G4 Partner document upload and staff review | Three decisions from you: (1) OK to create a private storage bucket in the Supabase project; (2) which documents are required per category (licence, ID, vehicle RC, tow equipment proof); (3) how long identity documents are kept and who may view them | An ADR, then signed upload URLs from the backend, a review queue beside partner verification, and expiry reminders. Auth and privacy: full regression |
+| G6 Hindi and Kannada | A native speaker to review each language. Machine-only translation of emergency instructions is not acceptable | Move every string in web and mobile into translation files (English first, no behaviour change), then add the two languages |
+| G11 Offline-tolerant request queue | A physical device: it cannot be verified in a browser | Mobile only. Queue the request locally with its idempotency key and send when signal returns; the backend already de-duplicates on that key |
+| Payments back office, gateway, webhooks, integer paise | G3: who holds the money, and CA sign-off | Blocked until then |
+| Store assets, real photographs for the landing collage, social preview image | Your material | No code |
+| Everything in section A | A person | See section A |
 
-## E. Suggested order
+## F. Loose ends from the second pass
 
-1. R1, R2, R3: no code, long lead time, so start them now. Tell Adarsh about HANDOFF section 19.
-2. Create the staging environment and take the first backup (`docs/DEPLOYMENT.md`), then run one restore drill.
-3. R5 and G2: one device session covers both, and closes N6.
-4. An uptime monitor on `/health` and the web origin, and Sentry for mobile.
-5. G4, staff roles, and the pricing editor, each with its own ADR and full regression.
-6. G3 once the money decision is made, then the payments back office.
+- **Smoke test not yet seen passing.** `backend/tests/smoke/smoke_e2e.py` signed the owner test number in, then Supabase refused the partner number `+919000000902` with HTTP 403. Check that both numbers are listed under Authentication > Phone > Test phone numbers with the OTP the guide gives, that the partner account still exists and is verified (a harness run deleted the hand-made one earlier, see N2), then run it again.
+- **Adarsh has not been told** about `HANDOFF-frontend-contract.md` sections 19 to 19.4. Two changes can break a client that assumes otherwise: an owner's job can go from assigned back to matching, and a partner with only an offer no longer receives owner details from `GET /jobs/{id}`.
+- **Staff roles now gate writes.** Changing prices and recording a refund need finance or super admin; partner verification and owner suspension need ops or super admin. The one linked admin today is a super admin. The unlinked `ops` row has no sign-in.
+- **Two stale live jobs** in the shared database (`1cadc5c7`, `fb907e38`) are still there and show as stuck on the alerts line. Cancel them from the Jobs board or leave them; I did not touch them.
+- [x] **Push deliveries bounded** (third pass): one at a time, backlog capped at 500, overflow logged as `push_dropped` (ADR-026 amendment 2).
+- **Committed in the third pass** along with E3: the `@expo/ngrok` dev dependency (it shared `mobile/package.json`). Still not committed: `mobile/expo-qr.png`, `.claude/`. Nothing is pushed.
+
+## G. Next steps, in order
+
+1. Tell Adarsh about HANDOFF section 19 to 19.4.
+2. R1, R2, R3: real contact details and UPI ID, rotate the Maps key, lawyer review. No code, long lead time.
+3. Fix the two smoke-test numbers and get `smoke_e2e.py` passing once.
+4. Create the staging environment, take the first backup and run one restore drill (`docs/DEPLOYMENT.md`).
+5. R5 and G2 in one device session; that also closes N6.
+6. An uptime monitor on `/health` and the web origin, and crash reporting for mobile.
+7. Answer the three G4 questions in section E, then build G4.
+8. G6 once a reviewer is available, then G11 on a device.
+9. G3 when the money decision is made, then the payments back office.
