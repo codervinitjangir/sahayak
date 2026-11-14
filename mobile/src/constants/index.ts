@@ -1,15 +1,16 @@
 import { Platform, NativeModules } from "react-native";
 import Constants from "expo-constants";
+import { withApiPrefix } from "../utils/apiUrl";
 
 // The /api/v1 prefix is part of the contract — every endpoint the service
 // modules call ("/jobs", "/jobs/:id") is relative to it. Without it every
 // request 404s.
 function getDevApiUrl(): string {
   if (process.env.EXPO_PUBLIC_API_BASE_URL) {
-    return process.env.EXPO_PUBLIC_API_BASE_URL;
+    return withApiPrefix(process.env.EXPO_PUBLIC_API_BASE_URL);
   }
   if (process.env.EXPO_PUBLIC_API_URL) {
-    return process.env.EXPO_PUBLIC_API_URL;
+    return withApiPrefix(process.env.EXPO_PUBLIC_API_URL);
   }
 
   // When testing on a physical device over Expo Go / Wi-Fi, hostUri contains
@@ -41,7 +42,11 @@ function getDevApiUrl(): string {
 
 export const API_BASE_URL = __DEV__
   ? getDevApiUrl()
-  : (process.env.EXPO_PUBLIC_API_BASE_URL || process.env.EXPO_PUBLIC_API_URL || "https://api.sahayak.app/api/v1");
+  : withApiPrefix(
+      process.env.EXPO_PUBLIC_API_BASE_URL ||
+        process.env.EXPO_PUBLIC_API_URL ||
+        "https://api.sahayak.app/api/v1",
+    );
 
 export const APP_NAME = "Sahayak";
 export const APP_VERSION = "0.1.0";

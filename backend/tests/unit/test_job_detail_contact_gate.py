@@ -279,3 +279,22 @@ def test_detail_carries_the_service_code_and_name(wiring):
     assert detail.service_id == 1
     assert detail.service_code == "flat_tyre"
     assert detail.service_name == "Flat-Tyre Support"
+
+
+def test_owner_gets_no_partner_details_while_the_offer_is_pending(wiring, monkeypatch):
+    """Found 2026-11-14 in a live run: the owner's page rendered tel:<partner
+    phone> while the assignment was still 'offered'. Release follows the
+    assignment (ADR-017), so until the partner accepts the owner learns the
+    status and the ETA, never who."""
+
+    async def offered(db, job_id):
+        return Stub(status="offered", partner_id=PARTNER_ID, estimated_arrival_min=None)
+
+    monkeypatch.setattr(job_repository, "get_latest_assignment", offered)
+
+    detail = _read(OWNER)
+
+    assert detail.current_assignment.status == "offered"
+    for field in GATED_PARTNER_FIELDS:
+        assert getattr(detail.current_assignment, field) is None, field
+    assert wiring["get_partner_by_id"] == 0

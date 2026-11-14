@@ -1,0 +1,19 @@
+### check_job_race
+exit=0  43/43 checks passed
+### check_dispatch_race
+exit=0  69/69 checks passed
+### check_partner_offers
+exit=0  28/28 checks passed
+### check_dispatch_flow
+exit=0  50/50 checks passed
+### check_dispatch_capacity
+exit=1  48/49 checks passed
+### check_job_lifecycle
+exit=0  78/78 checks passed
+### check_payments_and_sharing
+exit=0  29/29 checks passed
+### check_ratings
+exit=0  44/44 checks passed
+### check_notifications
+exit=0  79/79 checks passed
+### DONE

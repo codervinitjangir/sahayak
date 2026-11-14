@@ -86,6 +86,10 @@ class ErrorCode:
     # target status, which a schema-level "required" cannot express without
     # making every other transition carry a price.
     PRICE_FINAL_REQUIRED = "PRICE_FINAL_REQUIRED"
+    # A final price implausibly far above the quote (a typo, or a prefilled
+    # field typed over). Bounded against the job's own estimate rather than a
+    # global constant so the same rule fits a ₹399 jumpstart and a tow.
+    PRICE_FINAL_OUT_OF_RANGE = "PRICE_FINAL_OUT_OF_RANGE"
     # A field was sent that does not belong to the requested transition — a
     # price on an 'in_progress' move, a cancellation reason on a completion.
     # Refused rather than ignored: silently dropping it is how a price goes

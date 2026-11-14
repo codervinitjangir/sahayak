@@ -120,6 +120,7 @@ class FakeJob:
         self.user_id = OWNER_ID
         self.status = status
         self.price_final = None
+        self.price_estimate = None
         self.completed_at = None
         self.cancelled_at = None
         self.cancellation_reason = None
@@ -351,6 +352,33 @@ class TestConditionalBodyFields:
         assert exc.value.code == ErrorCode.PRICE_FINAL_REQUIRED
         assert not session.committed
         assert stub_repos["history"] == []
+
+    def test_final_price_far_above_the_estimate_is_refused(self, stub_repos):
+        """Found 2026-11-14 in a live run: a ₹499 jumpstart was completed at
+        ₹499,499 (a prefilled field typed over) and the API stored it. The
+        partner's earnings and the owner's bill both read price_final."""
+        from decimal import Decimal
+
+        job = FakeJob("in_progress")
+        job.price_estimate = Decimal("499.00")
+        stub_repos["job"] = job
+        session = FakeSession()
+        with pytest.raises(AppError) as exc:
+            transition(Payload("completed", price_final=Decimal("499499")), session)
+        assert exc.value.status_code == 400
+        assert exc.value.code == ErrorCode.PRICE_FINAL_OUT_OF_RANGE
+        assert not session.committed
+        assert stub_repos["history"] == []
+
+    def test_final_price_up_to_the_ceiling_is_accepted(self, stub_repos):
+        from decimal import Decimal
+
+        job = FakeJob("in_progress")
+        job.price_estimate = Decimal("499.00")
+        stub_repos["job"] = job
+        session = FakeSession()
+        transition(Payload("completed", price_final=Decimal("2495")), session)
+        assert session.committed
 
     def test_price_on_a_non_completion_is_400(self, stub_repos):
         """Refused, not ignored: the client has the wrong state in mind, and

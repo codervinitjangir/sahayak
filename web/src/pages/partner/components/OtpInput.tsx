@@ -36,6 +36,22 @@ export const OtpInput: React.FC<OtpInputProps> = ({
     }
   };
 
+  // The input can receive more than one character at once: SMS autofill
+  // (autocomplete="one-time-code") writes the whole code into the first box,
+  // and fast typing outruns the re-render. Keeping only the last character
+  // dropped the rest, leaving a one-digit code the user could not finish.
+  const handleInput = (index: number, raw: string) => {
+    const clean = raw.replace(/\D/g, '');
+    if (clean.length > 2 || (clean.length === 2 && !digits[index])) {
+      const merged = (value.slice(0, index) + clean).slice(0, length);
+      onChange(merged);
+      focusInput(Math.min(merged.length, length - 1));
+      return;
+    }
+    // One character typed over an existing digit arrives as two; the new one is last.
+    handleChange(index, clean.slice(-1));
+  };
+
   const handleKeyDown = (index: number, e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Backspace') {
       if (!digits[index] && index > 0) {
@@ -67,12 +83,12 @@ export const OtpInput: React.FC<OtpInputProps> = ({
           type="text"
           inputMode="numeric"
           pattern="[0-9]*"
-          maxLength={1}
+          maxLength={length}
           value={digit}
           disabled={disabled}
           aria-label={`Digit ${i + 1}`}
           className="otp-input-group__digit"
-          onChange={(e) => handleChange(i, e.target.value.slice(-1))}
+          onChange={(e) => handleInput(i, e.target.value)}
           onKeyDown={(e) => handleKeyDown(i, e)}
           onPaste={i === 0 ? handlePaste : undefined}
           onFocus={(e) => e.target.select()}

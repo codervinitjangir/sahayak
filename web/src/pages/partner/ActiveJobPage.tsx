@@ -50,9 +50,18 @@ export const ActiveJobPage: React.FC = () => {
   const priceValue = Number(priceFinal);
   const needsCode = job?.status === 'partner_en_route';
   const needsPrice = job?.status === 'in_progress';
+  // Mirrors the backend's ceiling (job_service._check_final_price_in_range):
+  // max(5 x estimate, 5000), capped at 50000. Caught here so a mistyped amount
+  // gets a plain message before the round trip.
+  const priceCeiling =
+    job?.price_estimate != null
+      ? Math.min(50000, Math.max(Number(job.price_estimate) * 5, 5000))
+      : 50000;
+  const priceTooHigh = needsPrice && Number.isFinite(priceValue) && priceValue > priceCeiling;
   const inputInvalid =
     (needsCode && !/^\d{4}$/.test(startCode)) ||
-    (needsPrice && (priceFinal.trim() === '' || !Number.isFinite(priceValue) || priceValue < 0));
+    (needsPrice &&
+      (priceFinal.trim() === '' || !Number.isFinite(priceValue) || priceValue < 0 || priceTooHigh));
 
   const handleAdvance = async () => {
     if (!job || !next || inputInvalid) return;
@@ -76,7 +85,9 @@ export const ActiveJobPage: React.FC = () => {
     ? transition.error instanceof ApiError
       ? transition.error.code === 'INVALID_START_CODE'
         ? 'That code does not match. Ask the owner to read the 4-digit code on their screen again.'
-        : transition.error.message
+        : transition.error.code === 'PRICE_FINAL_OUT_OF_RANGE'
+          ? 'That amount is far above the quote. Check it and enter the amount you actually charged.'
+          : transition.error.message
       : 'Could not update the job. Check your connection and try again.'
     : null;
 
@@ -207,8 +218,17 @@ export const ActiveJobPage: React.FC = () => {
                   step="1"
                   value={priceFinal}
                   onChange={(e) => setPriceFinal(e.target.value)}
+                  // Prefilled with the estimate; selecting on focus means typing
+                  // replaces it instead of appending (499 -> 499499).
+                  onFocus={(e) => e.target.select()}
+                  aria-invalid={priceTooHigh}
                   className="mt-2 w-full min-h-[48px] rounded-xl border border-slate-300 px-4 text-lg font-bold text-slate-900 focus:ring-2 focus:ring-teal-600 focus:outline-none"
                 />
+                {priceTooHigh && (
+                  <p role="alert" className="mt-2 text-sm font-semibold text-red-700">
+                    ₹{priceValue} is above the maximum of ₹{priceCeiling} for this job. Check for an extra digit.
+                  </p>
+                )}
                 {job.price_estimate != null && (
                   <p className="mt-2 text-sm text-slate-500">Upfront estimate given to the owner: ₹{Number(job.price_estimate)}</p>
                 )}

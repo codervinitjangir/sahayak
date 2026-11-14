@@ -59,7 +59,12 @@ export const AppRoutes: React.FC = () => {
       {/* Ops console & partner verification queue */}
       <Route path="/admin" element={<Navigate to="/admin/overview" replace />} />
       <Route path="/admin/verify" element={<Navigate to="/admin/partners" replace />} />
-      <Route path="/admin/:tab" element={<AdminConsole />} />
+      {/* UX gate only: the data is protected server-side (401/403 on every
+          /admin/analytics call). This stops the console shell rendering for a
+          visitor who is not signed in as ops. */}
+      <Route element={<RequireRole allowedRoles={['ops', 'super_admin']} />}>
+        <Route path="/admin/:tab" element={<AdminConsole />} />
+      </Route>
 
       {/* Fallback */}
       <Route path="*" element={<Navigate to="/owner" replace />} />

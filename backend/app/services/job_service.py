@@ -502,7 +502,15 @@ async def get_job_with_status(
             and assignment.partner_id is not None
             and identity.local_id == assignment.partner_id
         )
-        may_see_contact_details = is_owner or is_assigned_partner
+        # Release follows the assignment, not just the role (ADR-017): an
+        # 'offered' partner has not taken the job and may be replaced by the
+        # next candidate, so the owner gets no name, number or id until the
+        # partner has accepted. Found 2026-11-14: the owner's page rendered
+        # tel:<partner phone> while the offer was still pending.
+        owner_may_see_partner = is_owner and (
+            assignment.status in job_repository.RESPONSIBLE_ASSIGNMENT_STATUSES
+        )
+        may_see_contact_details = owner_may_see_partner or is_assigned_partner
 
         # partner_id is nullable on job_assignments, so an offer can exist
         # without a resolvable partner; the partner fields then stay None
@@ -628,6 +636,34 @@ def _check_body_applies(payload: JobStatusTransitionRequest) -> None:
         raise BadRequestError(
             ErrorCode.FIELD_NOT_APPLICABLE,
             "cancellation_reason may only be sent when status is 'cancelled'",
+        )
+
+
+# A completion may exceed the quote (extra parts, a longer tow), but not by an
+# order of magnitude. Ceiling = max(5 x estimate, floor); with no estimate on the
+# row, the absolute cap alone applies.
+FINAL_PRICE_MULTIPLE = Decimal("5")
+FINAL_PRICE_FLOOR = Decimal("5000")
+FINAL_PRICE_ABSOLUTE_CAP = Decimal("50000")
+
+
+def _check_final_price_in_range(job, payload: JobStatusTransitionRequest) -> None:
+    """Refuse an implausible final price before it becomes the owner's bill and
+    the partner's earnings. Only applies to a completion; _check_body_applies
+    has already guaranteed price_final is present there."""
+    if payload.status != "completed" or payload.price_final is None:
+        return
+    estimate = getattr(job, "price_estimate", None)
+    ceiling = FINAL_PRICE_ABSOLUTE_CAP
+    if estimate is not None:
+        ceiling = min(
+            FINAL_PRICE_ABSOLUTE_CAP,
+            max(Decimal(estimate) * FINAL_PRICE_MULTIPLE, FINAL_PRICE_FLOOR),
+        )
+    if payload.price_final > ceiling:
+        raise BadRequestError(
+            ErrorCode.PRICE_FINAL_OUT_OF_RANGE,
+            f"price_final exceeds the allowed maximum of {ceiling} for this job",
         )
 
 
@@ -763,6 +799,7 @@ async def transition_job_status(
         )
 
     _check_body_applies(payload)
+    _check_final_price_in_range(job, payload)
 
     # func.now() rather than a Python datetime so completed_at, cancelled_at and
     # the history row's changed_at all come off the database clock. Timestamps

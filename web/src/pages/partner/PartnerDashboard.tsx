@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   ChevronRight,
+  AlertTriangle,
   Eye,
   EyeOff,
   MapPin,
@@ -400,10 +401,24 @@ const LiveZoneMap: React.FC<LiveZoneMapProps> = ({
               You're available. Waiting for the next job.
             </h2>
             <ul className="mt-5 text-sm text-ink-soft space-y-2 text-left inline-block">
-              <li className="flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-brand-700 shrink-0" aria-hidden="true" />
-                <span>Your location is shared with dispatch while you are on duty.</span>
-              </li>
+              {locationAgeSeconds !== null ? (
+                <li className="flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-brand-700 shrink-0" aria-hidden="true" />
+                  <span>Your location is shared with dispatch while you are on duty.</span>
+                </li>
+              ) : (
+                <li role="alert" data-testid="no-gps-fix" className="flex items-start gap-2 text-status-warning">
+                  <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" aria-hidden="true" />
+                  <span>
+                    No GPS fix yet, so dispatch cannot see you and will not send offers. Allow
+                    location in your browser, then tap{' '}
+                    <button type="button" onClick={onRefreshLocation} className="font-semibold underline">
+                      Share location
+                    </button>
+                    .
+                  </span>
+                </li>
+              )}
             </ul>
           </div>
         )}
@@ -503,7 +518,7 @@ const LiveZoneMap: React.FC<LiveZoneMapProps> = ({
             className={`w-2 h-2 rounded-full ${isOffDuty ? 'bg-slate-300' : 'bg-status-success animate-pulse'}`}
           />
           <span className="text-xs font-semibold uppercase tracking-wide text-ink-soft">
-            {isOffDuty ? 'Not sharing location' : 'Sharing location'}
+            {isOffDuty || locationAgeSeconds === null ? 'Not sharing location' : 'Sharing location'}
           </span>
         </div>
       </div>

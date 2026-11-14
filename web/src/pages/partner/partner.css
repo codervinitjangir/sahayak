@@ -58,12 +58,16 @@
 
 .otp-input-group {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   justify-content: center;
 }
 
+/* Flexible, not a fixed 48px: six fixed boxes plus gaps are 338px, wider than
+   the card on a 340px phone, which clipped the first digit. */
 .otp-input-group__digit {
-  width: 48px;
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 48px;
   height: 56px;
   text-align: center;
   font-size: 22px;
