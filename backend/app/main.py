@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.admin import router as admin_router, admin_partners_router, admin_ops_router
 from app.api.auth import router as auth_router
+from app.api.disputes import admin_disputes_router, router as disputes_router
 from app.api.health import router as health_router
 from app.api.job_assignments import router as job_assignments_router
 from app.api.jobs import router as jobs_router
@@ -35,8 +36,6 @@ async def lifespan(app: FastAPI):
     await close_redis()
     log_event("app_stopped", outcome="success")
 
-
-from app.api.disputes import admin_disputes_router, router as disputes_router
 
 app = FastAPI(
     title="Sahayak API",
