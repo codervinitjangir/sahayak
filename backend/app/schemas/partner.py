@@ -305,6 +305,10 @@ class PartnerStatsResponse(BaseModel):
 
     partner_id: uuid.UUID
     verification_status: str
+    # The server's duty state. Clients must seed their on/off switch from this:
+    # a switch kept only in app memory read "Off duty" after a restart while
+    # dispatch, which reads this column, kept sending jobs.
+    is_available: bool = False
     rating_avg: Decimal = Field(default=Decimal("0.0"))
     rating_count: int = Field(default=0)
     acceptance_rate_pct: int = Field(default=100)

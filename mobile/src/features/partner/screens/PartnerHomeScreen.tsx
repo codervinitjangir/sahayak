@@ -1,8 +1,9 @@
 // ─── Sahayak: partner shell ───────────────────────────────────────────────────
 // Home (shift, offers, active job), Earnings, Account. Every figure on screen
 // comes from the backend; a failed read shows an error, never a zero.
-import React, { useCallback, useEffect, useState } from "react";
-import { View, Text, ScrollView, Pressable, Switch, StyleSheet, StatusBar, RefreshControl, Linking } from "react-native";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { View, Text, ScrollView, Pressable, Switch, StyleSheet, StatusBar, RefreshControl, Linking, AppState } from "react-native";
+import { NAV_APP_LABEL, getNavApp, setNavApp as saveNavApp, type NavApp } from "../../../services/navigationPreference";
 import { showDialog } from "../../../components/ui/AppDialog";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -75,9 +76,19 @@ export default function PartnerHomeScreen() {
   const [failed, setFailed] = useState<string[]>([]);
   const [servicesCollapsed, setServicesCollapsed] = useState(false);
   const pausedServices = services.filter((s) => s.dispatchable === false);
-  const [loudAlerts, setLoudAlerts] = useState(true);
-  const [vibrateAlerts, setVibrateAlerts] = useState(true);
-  const [navApp, setNavApp] = useState("Google Maps");
+  const [navApp, setNavApp] = useState<NavApp>("google");
+  // While a duty change is in flight the server answer we are about to read
+  // may predate it; do not let a stats refresh flip the switch back.
+  const dutyBusyRef = useRef(false);
+
+  useEffect(() => {
+    void getNavApp().then(setNavApp);
+  }, []);
+
+  const chooseNavApp = (app: NavApp) => {
+    setNavApp(app);
+    void saveNavApp(app);
+  };
 
   // Five independent reads: one failing degrades only its own card.
   const load = useCallback(async () => {
@@ -90,7 +101,14 @@ export default function PartnerHomeScreen() {
       }
     };
     await Promise.all([
-      run("your stats", async () => setStats(await partnerApi.getStats())),
+      run("your stats", async () => {
+        const s = await partnerApi.getStats();
+        setStats(s);
+        // The server owns duty state (dispatch reads partners.is_available).
+        // Seeding from it is what keeps a reopened app from saying "Off duty"
+        // while jobs are still being sent, and keeps offer polling running.
+        if (typeof s.is_available === "boolean" && !dutyBusyRef.current) setOnline(s.is_available);
+      }),
       run("earnings", async () => setEarnings(await partnerApi.getEarnings())),
       run("your services", async () => setServices((await partnerApi.getServices()).services ?? [])),
       run("job history", async () => setJobs((await jobsApi.fetchMyJobs(30, 0)).items ?? [])),
@@ -98,10 +116,19 @@ export default function PartnerHomeScreen() {
     ]);
     setFailed(bad);
     setLoading(false);
-  }, []);
+  }, [setOnline]);
 
   useEffect(() => {
     void load();
+  }, [load]);
+
+  // Coming back to the app (from Maps, a call, the launcher) re-reads the
+  // server: duty may have changed on another device or from the admin panel.
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") void load();
+    });
+    return () => sub.remove();
   }, [load]);
 
   const fetchOffers = useCallback(async () => {
@@ -149,6 +176,7 @@ export default function PartnerHomeScreen() {
       return;
     }
     setDutyBusy(true);
+    dutyBusyRef.current = true;
     try {
       if (val) {
         const coords = knownLocation ?? (await acquireLocation());
@@ -168,6 +196,7 @@ export default function PartnerHomeScreen() {
       );
     } finally {
       setDutyBusy(false);
+      dutyBusyRef.current = false;
     }
   };
 
@@ -552,42 +581,20 @@ export default function PartnerHomeScreen() {
             <View>
               <SectionHeader title="Operational Settings" />
               <Card noPad>
-                <View style={styles.settingsRow}>
-                  <View style={{ flex: 1, gap: 2 }}>
-                    <Text style={styles.settingsLabel}>Loud offer sound alerts</Text>
-                    <Text style={styles.settingsSub}>
-                      High-priority chime for incoming breakdown offers
-                    </Text>
-                  </View>
-                  <Switch
-                    value={loudAlerts}
-                    onValueChange={setLoudAlerts}
-                    trackColor={{ false: Colors.border, true: Colors.brand700 }}
-                  />
-                </View>
-
-                <View style={[styles.settingsRow, styles.settingsDivider]}>
-                  <View style={{ flex: 1, gap: 2 }}>
-                    <Text style={styles.settingsLabel}>Vibrate on job status updates</Text>
-                    <Text style={styles.settingsSub}>
-                      Tactile alerts when owner confirms arrival
-                    </Text>
-                  </View>
-                  <Switch
-                    value={vibrateAlerts}
-                    onValueChange={setVibrateAlerts}
-                    trackColor={{ false: Colors.border, true: Colors.brand700 }}
-                  />
-                </View>
-
+                <ListRow
+                  icon="notifications-outline"
+                  title="Sound and vibration"
+                  subtitle="New offers ring and vibrate. Change it in your phone's notification settings."
+                  onPress={() => void Linking.openSettings()}
+                />
                 <ListRow
                   icon="navigate-outline"
                   title="Navigation app"
-                  subtitle={navApp}
+                  subtitle={NAV_APP_LABEL[navApp]}
                   onPress={() => {
-                    showDialog("Select Navigation App", "Choose your default navigation tool for pickups:", [
-                      { text: "Google Maps", onPress: () => setNavApp("Google Maps") },
-                      { text: "Apple Maps", onPress: () => setNavApp("Apple Maps") },
+                    showDialog("Navigation app", "Which app should open when you tap Navigate on a job?", [
+                      { text: NAV_APP_LABEL.google, onPress: () => chooseNavApp("google") },
+                      { text: NAV_APP_LABEL.system, onPress: () => chooseNavApp("system") },
                       { text: "Cancel", style: "cancel" },
                     ]);
                   }}

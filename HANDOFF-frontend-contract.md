@@ -2355,3 +2355,8 @@ Missing on an older backend means `true`.
 No backend change; a client note. The response is `JobStatusTransitionResponse` (`id`, `status`,
 `assignment_status`). Mobile typed it as the full job and stored it, which blanked the partner's customer
 card, pickup coordinates and vehicle until the next poll. Merge only `status` into the job you hold.
+
+### 20.3 `GET /api/v1/partners/me/stats` now returns `is_available` (additive)
+The server's duty state. Seed the on/off-duty switch from it on every load and app resume. Found on a
+device: the app kept duty in memory only, so after a restart it read "Off duty" and stopped polling offers
+while the server still had `is_available = true` and dispatch kept sending jobs.

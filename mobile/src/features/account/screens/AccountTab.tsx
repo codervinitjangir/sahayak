@@ -69,9 +69,6 @@ export default function AccountTab({ onAddVehicle }: { onAddVehicle: () => void 
 
   // Settings & preferences state
   const [vehiclesCollapsed, setVehiclesCollapsed] = useState(false);
-  const [autoShareTracking, setAutoShareTracking] = useState(true);
-  const [liveGpsNotifications, setLiveGpsNotifications] = useState(true);
-  const [arrivalAlerts, setArrivalAlerts] = useState(true);
 
   const vehicleList = vehicles.data ?? [];
 
@@ -223,19 +220,6 @@ export default function AccountTab({ onAddVehicle }: { onAddVehicle: () => void 
       <View>
         <SectionHeader title="Safety & Trip Sharing" />
         <Card noPad>
-          <View style={styles.settingsRow}>
-            <View style={{ flex: 1, gap: 2 }}>
-              <Text style={styles.settingsLabel}>Auto-share live tracking link</Text>
-              <Text style={styles.settingsSub}>
-                Prompts one-tap WhatsApp / SMS tracking link to family when help is requested
-              </Text>
-            </View>
-            <Switch
-              value={autoShareTracking}
-              onValueChange={setAutoShareTracking}
-              trackColor={{ false: Colors.border, true: Colors.brand700 }}
-            />
-          </View>
           <ListRow
             icon="call-outline"
             title={`Police & Medical Services (${EMERGENCY_NUMBER})`}
@@ -254,34 +238,15 @@ export default function AccountTab({ onAddVehicle }: { onAddVehicle: () => void 
 
       {/* Notification Preferences */}
       <View>
-        <SectionHeader title="Notification Preferences" />
+        <SectionHeader title="Notifications" />
         <Card noPad>
-          <View style={styles.settingsRow}>
-            <View style={{ flex: 1, gap: 2 }}>
-              <Text style={styles.settingsLabel}>Live GPS tracking updates</Text>
-              <Text style={styles.settingsSub}>
-                Push alerts when the partner starts driving to your vehicle
-              </Text>
-            </View>
-            <Switch
-              value={liveGpsNotifications}
-              onValueChange={setLiveGpsNotifications}
-              trackColor={{ false: Colors.border, true: Colors.brand700 }}
-            />
-          </View>
-          <View style={[styles.settingsRow, styles.rowDivider]}>
-            <View style={{ flex: 1, gap: 2 }}>
-              <Text style={styles.settingsLabel}>Arrival notification sound</Text>
-              <Text style={styles.settingsSub}>
-                Play chime once partner arrives at your breakdown location
-              </Text>
-            </View>
-            <Switch
-              value={arrivalAlerts}
-              onValueChange={setArrivalAlerts}
-              trackColor={{ false: Colors.border, true: Colors.brand700 }}
-            />
-          </View>
+          <ListRow
+            icon="notifications-outline"
+            title="Notification settings"
+            subtitle="Partner updates, arrival and completion alerts. Manage sound and banners in your phone's settings."
+            onPress={() => void Linking.openSettings()}
+            last
+          />
         </Card>
       </View>
 

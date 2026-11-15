@@ -258,6 +258,29 @@ def test_get_partner_stats_returns_metrics(monkeypatch):
     assert stats.lifetime_jobs == 38
 
 
+def test_partner_stats_report_the_server_duty_state(monkeypatch):
+    """Found 2026-11-15 on a device: the app kept on-duty in memory only, so a
+    reopened app said "Off duty" (and stopped polling offers) while the server
+    still had is_available = true and dispatch kept sending jobs. The app now
+    seeds the switch from this field."""
+    async def fake_get_partner_stats(db, partner_id):
+        return {
+            "partner_id": partner_id,
+            "verification_status": "verified",
+            "is_available": True,
+            "rating_avg": Decimal("0.0"),
+            "rating_count": 0,
+            "acceptance_rate_pct": 100,
+            "lifetime_jobs": 0,
+        }
+
+    from app.repositories import partner_repository
+    monkeypatch.setattr(partner_repository, "get_partner_stats", fake_get_partner_stats)
+
+    stats = asyncio.run(partner_service.get_partner_stats(FakeSession(), PARTNER_IDENTITY))
+    assert stats.is_available is True
+
+
 def test_endpoint_get_my_stats_envelope(monkeypatch):
     """GET /partners/me/stats wraps stats response in standard envelope."""
     from app.api.partners import get_my_stats

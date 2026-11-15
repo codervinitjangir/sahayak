@@ -4,6 +4,8 @@ import type { BackendJob } from "./jobs";
 export interface MobilePartnerTrustStats {
   partner_id: string;
   verification_status: string;
+  /** Server duty state; the on/off switch is seeded from this. */
+  is_available?: boolean;
   rating_avg: number;
   rating_count: number;
   acceptance_rate_pct: number;

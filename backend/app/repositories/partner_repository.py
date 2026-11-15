@@ -200,6 +200,7 @@ async def get_partner_stats(
     return {
         "partner_id": partner.id,
         "verification_status": partner.verification_status,
+        "is_available": bool(partner.is_available),
         "rating_avg": partner.rating_avg or Decimal("0.0"),
         "rating_count": partner.rating_count or 0,
         "acceptance_rate_pct": acceptance_rate_pct,

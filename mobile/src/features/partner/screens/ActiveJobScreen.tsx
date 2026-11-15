@@ -20,6 +20,7 @@ import { jobsApi } from "../../../services/api/jobs";
 import type { BackendJob } from "../../../services/api/jobs";
 import type { PartnerStackParamList } from "../../../types";
 import { inr, serviceMetaFor } from "../partnerFormat";
+import { directionsUrl, getNavApp } from "../../../services/navigationPreference";
 
 type Nav = NativeStackNavigationProp<PartnerStackParamList, "ActiveJob">;
 type Route = RouteProp<PartnerStackParamList, "ActiveJob">;
@@ -195,8 +196,11 @@ export default function ActiveJobScreen() {
       );
       return;
     }
-    void Linking.openURL(
-      `https://www.google.com/maps/dir/?api=1&destination=${pickup.latitude},${pickup.longitude}`
+    void getNavApp().then((app) =>
+      Linking.openURL(directionsUrl(app, pickup.latitude, pickup.longitude)).catch(() =>
+        // e.g. no app registered for geo: links; Google Maps on the web always opens.
+        Linking.openURL(directionsUrl("google", pickup.latitude, pickup.longitude))
+      )
     );
   };
 
