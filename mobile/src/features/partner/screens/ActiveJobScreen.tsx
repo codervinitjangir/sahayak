@@ -5,7 +5,7 @@
 // in_progress is POST /jobs/{id}/start with the owner's code, and completion
 // requires the partner to enter the amount actually charged.
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Platform, StatusBar, Animated, Linking, Pressable, TextInput, ActivityIndicator } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, Platform, StatusBar, Animated, Linking, Pressable, TextInput, ActivityIndicator, Keyboard, ScrollView } from "react-native";
 import { showDialog } from "../../../components/ui/AppDialog";
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
@@ -54,6 +54,20 @@ export default function ActiveJobScreen() {
     longitude: number;
   } | null>(null);
   const slideAnim = useRef(new Animated.Value(100)).current;
+  // The start-code boxes and the amount field sit at the bottom of the sheet;
+  // without lifting it, the number pad covers exactly what is being typed.
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  useEffect(() => {
+    const showEvt = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvt = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const show = Keyboard.addListener(showEvt, (e) => setKeyboardHeight(e.endCoordinates.height));
+    const hide = Keyboard.addListener(hideEvt, () => setKeyboardHeight(0));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
 
   const loadJob = useCallback(
     async (showSpinner: boolean) => {
@@ -106,7 +120,9 @@ export default function ActiveJobScreen() {
     enRouteSynced.current = true;
     jobsApi
       .updateJobStatus(job.id, "partner_en_route")
-      .then((updated) => setJob(updated))
+      // The response is a confirmation, not the job: keep every field we
+      // already have and take only the new status.
+      .then((updated) => setJob((prev) => (prev ? { ...prev, status: updated.status } : prev)))
       .catch(() => {
         setActionError(
           "Could not tell Sahayak you are en route. The job is still assigned to you; stop and retry from the dashboard if this persists."
@@ -215,7 +231,8 @@ export default function ActiveJobScreen() {
     setActionError(null);
     try {
       const updated = await jobsApi.startJob(job.id, code);
-      setJob(updated);
+      Keyboard.dismiss();
+      setJob((prev) => (prev ? { ...prev, status: updated.status } : prev));
       setStep("in_progress");
     } catch (err: any) {
       const codeName = errorCodeOf(err);
@@ -272,6 +289,11 @@ export default function ActiveJobScreen() {
   };
 
   const renderMap = () => {
+    // Before the job has loaded there is nothing to say about coordinates yet;
+    // claiming "not shared" here flashed a false message on every accept.
+    if (!job) {
+      return <View style={styles.mapLoading} />;
+    }
     if (!pickup) {
       return (
         <View style={styles.mapFallback}>
@@ -296,6 +318,7 @@ export default function ActiveJobScreen() {
             <Ionicons name="chevron-back" size={24} color={Colors.textPrimary} />
           </Pressable>
           <View style={styles.mapStatus}>
+            <View style={[styles.mapStatusDot, step === "in_progress" && { backgroundColor: Colors.success }]} />
             <Text style={styles.mapStatusText}>
               {step === "in_progress"
                 ? "Service in progress"
@@ -304,6 +327,15 @@ export default function ActiveJobScreen() {
                 : "On the way to pickup"}
             </Text>
           </View>
+          <View style={{ flex: 1 }} />
+          <Pressable
+            style={styles.mapBack}
+            onPress={handleNavigate}
+            accessibilityRole="button"
+            accessibilityLabel="Open directions in maps"
+          >
+            <Ionicons name="navigate" size={20} color={Colors.brand700} />
+          </Pressable>
         </View>
       </View>
     );
@@ -599,21 +631,23 @@ export default function ActiveJobScreen() {
 
       {renderMap()}
 
-      {pickup ? (
-        <TouchableOpacity style={styles.myLocBtn} onPress={handleNavigate}>
-          <Ionicons name="navigate" size={20} color={Colors.brand700} />
-        </TouchableOpacity>
-      ) : null}
-
       <Animated.View
         style={[
           styles.sheet,
           { transform: [{ translateY: slideAnim }] },
           !pickup && styles.sheetNoMap,
+          keyboardHeight > 0 && { bottom: keyboardHeight, paddingBottom: Spacing.md },
         ]}
       >
         <View style={styles.sheetHandle} />
-        {renderBody()}
+        <ScrollView
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ gap: Spacing.sm }}
+          bounces={false}
+        >
+          {renderBody()}
+        </ScrollView>
       </Animated.View>
     </View>
   );
@@ -622,7 +656,9 @@ export default function ActiveJobScreen() {
 const styles = StyleSheet.create({
   mapOverlay: { position: "absolute", top: 0, left: 0, right: 0, paddingTop: 48, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", gap: 12 },
   mapBack: { width: 48, height: 48, borderRadius: 24, backgroundColor: "#FFFFFF", alignItems: "center", justifyContent: "center", elevation: 4 },
-  mapStatus: { backgroundColor: "#FFFFFF", borderRadius: 999, paddingHorizontal: 14, minHeight: 40, justifyContent: "center", elevation: 4 },
+  mapStatus: { backgroundColor: "#FFFFFF", borderRadius: 999, paddingHorizontal: 14, minHeight: 40, flexDirection: "row", alignItems: "center", gap: 8, elevation: 4 },
+  mapStatusDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: Colors.brand700 },
+  mapLoading: { flex: 1, backgroundColor: "#EEF2F6" },
   mapStatusText: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#0F172A" },
   container: { flex: 1, backgroundColor: "#E2E8F0" },
   map: { ...(StyleSheet.absoluteFill as object) },
@@ -749,16 +785,16 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
   },
   customerAddress: {
-    fontSize: Typography.fontSize.xs,
+    fontSize: Typography.fontSize.sm,
     color: Colors.textSecondary,
     fontFamily: Typography.fontFamily.regular,
     marginTop: 2,
   },
   iconRow: { flexDirection: "row", gap: 8 },
   circleActionBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     backgroundColor: "#F8FAFC",
     borderWidth: 1,
     borderColor: Colors.border,

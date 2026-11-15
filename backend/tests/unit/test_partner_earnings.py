@@ -136,3 +136,46 @@ class TestPartnerServices:
         )
 
         assert result.services == []
+
+    def test_equipment_services_are_flagged_undispatchable_without_verified_equipment(
+        self, monkeypatch
+    ):
+        """Found 2026-11-15 on a device: a partner with no verified tow vehicle
+        saw Flatbed Towing listed as active, while dispatch skipped them for
+        every towing job (get_eligible_partners requires verified equipment).
+        The list has to say which services can actually reach them."""
+
+        class Row:
+            def __init__(self, id, code, name, requires):
+                self.id = id
+                self.code = code
+                self.name = name
+                self.requires_vehicle_equipment = requires
+
+        async def get_partner_services(db, partner_id):
+            return [
+                Row(1, "flatbed_towing", "Flatbed Towing", True),
+                Row(3, "battery_jumpstart", "Battery Jumpstart", False),
+            ]
+
+        state = {"has_equipment": False}
+
+        async def has_verified_equipment(db, partner_id):
+            assert partner_id == PARTNER_ID
+            return state["has_equipment"]
+
+        monkeypatch.setattr(
+            partner_repository, "get_partner_services", get_partner_services
+        )
+        monkeypatch.setattr(
+            partner_repository, "has_verified_equipment", has_verified_equipment
+        )
+
+        result = asyncio.run(partner_service.get_partner_services(None, _identity()))
+        towing, battery = result.services
+        assert (towing.requires_equipment, towing.dispatchable) == (True, False)
+        assert (battery.requires_equipment, battery.dispatchable) == (False, True)
+
+        state["has_equipment"] = True
+        result = asyncio.run(partner_service.get_partner_services(None, _identity()))
+        assert all(s.dispatchable for s in result.services)

@@ -30,7 +30,7 @@ import type { PaymentRecord } from "../../../services/api/payments";
 import type { MobilePartnerEarnings } from "../../../services/api/partner";
 import { useAuthStore } from "../../../store/authStore";
 import type { PartnerStackParamList } from "../../../types";
-import { inr } from "../partnerFormat";
+import { firstNameFor, inr } from "../partnerFormat";
 
 type Nav = NativeStackNavigationProp<PartnerStackParamList, "PartnerJobDone">;
 type Route = RouteProp<PartnerStackParamList, "PartnerJobDone">;
@@ -150,7 +150,7 @@ export default function PartnerJobDoneScreen() {
     ]).start();
   }, [fadeAnim, scaleAnim]);
 
-  const firstName = partnerName?.trim().split(/\s+/)[0];
+  const firstName = firstNameFor(partnerName);
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>

@@ -1,7 +1,10 @@
 // ─── Sahayak — Root Navigator ─────────────────────────────────────────────────
 // Role-aware routing: Auth → Owner flow OR Partner flow
-import React from "react";
+import React, { useEffect } from "react";
 import { NavigationContainer } from "@react-navigation/native";
+import { navigationRef, openNotificationRoute } from "./navigationRef";
+import * as Notifications from "expo-notifications";
+import { routeForNotification } from "../services/notificationMeta";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
 import { useAuthStore } from "../store/authStore";
@@ -86,9 +89,30 @@ function AuthNavigator() {
 // ─── Root Navigator ───────────────────────────────────────────────────────────
 export default function RootNavigator() {
   const { user } = useAuthStore();
+  const role = user?.role;
+
+  // Tapping a push: route by its event and job. Also handles the push that
+  // launched the app from killed state (getLastNotificationResponseAsync).
+  useEffect(() => {
+    if (!role) return;
+    const handle = (response: Notifications.NotificationResponse | null) => {
+      const data = (response?.notification.request.content.data ?? {}) as {
+        event?: string;
+        job_id?: string | null;
+      };
+      if (!data.event) return;
+      const target = routeForNotification(role, data.event, data.job_id);
+      // The navigator may still be mounting after a cold start.
+      if (navigationRef.isReady()) openNotificationRoute(target);
+      else setTimeout(() => openNotificationRoute(target), 600);
+    };
+    void Notifications.getLastNotificationResponseAsync().then(handle).catch(() => {});
+    const sub = Notifications.addNotificationResponseReceivedListener(handle);
+    return () => sub.remove();
+  }, [role]);
 
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef}>
       {!user ? (
         <AuthNavigator />
       ) : user.role === "partner" ? (

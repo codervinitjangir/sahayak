@@ -35,7 +35,13 @@
     },
     "plugins": [
       "expo-font",
-      "expo-notifications",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/android-icon-monochrome.png",
+          "color": "#0F766E"
+        }
+      ],
       [
         "expo-location",
         {

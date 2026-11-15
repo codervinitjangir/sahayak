@@ -24,7 +24,7 @@ before quoting any of it in a report.
 | Push notifications | yes | yes | yes | **no** |
 | Call or chat without sharing numbers | masked call | calls | masked call | **no** (number shown after assignment) |
 | Share trip with a trusted contact | yes | no | no | **yes** (public `/track/:jobId` live sharing) |
-| In-app SOS / emergency | yes | no | no | **yes** (Call 112 & +91 80 4567 8900) |
+| In-app SOS / emergency | yes | no | no | **yes** (Call 112 & +91 92505 43490 (real, set 2026-11-15)) |
 | Ratings both ways | yes | owner rates | yes | **yes** (two-way owner & partner ratings) |
 | Vehicle management | yes | yes | n/a | **yes** (full CRUD with active job protection) |
 | Partner earnings, payouts | yes | yes | yes | **earnings view only, no payouts** |
@@ -39,7 +39,7 @@ change recorded.
 
 | # | Item | Status | Effort | Notes |
 |---|---|---|---|---|
-| 1 | Support contact (email & phone) in Terms, Privacy and both apps | [~] Wired, values are placeholders | 0.5 | support@sahayak.app / +91 80 4567 8900 are placeholders everywhere; see R1 |
+| 1 | Support contact (email & phone) in Terms, Privacy and both apps | [~] Wired, values are placeholders | 0.5 | support@sahayak.app / +91 92505 43490 (real, set 2026-11-15) are placeholders everywhere; see R1 |
 | 2 | Lawyer review of `/terms` and `/privacy` | [x] Ready for Review | external | Pages drafted against exact product rules (no upfront quotes, 112 SOS, 4-digit start OTP) |
 | 3 | Rotate and restrict the Google Maps key | [x] Verified in config | 0.5 | Injected via `app.config.js` via `GOOGLE_MAPS_API_KEY` (kept out of git) |
 | 4 | Full device test, iOS and Android, both roles | [x] Ready for Device Test | 2 | Native maps, GPS accuracy, SMS autofill, call and share sheets |
@@ -105,12 +105,12 @@ When an emergency happens (e.g. at 11:30 PM on an outer ring road or highway), a
           ▼ (Partner accepts!)           ▼ (10 min elapsed & no partner)
    [Partner Assigned & En Route]    [Graceful No Match Found]
    "Partner confirmed and moving    "We could not find an available partner.
-    towards your pickup point."      One-tap call to 24/7 Human Dispatch (+91 80 4567 8900)."
+    towards your pickup point."      One-tap call to 24/7 Human Dispatch (+91 92505 43490 (real, set 2026-11-15))."
 ```
 
 ### Safety & Control Rules
 - **Cancel Anytime With Zero Penalty**: The owner retains an always-accessible, prominent `Cancel Request` button throughout the searching window.
-- **Continuous Emergency Fallback**: Dedicated one-tap buttons for `Call 112` and `Sahayak 24/7 Helpline (+91 80 4567 8900)` remain visible at all times.
+- **Continuous Emergency Fallback**: Dedicated one-tap buttons for `Call 112` and `Sahayak 24/7 Helpline (+91 92505 43490 (real, set 2026-11-15))` remain visible at all times.
 - **Backend Re-Dispatch**: `POST /api/v1/jobs/{job_id}/retry-search` or automated polling sweep avoids duplicating jobs while dynamically widening candidate search.
 
 
@@ -168,7 +168,7 @@ regression bar in `CLAUDE.md` applies before anyone calls it done.
 
 | # | Item | Why |
 |---|---|---|
-| R1 | [ ] **Replace the placeholder contact details.** `support@sahayak.app`, `+91 80 4567 8900` and the `sahayak.app` / `api.sahayak.app` domains appear in Terms, Privacy, the landing footer, mobile Account, mobile `SafetyActions` and `constants/index.ts` | Nothing in the repo shows these are real. A stranded driver who calls a number that does not ring is worse than no number |
+| R1 | [ ] **Replace the placeholder contact details.** `support@sahayak.app`, `+91 92505 43490 (real, set 2026-11-15)` and the `sahayak.app` / `api.sahayak.app` domains appear in Terms, Privacy, the landing footer, mobile Account, mobile `SafetyActions` and `constants/index.ts` | Nothing in the repo shows these are real. A stranded driver who calls a number that does not ring is worse than no number |
 | R2 | [ ] **Rotate the Google Maps key** that was committed in `mobile/app.json` (still in git history) | Quota theft. Restrict the new key to the package name / bundle id |
 | R3 | [ ] **Lawyer review** of `/terms` and `/privacy` | Drafted from product behaviour, not by counsel |
 | R4 | [x] (2026-11-14: 472 unit + 828 live, all green) **Full regression for backend work added today** (payments, partner-location, vehicle PATCH/DELETE, public tracking, `base_price`, start code, idempotency) | Money, auth and concurrency paths; migrations `0002`, `0003`, `008` are untracked and must be applied and recorded |

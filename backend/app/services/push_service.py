@@ -103,6 +103,30 @@ async def drain(timeout: float = 15.0) -> int:
     return len(pending)
 
 
+# Push titles per event; the body stays the stored notification message. The
+# app name is already shown by the OS, so a title of "Sahayak" said nothing.
+# Mirrors mobile/src/services/notificationMeta.ts. No owner or partner detail
+# goes in a title (ADR-017): a lock screen is readable by anyone nearby.
+PUSH_TITLES: dict[str, str] = {
+    "job_offered": "New job offer",
+    "job_accepted": "Partner assigned",
+    "job_partner_en_route": "Partner on the way",
+    "job_in_progress": "Work started",
+    "job_completed": "Request completed",
+    "job_cancelled_by_owner": "Job cancelled by owner",
+    "job_cancelled_by_partner": "Partner cancelled",
+    "job_cancelled_by_support": "Cancelled by Sahayak",
+    "job_no_match_found": "No partner found",
+    "job_reassigned_by_support": "Job moved",
+    "job_reassigning": "Finding another partner",
+}
+
+# Android channel ids created by mobile/src/services/push.ts. Offers get the
+# loud one so a partner can tell a new job from a status update by sound.
+OFFER_CHANNEL = "offers"
+UPDATE_CHANNEL = "jobs"
+
+
 def build_messages(items: Iterable[dict], tokens_by_owner: dict[tuple[str, uuid.UUID], list[str]]) -> list[dict]:
     """One Expo message per (staged push, device). Pure, for testing."""
     out = []
@@ -110,10 +134,11 @@ def build_messages(items: Iterable[dict], tokens_by_owner: dict[tuple[str, uuid.
         for token in tokens_by_owner.get((item["recipient_type"], item["recipient_id"]), []):
             out.append({
                 "to": token,
-                "title": "Sahayak",
+                "title": PUSH_TITLES.get(item["event"], "Sahayak"),
                 "body": item["message"],
                 "sound": "default",
                 "priority": "high",
+                "channelId": OFFER_CHANNEL if item["event"] == "job_offered" else UPDATE_CHANNEL,
                 "data": {"event": item["event"], "job_id": item["job_id"]},
             })
     return out

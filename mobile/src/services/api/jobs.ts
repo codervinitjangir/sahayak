@@ -75,6 +75,15 @@ export interface BackendPartnerOfferItem {
   job: BackendPartnerOfferJob;
 }
 
+/** POST /jobs/{id}/status and /jobs/{id}/start return a confirmation, not the
+ *  job (JobStatusTransitionResponse). Typing them as BackendJob let the active
+ *  job screen replace the full job with this and blank the customer card. */
+export interface JobStatusTransition {
+  id: string;
+  status: BackendJob["status"];
+  assignment_status?: string | null;
+}
+
 export interface AssignmentRespondResponse {
   assignment_id: string;
   job_id: string;
@@ -172,7 +181,7 @@ export const jobsApi = {
   /** Advance job lifecycle status (POST /api/v1/jobs/{jobId}/status) */
   updateJobStatus: (jobId: string, status: string, priceFinal?: number) =>
     apiClient
-      .post<BackendJob>(`/jobs/${jobId}/status`, {
+      .post<JobStatusTransition>(`/jobs/${jobId}/status`, {
         status,
         ...(status === "completed" && priceFinal !== undefined
           ? { price_final: priceFinal }
@@ -189,7 +198,7 @@ export const jobsApi = {
    */
   startJob: (jobId: string, startCode: string) =>
     apiClient
-      .post<BackendJob>(`/jobs/${jobId}/start`, { start_code: startCode })
+      .post<JobStatusTransition>(`/jobs/${jobId}/start`, { start_code: startCode })
       .then((r) => r.data),
 
   /** Partner: list active incoming offers (GET /api/v1/partners/me/offers) */

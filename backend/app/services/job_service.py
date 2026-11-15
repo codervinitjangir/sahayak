@@ -35,6 +35,7 @@ from app.repositories import (
     user_repository,
     vehicle_repository,
 )
+from app.schemas.job import SUPPORT_HELPLINE
 from app.schemas.job import (
     CurrentAssignmentResponse,
     JobCancelRequest,
@@ -1454,7 +1455,7 @@ async def get_public_job_tracking(
         partner_lng=partner_lng,
         partner_location_updated_at=partner_location_updated_at,
         estimated_arrival_min=estimated_arrival_min,
-        emergency_helpline="+91 80 4567 8900",
+        emergency_helpline=SUPPORT_HELPLINE,
         sos_number="112",
         requested_at=job.requested_at,
         completed_at=job.completed_at,

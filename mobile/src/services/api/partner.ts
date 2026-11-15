@@ -15,6 +15,11 @@ export interface MobilePartnerService {
   code: string;
   name: string;
   base_price: number | null;
+  /** services.requires_vehicle_equipment (towing). */
+  requires_equipment?: boolean;
+  /** False when dispatch will not send this service to the partner (needs a
+   *  verified tow vehicle they do not have). Absent on older backends = true. */
+  dispatchable?: boolean;
 }
 
 export interface MobilePartnerServices {

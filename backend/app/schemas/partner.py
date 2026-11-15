@@ -151,6 +151,13 @@ class PartnerServiceItem(BaseModel):
     # Same projection as GET /services.base_price. The partner app shows what
     # a job of this kind is worth without keeping its own price table.
     base_price: Optional[Decimal] = None
+    # services.requires_vehicle_equipment, passed through.
+    requires_equipment: bool = False
+    # False when dispatch will never offer this partner the service: today that
+    # is exactly "requires equipment and the partner holds none verified" (the
+    # rule in dispatch_repository.get_eligible_partners). Without it the app
+    # listed towing as active for partners who could not receive towing jobs.
+    dispatchable: bool = True
 
     model_config = ConfigDict(from_attributes=True)
 

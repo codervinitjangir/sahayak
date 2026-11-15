@@ -11,6 +11,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import * as Location from "expo-location";
 
 import { Colors, Typography, Spacing, Radius } from "../../../constants/theme";
+import { SUPPORT_PHONE_DISPLAY, SUPPORT_PHONE_TEL } from "../../../constants/support";
 import Card from "../../../components/ui/Card";
 import Button from "../../../components/ui/Button";
 import LogoMark from "../../../components/brand/LogoMark";
@@ -73,6 +74,7 @@ export default function PartnerHomeScreen() {
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState<string[]>([]);
   const [servicesCollapsed, setServicesCollapsed] = useState(false);
+  const pausedServices = services.filter((s) => s.dispatchable === false);
   const [loudAlerts, setLoudAlerts] = useState(true);
   const [vibrateAlerts, setVibrateAlerts] = useState(true);
   const [navApp, setNavApp] = useState("Google Maps");
@@ -270,6 +272,20 @@ export default function PartnerHomeScreen() {
                   </Text>
                 </View>
               ) : null}
+              {verified && pausedServices.length > 0 ? (
+                <Pressable
+                  onPress={() => setTab("account")}
+                  accessibilityRole="button"
+                  accessibilityLabel="See why some services are not receiving jobs"
+                  style={styles.verifyBanner}
+                >
+                  <Ionicons name="alert-circle-outline" size={18} color={Colors.warning} />
+                  <Text style={styles.verifyText}>
+                    {pausedServices.map((p) => p.name).join(" and ")}{" "}
+                    jobs are not sent to you yet: they need a tow vehicle verified by Sahayak.
+                  </Text>
+                </Pressable>
+              ) : null}
             </Card>
 
             {failed.length > 0 ? (
@@ -333,6 +349,7 @@ export default function PartnerHomeScreen() {
                           {dist ? <Text style={styles.metaText}>{dist} away</Text> : null}
                           {o.estimated_arrival_min != null ? <Text style={styles.metaText}>about {o.estimated_arrival_min} min</Text> : null}
                           {o.job.vehicle_number ? <Text style={styles.metaText}>{o.job.vehicle_number}</Text> : null}
+                          {o.job.price_estimate != null ? <Text style={[styles.metaText, { color: Colors.brand700 }]}>{inr(o.job.price_estimate)}</Text> : null}
                         </View>
                         <Text style={styles.offerCta}>View offer</Text>
                       </Pressable>
@@ -435,7 +452,9 @@ export default function PartnerHomeScreen() {
                     Services & Capabilities
                   </Text>
                   <View style={styles.countBadge}>
-                    <Text style={styles.countBadgeText}>{services.length} active</Text>
+                    <Text style={styles.countBadgeText}>
+                      {services.length - pausedServices.length} of {services.length} live
+                    </Text>
                   </View>
                 </View>
                 <Pressable
@@ -479,13 +498,19 @@ export default function PartnerHomeScreen() {
                           i < services.length - 1 && styles.tableRowBorder,
                         ]}
                       >
-                        <View style={{ flex: 2, gap: 2 }}>
+                        <View style={{ flex: 2, gap: 4 }}>
                           <Text style={styles.serviceNameText}>{s.name}</Text>
-                          <Text style={styles.serviceMetaText}>
-                            {s.code.includes("towing")
-                              ? "Heavy Equipment / Tow Rig"
-                              : "Standard Emergency Specialization"}
-                          </Text>
+                          {s.dispatchable === false ? (
+                            <View style={styles.pausedChip}>
+                              <Ionicons name="alert-circle" size={13} color={Colors.warning} />
+                              <Text style={styles.pausedChipText}>Needs a verified tow vehicle</Text>
+                            </View>
+                          ) : (
+                            <View style={styles.liveChip}>
+                              <View style={styles.liveChipDot} />
+                              <Text style={styles.liveChipText}>Receiving jobs</Text>
+                            </View>
+                          )}
                         </View>
                         <View style={{ flex: 1, alignItems: "flex-end", justifyContent: "center" }}>
                           <Text style={styles.servicePriceText}>
@@ -499,7 +524,9 @@ export default function PartnerHomeScreen() {
                   <View style={styles.tableFooterNote}>
                     <Ionicons name="information-circle-outline" size={15} color={Colors.textMuted} />
                     <Text style={styles.tableFooterText}>
-                      Mapped to your verified inventory & tools
+                      {pausedServices.length > 0
+                        ? "Towing needs a tow vehicle verified by Sahayak. Contact the Sahayak team to add one."
+                        : "Base rates are the starting quote owners see."}
                     </Text>
                   </View>
                 </Card>
@@ -511,11 +538,9 @@ export default function PartnerHomeScreen() {
                   >
                     <View style={{ gap: 2 }}>
                       <Text style={styles.serviceNameText}>
-                        {services.length} services configured
+                        {services.length - pausedServices.length} of {services.length} services receiving jobs
                       </Text>
-                      <Text style={styles.serviceMetaText}>
-                        Tap to expand full rates & capability table
-                      </Text>
+                      <Text style={styles.serviceMetaText}>Tap to see rates and status</Text>
                     </View>
                     <Ionicons name="chevron-forward" size={18} color={Colors.brand700} />
                   </Pressable>
@@ -578,8 +603,8 @@ export default function PartnerHomeScreen() {
                 <ListRow
                   icon="call-outline"
                   title="24/7 Dispatch Control Room"
-                  subtitle="+91 80 4567 8900"
-                  onPress={() => void Linking.openURL("tel:+918045678900")}
+                  subtitle={SUPPORT_PHONE_DISPLAY}
+                  onPress={() => void Linking.openURL(SUPPORT_PHONE_TEL)}
                 />
                 {WEB_URL ? (
                   <>
@@ -619,8 +644,8 @@ export default function PartnerHomeScreen() {
 function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <View style={styles.stat} accessible accessibilityLabel={`${label}: ${value}${sub ? `, ${sub}` : ""}`}>
-      <Text style={styles.statLabel}>{label}</Text>
-      <Text style={styles.statValue}>{value}</Text>
+      <Text style={styles.statLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{label}</Text>
+      <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{value}</Text>
       {sub ? <Text style={styles.statSub}>{sub}</Text> : null}
     </View>
   );
@@ -666,10 +691,15 @@ const styles = StyleSheet.create({
   metaText: { fontSize: Typography.fontSize.sm, fontFamily: Typography.fontFamily.semiBold, color: Colors.textSecondary },
   offerCta: { marginTop: 6, fontSize: Typography.fontSize.base, fontFamily: Typography.fontFamily.bold, color: Colors.brand700 },
 
-  statRow: { flexDirection: "row", gap: Spacing.md },
-  stat: { flex: 1, backgroundColor: Colors.surfaceWhite, borderRadius: Radius.lg, borderWidth: 1, borderColor: Colors.border, padding: Spacing.base },
+  statRow: { flexDirection: "row", gap: Spacing.sm },
+  stat: { flex: 1, minWidth: 0, backgroundColor: Colors.surfaceWhite, borderRadius: Radius.lg, borderWidth: 1, borderColor: Colors.border, paddingVertical: Spacing.base, paddingHorizontal: Spacing.md },
+  pausedChip: { flexDirection: "row", alignItems: "center", gap: 4, alignSelf: "flex-start", backgroundColor: Colors.warningLight, paddingHorizontal: 8, paddingVertical: 3, borderRadius: Radius.full },
+  pausedChipText: { fontSize: Typography.fontSize.xs, fontFamily: Typography.fontFamily.semiBold, color: Colors.warning },
+  liveChip: { flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "flex-start" },
+  liveChipDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: Colors.success },
+  liveChipText: { fontSize: Typography.fontSize.xs, fontFamily: Typography.fontFamily.medium, color: Colors.success },
   statLabel: { fontSize: Typography.fontSize.xs, fontFamily: Typography.fontFamily.semiBold, color: Colors.textMuted, textTransform: "uppercase", letterSpacing: 0.4 },
-  statValue: { marginTop: 4, fontSize: Typography.fontSize["3xl"], fontFamily: Typography.fontFamily.bold, color: Colors.textPrimary },
+  statValue: { marginTop: 4, fontSize: Typography.fontSize["2xl"], fontFamily: Typography.fontFamily.bold, color: Colors.textPrimary },
   statSub: { marginTop: 2, fontSize: Typography.fontSize.sm, color: Colors.textSecondary, fontFamily: Typography.fontFamily.regular },
   big: { marginTop: 4, marginBottom: 6, fontSize: Typography.fontSize["4xl"], fontFamily: Typography.fontFamily.bold, color: Colors.textPrimary },
 

@@ -4,6 +4,7 @@ import { showDialog } from "../../../components/ui/AppDialog";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors, Typography, Spacing, Radius } from "../../../constants/theme";
+import { SUPPORT_PHONE_DISPLAY, SUPPORT_PHONE_TEL } from "../../../constants/support";
 import { useAuthStore } from "../../../store/authStore";
 import Card from "../../../components/ui/Card";
 import Button from "../../../components/ui/Button";
@@ -244,8 +245,8 @@ export default function AccountTab({ onAddVehicle }: { onAddVehicle: () => void 
           <ListRow
             icon="shield-outline"
             title="Sahayak 24/7 Roadside Control Room"
-            subtitle="+91 80 4567 8900"
-            onPress={() => void Linking.openURL("tel:+918045678900")}
+            subtitle={SUPPORT_PHONE_DISPLAY}
+            onPress={() => void Linking.openURL(SUPPORT_PHONE_TEL)}
             last
           />
         </Card>

@@ -1,8 +1,8 @@
-﻿// â”€â”€â”€ Sahayak â€” Incoming Offer Screen (Partner) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Sahayak — Incoming Offer Screen (Partner) ───────────────────────────────
 // Everything on this screen comes from the offer the dispatch engine actually
 // sent: GET /partners/me/offers items carry { assignment_id, job_id, offered_at,
 // distance_at_offer_m, estimated_arrival_min, job }. There is deliberately no
-// fallback job or made-up pickup when that payload is missing â€” a fabricated
+// fallback job or made-up pickup when that payload is missing — a fabricated
 // address here would send a mechanic to the wrong street.
 import React, { useState, useEffect, useRef } from "react";
 import { View, Text, StyleSheet, ScrollView, Animated, StatusBar, Platform } from "react-native";
@@ -153,22 +153,22 @@ export default function IncomingOfferScreen() {
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <StatusBar barStyle="dark-content" />
 
-      {/* â”€â”€ Alert Header (Figma: offer-alert-header â€” bg #F0FDFA) â”€â”€ */}
+      {/* ── Header: what this is and how fresh it is ── */}
       <View style={styles.alertHeader}>
         <View style={styles.alertLeft}>
-          <View style={styles.alertIconWrap}>
-            <Ionicons name="flash" size={24} color={Colors.primary} />
+          <View style={[styles.alertIconWrap, { backgroundColor: meta.bg }]}>
+            <Ionicons name={meta.icon as any} size={22} color={meta.color} />
           </View>
-          <View>
-            <Text style={styles.alertTitle}>New Breakdown Offer!</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.alertTitle}>New job offer</Text>
             <Text style={styles.alertSubtitle}>
-              {offeredAt ? `Offered ${relativeAge}` : "Live roadside dispatch"}
+              {offeredAt ? `Offered ${relativeAge.toLowerCase()}` : "Live roadside dispatch"}
             </Text>
           </View>
         </View>
-        <View style={styles.timerCircle}>
-          <Ionicons name="radio" size={14} color={Colors.success} />
-          <Text style={[styles.timerText, { color: Colors.success, fontSize: 12 }]}>LIVE</Text>
+        <View style={styles.livePill} accessibilityLabel="Live offer">
+          <View style={styles.liveDot} />
+          <Text style={styles.liveText}>LIVE</Text>
         </View>
       </View>
 
@@ -177,100 +177,83 @@ export default function IncomingOfferScreen() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        {/* â”€â”€ Owner's quoted price â”€â”€ */}
-        <View style={styles.earningBanner}>
-          <Text style={styles.earningLabel}>Price</Text>
-          <Text style={styles.earningAmount}>
-            {job.price_estimate != null ? inr(job.price_estimate) : "Set on completion"}
+        {/* ── Hero: service + owner's quote, stacked so nothing clips ── */}
+        <View style={styles.hero}>
+          <Text style={styles.heroService} numberOfLines={2}>
+            {job.service_name ?? meta.label}
           </Text>
-          <Text style={styles.earningNote}>You enter the final amount when the job is done</Text>
-        </View>
-
-        {/* â”€â”€ Vehicle Info â”€â”€ */}
-        <Card style={styles.card}>
-          <Text style={styles.cardLabel}>Vehicle</Text>
-          <View style={styles.vehicleRow}>
-            <View style={styles.vehicleIconWrap}>
-              <Ionicons name="car-sport" size={24} color={Colors.secondary} />
-            </View>
-            <View>
-              <Text style={styles.vehicleName}>
-                {job.vehicle_number ?? "Registration not provided"}
-              </Text>
-              <Text style={styles.vehiclePlate}>
-                {job.service_name ?? "Service details unavailable"}
-              </Text>
-              {job.issue_description ? (
-                <Text style={styles.vehicleColor}>"{job.issue_description}"</Text>
-              ) : null}
-            </View>
+          <View style={styles.heroPriceRow}>
+            <Text style={styles.heroAmount}>
+              {job.price_estimate != null ? inr(job.price_estimate) : "Price on completion"}
+            </Text>
+            {job.price_estimate != null ? (
+              <Text style={styles.heroAmountLabel}>owner's quote</Text>
+            ) : null}
           </View>
-        </Card>
+          <Text style={styles.heroNote}>You enter the final amount when the job is done.</Text>
 
-        {/* â”€â”€ Service Info â”€â”€ */}
-        <Card style={styles.card}>
-          <Text style={styles.cardLabel}>Service required</Text>
-          <View style={styles.serviceRow}>
-            <View style={[styles.serviceIcon, { backgroundColor: meta.bg }]}>
-              <Ionicons name={meta.icon as any} size={20} color={meta.color} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.serviceName}>
-                {job.service_name ?? meta.label}
-              </Text>
-              <Text style={styles.serviceNotes}>
-                {job.service_code ?? "Service code unavailable"}
-              </Text>
-            </View>
-          </View>
-        </Card>
-
-        {/* â”€â”€ Location Details â”€â”€ */}
-        <Card style={styles.card}>
-          <Text style={styles.cardLabel}>Location details</Text>
-          <View style={styles.routeRow}>
-            <View style={styles.routeLeft}>
-              <View style={[styles.routeDot, { backgroundColor: Colors.primary }]} />
-              <View style={styles.routeLine} />
-              <View style={[styles.routeDot, { backgroundColor: Colors.secondary }]} />
-            </View>
-            <View style={styles.routeRight}>
-              <View style={styles.routeItem}>
-                <Text style={styles.routeLabel}>Your current position</Text>
-                <Text style={styles.routeAddress}>
-                  Not included with the offer
-                </Text>
-              </View>
-              <View style={[styles.routeItem, { marginTop: Spacing.base }]}>
-                <Text style={styles.routeLabel}>Customer location</Text>
-                <Text style={styles.routeAddress}>
-                  {job.pickup_address_text ?? "Address not provided"}
-                </Text>
-              </View>
-            </View>
-          </View>
           {(distanceLabel || etaLabel) && (
-            <View style={styles.routeStats}>
+            <View style={styles.heroStats}>
               {distanceLabel && (
-                <View style={styles.routeStat}>
-                  <Ionicons name="navigate-outline" size={14} color={Colors.textSecondary} />
-                  <Text style={styles.routeStatText}>{distanceLabel} away at offer time</Text>
+                <View style={styles.heroStat}>
+                  <Ionicons name="navigate" size={14} color={Colors.primaryLight} />
+                  <Text style={styles.heroStatText}>{distanceLabel} away</Text>
                 </View>
               )}
               {etaLabel && (
-                <View style={styles.routeStat}>
-                  <Ionicons name="time-outline" size={14} color={Colors.textSecondary} />
-                  <Text style={styles.routeStatText}>{etaLabel}</Text>
+                <View style={styles.heroStat}>
+                  <Ionicons name="time" size={14} color={Colors.primaryLight} />
+                  <Text style={styles.heroStatText}>{etaLabel}</Text>
                 </View>
               )}
             </View>
           )}
+        </View>
+
+        {/* ── Pickup ── */}
+        <Card style={styles.card}>
+          <Text style={styles.cardLabel}>Pickup</Text>
+          <View style={styles.infoRow}>
+            <View style={[styles.infoIcon, { backgroundColor: Colors.primaryMuted }]}>
+              <Ionicons name="location" size={20} color={Colors.primary} />
+            </View>
+            <Text style={styles.pickupText}>
+              {job.pickup_address_text ?? "Address not provided. The exact pin is shared when you accept."}
+            </Text>
+          </View>
         </Card>
 
-        <View style={{ height: 100 }} />
+        {/* ── Vehicle and what the owner said ── */}
+        <Card style={styles.card}>
+          <Text style={styles.cardLabel}>Vehicle</Text>
+          <View style={styles.infoRow}>
+            <View style={[styles.infoIcon, { backgroundColor: Colors.surface }]}>
+              <Ionicons name="car-sport" size={20} color={Colors.secondary} />
+            </View>
+            {job.vehicle_number ? (
+              <View style={styles.plate}>
+                <Text style={styles.plateText}>{job.vehicle_number}</Text>
+              </View>
+            ) : (
+              <Text style={styles.mutedText}>Registration not provided</Text>
+            )}
+          </View>
+          {job.issue_description ? (
+            <View style={styles.issueBox}>
+              <Text style={styles.issueLabel}>Owner's note</Text>
+              <Text style={styles.issueText}>{job.issue_description}</Text>
+            </View>
+          ) : null}
+        </Card>
+
+        <Text style={styles.privacyNote}>
+          The owner's name, phone and exact pin are shared once you accept.
+        </Text>
+
+        <View style={{ height: 120 }} />
       </ScrollView>
 
-      {/* â”€â”€ Action Panel (Figma: bottom-panel + action-button-row) â”€â”€ */}
+      {/* ── Actions ── */}
       <Animated.View
         style={[
           styles.bottomPanel,
@@ -280,21 +263,25 @@ export default function IncomingOfferScreen() {
       >
         <View style={styles.actionRow}>
           <Button
-            label={declining ? "Decliningâ€¦" : "Decline"}
+            label={declining ? "Declining…" : "Decline"}
             onPress={handleDecline}
             loading={declining}
+            disabled={accepting}
             variant="ghost"
             style={styles.declineBtn}
             textStyle={{ color: Colors.error }}
             fullWidth={false}
+            accessibilityLabel="Decline this offer"
           />
           <Button
-            label={accepting ? "Acceptingâ€¦" : "Accept Job  âœ“"}
+            label={accepting ? "Accepting…" : "Accept job"}
             onPress={handleAccept}
             loading={accepting}
+            disabled={declining}
             variant="primary"
             style={styles.acceptBtn}
             fullWidth={false}
+            accessibilityLabel="Accept this job"
           />
         </View>
       </Animated.View>
@@ -328,32 +315,22 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 
-  timerBarBg: {
-    height: 3,
-    backgroundColor: Colors.border,
-    width: "100%",
-  },
-  timerBar: {
-    height: 3,
-    borderRadius: 2,
-  },
-
   alertHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    backgroundColor: Colors.offerAlertBg,
-    paddingHorizontal: Spacing.base,
+    backgroundColor: Colors.surfaceWhite,
+    paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.offerAlertBorder,
+    borderBottomColor: Colors.border,
+    gap: 12,
   },
-  alertLeft: { flexDirection: "row", alignItems: "center", gap: 12 },
+  alertLeft: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
   alertIconWrap: {
     width: 44,
     height: 44,
-    borderRadius: 22,
-    backgroundColor: Colors.primaryLight,
+    borderRadius: Radius.md,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -363,54 +340,88 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
   },
   alertSubtitle: {
-    fontSize: Typography.fontSize.xs,
+    fontSize: Typography.fontSize.sm,
     color: Colors.textSecondary,
     fontFamily: Typography.fontFamily.regular,
     marginTop: 2,
   },
-  timerCircle: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: Colors.primaryMuted,
-    borderWidth: 2.5,
-    borderColor: Colors.primary,
+  livePill: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.successLight,
   },
-  timerText: {
-    fontSize: Typography.fontSize.base,
+  liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: Colors.success },
+  liveText: {
+    fontSize: Typography.fontSize.xs,
     fontFamily: Typography.fontFamily.bold,
-    color: Colors.primaryDark,
+    color: Colors.success,
+    letterSpacing: 0.8,
   },
 
-  earningBanner: {
+  hero: {
     backgroundColor: Colors.secondary,
     borderRadius: Radius.lg,
     padding: Spacing.lg,
-    alignItems: "center",
-    marginBottom: Spacing.base,
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 8,
+    marginBottom: Spacing.md,
   },
-  earningLabel: {
+  heroService: {
     fontSize: Typography.fontSize.base,
-    color: "rgba(255,255,255,0.7)",
-    fontFamily: Typography.fontFamily.regular,
+    fontFamily: Typography.fontFamily.semiBold,
+    color: "rgba(255,255,255,0.85)",
   },
-  earningAmount: {
+  heroPriceRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 6,
+  },
+  heroAmount: {
     fontSize: Typography.fontSize["3xl"],
     fontFamily: Typography.fontFamily.bold,
-    color: Colors.primary,
+    color: Colors.textWhite,
   },
-  earningNote: {
-    fontSize: Typography.fontSize.base,
+  heroAmountLabel: {
+    fontSize: Typography.fontSize.sm,
+    fontFamily: Typography.fontFamily.medium,
     color: "rgba(255,255,255,0.7)",
+  },
+  heroNote: {
+    fontSize: Typography.fontSize.sm,
     fontFamily: Typography.fontFamily.regular,
+    color: "rgba(255,255,255,0.7)",
+    marginTop: 4,
+    lineHeight: 20,
+  },
+  heroStats: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: Spacing.base,
+    paddingTop: Spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,0.12)",
+  },
+  heroStat: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: Radius.full,
+  },
+  heroStatText: {
+    fontSize: Typography.fontSize.sm,
+    fontFamily: Typography.fontFamily.semiBold,
+    color: Colors.textWhite,
   },
 
-  card: { marginBottom: Spacing.sm, gap: 10 },
+  card: { marginBottom: Spacing.md, gap: 12 },
   cardLabel: {
     fontSize: Typography.fontSize.xs,
     fontFamily: Typography.fontFamily.semiBold,
@@ -418,90 +429,64 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 1,
   },
-
-  vehicleRow: { flexDirection: "row", alignItems: "center", gap: 12 },
-  vehicleIconWrap: {
-    width: 48,
-    height: 48,
-    borderRadius: Radius.md,
-    backgroundColor: Colors.surface,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  vehicleName: {
-    fontSize: Typography.fontSize.base,
-    fontFamily: Typography.fontFamily.semiBold,
-    color: Colors.textPrimary,
-  },
-  vehiclePlate: {
-    fontSize: Typography.fontSize.sm,
-    color: Colors.textSecondary,
-    fontFamily: Typography.fontFamily.medium,
-    letterSpacing: 0.8,
-    marginTop: 2,
-  },
-  vehicleColor: {
-    fontSize: Typography.fontSize.xs,
-    color: Colors.textMuted,
-    fontFamily: Typography.fontFamily.regular,
-    marginTop: 2,
-    textTransform: "capitalize",
-  },
-
-  serviceRow: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
-  serviceIcon: {
+  infoRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  infoIcon: {
     width: 44,
     height: 44,
     borderRadius: Radius.md,
     alignItems: "center",
     justifyContent: "center",
   },
-  serviceName: {
+  pickupText: {
+    flex: 1,
     fontSize: Typography.fontSize.base,
-    fontFamily: Typography.fontFamily.semiBold,
+    fontFamily: Typography.fontFamily.medium,
     color: Colors.textPrimary,
+    lineHeight: 22,
+  },
+  plate: {
+    borderWidth: 1.5,
+    borderColor: Colors.secondary,
+    borderRadius: Radius.sm,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: Colors.surfaceWhite,
+  },
+  plateText: {
+    fontSize: Typography.fontSize.base,
+    fontFamily: Typography.fontFamily.bold,
+    color: Colors.textPrimary,
+    letterSpacing: 1.5,
+  },
+  mutedText: {
+    fontSize: Typography.fontSize.base,
+    fontFamily: Typography.fontFamily.regular,
+    color: Colors.textSecondary,
+  },
+  issueBox: {
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.md,
+    padding: Spacing.md,
+  },
+  issueLabel: {
+    fontSize: Typography.fontSize.xs,
+    fontFamily: Typography.fontFamily.semiBold,
+    color: Colors.textMuted,
     marginBottom: 4,
   },
-  serviceNotes: {
-    fontSize: Typography.fontSize.sm,
-    color: Colors.textSecondary,
-    fontFamily: Typography.fontFamily.regular,
-    fontStyle: "italic",
-    lineHeight: 20,
-  },
-
-  routeRow: { flexDirection: "row", gap: 16 },
-  routeLeft: { alignItems: "center", paddingTop: 4 },
-  routeDot: { width: 10, height: 10, borderRadius: 5 },
-  routeLine: { width: 2, flex: 1, backgroundColor: Colors.border, marginVertical: 4 },
-  routeRight: { flex: 1 },
-  routeItem: {},
-  routeLabel: {
-    fontSize: Typography.fontSize.xs,
-    color: Colors.textMuted,
-    fontFamily: Typography.fontFamily.regular,
-    marginBottom: 2,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-  routeAddress: {
+  issueText: {
     fontSize: Typography.fontSize.base,
-    fontFamily: Typography.fontFamily.medium,
+    fontFamily: Typography.fontFamily.regular,
     color: Colors.textPrimary,
+    lineHeight: 22,
   },
-  routeStats: {
-    flexDirection: "row",
-    gap: Spacing.base,
-    paddingTop: Spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
-    marginTop: Spacing.sm,
-  },
-  routeStat: { flexDirection: "row", alignItems: "center", gap: 6 },
-  routeStatText: {
+  privacyNote: {
     fontSize: Typography.fontSize.sm,
-    color: Colors.textSecondary,
-    fontFamily: Typography.fontFamily.medium,
+    fontFamily: Typography.fontFamily.regular,
+    color: Colors.textMuted,
+    textAlign: "center",
+    paddingHorizontal: Spacing.base,
+    lineHeight: 20,
   },
 
   bottomPanel: {
@@ -524,11 +509,10 @@ const styles = StyleSheet.create({
     borderColor: Colors.errorLight,
     backgroundColor: Colors.errorLight,
     borderRadius: Radius.md,
-    height: 52,
+    height: 56,
   },
   acceptBtn: {
     flex: 2,
-    height: 52,
+    height: 56,
   },
 });
-

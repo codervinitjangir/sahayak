@@ -35,8 +35,24 @@ export const JOB_STATUS_LABELS: Record<string, string> = {
 export const inr = (value?: number | null): string =>
   value == null ? "—" : `₹${Math.round(Number(value)).toLocaleString("en-IN")}`;
 
-export const metresToKm = (metres?: number | null): string | null =>
-  metres == null ? null : `${(Number(metres) / 1000).toFixed(1)} km`;
+/** "0.0 km" reads as a bug when the partner is standing at the pickup, so short
+ *  distances are shown in metres and anything under 100 m as "Under 100 m". */
+export const metresToKm = (metres?: number | null): string | null => {
+  if (metres == null) return null;
+  const m = Number(metres);
+  if (!Number.isFinite(m)) return null;
+  if (m < 100) return "Under 100 m";
+  if (m < 1000) return `${Math.round(m / 10) * 10} m`;
+  return `${(m / 1000).toFixed(1)} km`;
+};
+
+/** First name for greetings. Falls back to nothing (not "Service") when the
+ *  partner still carries the placeholder name "Service partner". */
+export const firstNameFor = (name?: string | null): string | null => {
+  const trimmed = (name ?? "").trim();
+  if (!trimmed || /^service partner$/i.test(trimmed)) return null;
+  return trimmed.split(/\s+/)[0];
+};
 
 export const statusLabelFor = (status: string): string =>
   JOB_STATUS_LABELS[status] ?? status.replace(/_/g, " ");

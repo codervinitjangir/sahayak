@@ -2224,7 +2224,7 @@ calls (26 web call sites, was 23).
   - `partner_name` / rating / ETA / live coordinates describe the partner who **accepted**, never an unanswered offer.
   - Once the job is `completed` or `cancelled` the response carries only `id`, `status`, `service_name`, `requested_at`, `completed_at` (everything else `null`). 24 h after it ended the link answers 404.
   - Rate limited: 60 requests/minute per caller IP; beyond that 429 `RATE_LIMITED` with `Retry-After: 60`. The web page keeps the last good data through a failed poll.
-  - Returns sanitized breakdown details: status, service_name, masked vehicle_number, pickup_lat/lng, partner_name, partner_rating, live partner coordinates (from Redis), estimated arrival minutes, and emergency numbers (`112`, `+91 80 4567 8900`).
+  - Returns sanitized breakdown details: status, service_name, masked vehicle_number, pickup_lat/lng, partner_name, partner_rating, live partner coordinates (from Redis), estimated arrival minutes, and emergency numbers (`112`, `+91 92505 43490`).
   - Owner phone, partner phone, and secret start code are strictly omitted.
 
 ### 17.4 In-App Payments & Settlements
@@ -2338,3 +2338,20 @@ All `require_admin`; anyone else 403. Every write is audited in the same transac
 - `react-native-maps` removed; `app.config.js` no longer reads `GOOGLE_MAPS_API_KEY`; `app.json` adds the MapLibre plugin. Expo Go cannot run it: use an EAS build (`eas build -p android --profile preview`).
 - New `mobile/src/components/map/geo.ts` (radar circle) with `tests/map-geo.test.ts`.
 - Also added in the same pass: `mobile/eas.json` (preview = APK, production = AAB) and FCM via `googleServicesFile` (file comes from the `GOOGLE_SERVICES_JSON` EAS variable; `google-services.json` is gitignored).
+
+## 20. Device-test fixes (2026-11-15)
+
+### 20.1 `GET /api/v1/partners/me/services`: two new fields (additive)
+Each item now also carries:
+- `requires_equipment` (bool): `services.requires_vehicle_equipment` (both towing services).
+- `dispatchable` (bool): `false` when dispatch will never offer this partner the service, which today means
+  it requires equipment and the partner has no **verified** `partner_equipment` row. This is the same rule
+  `get_eligible_partners` applies, so a partner app can stop listing towing as active for a partner who
+  cannot receive towing jobs. Found on a device: partner 902 had no tow vehicle, so both towing requests
+  ended in `no_match_found` within a second while the app showed "Flatbed Towing, From ₹1499" as active.
+Missing on an older backend means `true`.
+
+### 20.2 `POST /jobs/{id}/status` and `POST /jobs/{id}/start` return a confirmation, not the job
+No backend change; a client note. The response is `JobStatusTransitionResponse` (`id`, `status`,
+`assignment_status`). Mobile typed it as the full job and stored it, which blanked the partner's customer
+card, pickup coordinates and vehicle until the next poll. Merge only `status` into the job you hold.

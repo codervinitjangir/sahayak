@@ -567,9 +567,11 @@ export default function OwnerHelpFlowScreen() {
                 <View style={{ flex: 1 }}>
                   <Text style={styles.partnerName}>{partnerName ?? "Your partner"}</Text>
                   <Text style={styles.muted}>
-                    {assignment?.partner_rating != null
-                      ? `${Number(assignment.partner_rating).toFixed(1)} rating · ${assignment.partner_rating_count ?? 0} ${assignment.partner_rating_count === 1 ? "job" : "jobs"}`
-                      : "New partner"}
+                    {/* "0.0 rating · 0 jobs" reads as a bad partner; with no
+                        ratings yet they are simply new. */}
+                    {assignment?.partner_rating != null && (assignment.partner_rating_count ?? 0) > 0
+                      ? `★ ${Number(assignment.partner_rating).toFixed(1)} · ${assignment.partner_rating_count} ${assignment.partner_rating_count === 1 ? "rating" : "ratings"}`
+                      : "New partner · Verified by Sahayak"}
                   </Text>
                 </View>
                 {partnerPhone ? (
@@ -642,7 +644,7 @@ export default function OwnerHelpFlowScreen() {
                             accessibilityState={{ selected: rating === n }}
                             style={styles.starBtn}
                           >
-                            <Ionicons name={n <= rating ? "star" : "star-outline"} size={36} color={n <= rating ? "#F59E0B" : Colors.border} />
+                            <Ionicons name={n <= rating ? "star" : "star-outline"} size={36} color={n <= rating ? "#F59E0B" : Colors.textMuted} />
                           </Pressable>
                         ))}
                       </View>
@@ -676,9 +678,11 @@ export default function OwnerHelpFlowScreen() {
                   />
                   <Text style={styles.h1}>{job.status === "no_match_found" ? "No partner available right now" : "Request cancelled"}</Text>
                   <Text style={[styles.muted, { textAlign: "center" }]}>
-                    {job.status === "no_match_found"
-                      ? "Every nearby verified partner was offered this job and none could take it. You can try again."
-                      : "This request is closed. You can start a new one any time."}
+                    {job.status !== "no_match_found"
+                      ? "This request is closed. You can start a new one any time."
+                      : job.timeline?.some((t) => t.status === "matching")
+                      ? "Every nearby verified partner was offered this job and none could take it. You can try again, or call 112 if you are unsafe."
+                      : "No verified partner offering this service is available near you right now. Try again in a few minutes, or choose a different service."}
                   </Text>
                 </View>
               )}
@@ -710,7 +714,7 @@ function Pulse() {
   useEffect(() => {
     const loop = Animated.loop(
       Animated.parallel([
-        Animated.timing(scale, { toValue: 1.8, duration: 1600, useNativeDriver: true }),
+        Animated.timing(scale, { toValue: 1.35, duration: 1600, useNativeDriver: true }),
         Animated.timing(opacity, { toValue: 0, duration: 1600, useNativeDriver: true }),
       ])
     );
@@ -756,7 +760,7 @@ const styles = StyleSheet.create({
 
   searchHead: { flexDirection: "row", alignItems: "center", gap: Spacing.base },
   summary: { marginTop: Spacing.md, fontSize: Typography.fontSize.md, fontFamily: Typography.fontFamily.semiBold, color: Colors.textPrimary },
-  pulseWrap: { width: 56, height: 56, alignItems: "center", justifyContent: "center" },
+  pulseWrap: { width: 56, height: 56, margin: 6, alignItems: "center", justifyContent: "center", zIndex: 0 },
   pulseRing: { position: "absolute", width: 56, height: 56, borderRadius: 28, backgroundColor: Colors.brand700 },
   pulseCore: { width: 44, height: 44, borderRadius: 22, backgroundColor: Colors.brand700, alignItems: "center", justifyContent: "center" },
 

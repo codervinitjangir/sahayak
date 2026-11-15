@@ -27,7 +27,7 @@ Not verified: any physical phone (mobile was run through its web target only).
 
 | # | Item | Why it matters |
 |---|---|---|
-| R1 | Replace placeholder contact details (`support@sahayak.app`, `+91 80 4567 8900`, `sahayak.app` and `api.sahayak.app`) in Terms, Privacy, landing footer, mobile Account, mobile `SafetyActions`, `constants/index.ts` | A stranded driver calling a number that does not ring is worse than no number |
+| R1 | Replace placeholder contact details (`support@sahayak.app`, `+91 92505 43490 (real, set 2026-11-15)`, `sahayak.app` and `api.sahayak.app`) in Terms, Privacy, landing footer, mobile Account, mobile `SafetyActions`, `constants/index.ts` | A stranded driver calling a number that does not ring is worse than no number |
 | R2 | Rotate the Google Maps key committed in `mobile/app.json` (still in git history). Restrict the new key to the package name and bundle id | Quota theft |
 | R3 | Lawyer review of `/terms` and `/privacy` | Drafted from product behaviour, not by counsel |
 | R5 | Device run, both roles, on a physical Android and an iPhone: request, match, start code, pay, complete, rate | Native maps, GPS accuracy, SMS autofill, `tel:` and share sheets were only ever checked in a browser |

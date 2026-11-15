@@ -79,7 +79,7 @@ async def test_get_public_job_tracking_success_with_partner_and_redis():
         assert res.partner_lat == 12.9720
         assert res.partner_lng == 77.5950
         assert res.partner_location_updated_at is not None
-        assert res.emergency_helpline == "+91 80 4567 8900"
+        assert res.emergency_helpline == "+91 92505 43490"
         assert res.sos_number == "112"
         # Ensure private fields are not exposed
         assert not hasattr(res, "start_code")

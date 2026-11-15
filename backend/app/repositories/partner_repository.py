@@ -12,13 +12,13 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Iterable, Optional, Sequence
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, exists, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.job import Job, JobAssignment
-from app.models.partner import Partner, PartnerService
+from app.models.partner import Partner, PartnerEquipment, PartnerService
 from app.models.service import Service, ServiceCategory
 
 
@@ -146,6 +146,26 @@ async def get_partner_services(
         .order_by(Service.id)
     )
     return result.scalars().all()
+
+
+async def has_verified_equipment(db: AsyncSession, partner_id: uuid.UUID) -> bool:
+    """Whether the partner holds at least one verified partner_equipment row.
+
+    The same test dispatch_repository.get_eligible_partners applies to services
+    with requires_vehicle_equipment, asked for one partner so the partner app
+    can say which of their services dispatch will actually send them.
+    """
+    result = await db.execute(
+        select(
+            exists().where(
+                and_(
+                    PartnerEquipment.partner_id == partner_id,
+                    PartnerEquipment.verification_status == "verified",
+                )
+            )
+        )
+    )
+    return bool(result.scalar())
 
 
 async def get_partner_stats(

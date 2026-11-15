@@ -12,7 +12,7 @@ Detail and history live in `docs/NEXT-STEPS.md` §9 and `docs/adr/ADR.md`.
 |---|---|---|---|
 | B1 | Replace the revoked Supabase secret key in `backend/.env` (and in the hosting env) | You | Account deletion can't remove logins, and 7 live test suites can't run |
 | B2 | Rerun the 7 blocked live suites (`dispatch_race`, `notifications`, `partner_offers`, `ratings`, `vehicle_registration`, `auth_flow`, `user_registration`) | Code, after B1 | Dispatch, auth and payment changes from 13–14 Nov aren't fully proven yet |
-| B3 | Real support phone, email and UPI ID. Today `+91 80 4567 8900`, `support@sahayak.app` and `sahayak.dispatch@upi` are placeholders | You | A stranded driver calling a dead number; payments going to an account you don't own |
+| B3 | Real support phone, email and UPI ID. Today `+91 92505 43490 (real, set 2026-11-15)`, `support@sahayak.app` and `sahayak.dispatch@upi` are placeholders | You | A stranded driver calling a dead number; payments going to an account you don't own |
 | B4 | Set `SHARE_LINK_SECRET` in production | You | Without it, rotating the Supabase key breaks every share link already sent |
 | B5 | Rotate and restrict the Google Maps key (the old one is in git history) | You | Quota theft |
 | B6 | Lawyer review of `/terms` and `/privacy`, including account deletion and data retention (ADR-025) | You | Drafted from product behaviour, not by counsel |

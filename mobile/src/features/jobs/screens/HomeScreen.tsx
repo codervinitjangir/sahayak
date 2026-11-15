@@ -1,7 +1,7 @@
 // ─── Sahayak: owner shell ─────────────────────────────────────────────────────
 // Four tabs: Home, Services, Activity, Account. The request flow itself lives in
 // OwnerHelpFlowScreen and is pushed on top of this shell.
-import React, { useState } from "react";
+import React, { useCallback, useState } from "react";
 import { View, Text, Pressable, StyleSheet, StatusBar } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -14,7 +14,10 @@ import ActivityTab from "../../activity/screens/ActivityTab";
 import AccountTab from "../../account/screens/AccountTab";
 import AddVehicleModal from "../../account/AddVehicleModal";
 import NotificationsModal from "../../shared/NotificationsModal";
-import { useUnreadCount } from "../../shared/ownerData";
+import { QK, useMyJobs, useUnreadCount } from "../../shared/ownerData";
+import ActiveRequestBar from "../../home/ActiveRequestBar";
+import { useFocusEffect } from "@react-navigation/native";
+import { useQueryClient } from "@tanstack/react-query";
 
 type TabKey = "home" | "services" | "activity" | "account";
 
@@ -23,6 +26,17 @@ export default function HomeScreen() {
   const [addVehicleOpen, setAddVehicleOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const unread = useUnreadCount().data ?? 0;
+  const jobs = useMyJobs();
+  const qc = useQueryClient();
+
+  // React Query cannot see screen focus on native. Coming back from the
+  // request flow must re-read the job list, or the shell keeps showing the
+  // list from before the request existed.
+  useFocusEffect(
+    useCallback(() => {
+      void qc.invalidateQueries({ queryKey: QK.jobs });
+    }, [qc])
+  );
 
   const tabs: TabDef<TabKey>[] = [
     { key: "home", label: "Home", icon: "home-outline", iconActive: "home" },
@@ -60,6 +74,9 @@ export default function HomeScreen() {
         {tab === "account" && <AccountTab onAddVehicle={() => setAddVehicleOpen(true)} />}
       </View>
 
+      <View style={styles.barDock}>
+        <ActiveRequestBar jobs={jobs.data} />
+      </View>
       <TabBar tabs={tabs} active={tab} onChange={setTab} />
 
       <AddVehicleModal visible={addVehicleOpen} onClose={() => setAddVehicleOpen(false)} />
@@ -85,4 +102,5 @@ const styles = StyleSheet.create({
   bell: { width: 48, height: 48, alignItems: "center", justifyContent: "center", marginRight: -8 },
   bellDot: { position: "absolute", top: 10, right: 10, width: 10, height: 10, borderRadius: 5, backgroundColor: Colors.emergency, borderWidth: 2, borderColor: Colors.surfaceWhite },
   body: { flex: 1, backgroundColor: Colors.surface },
+  barDock: { backgroundColor: Colors.surface },
 });

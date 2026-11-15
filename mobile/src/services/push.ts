@@ -39,9 +39,22 @@ export async function registerForPush(): Promise<string | null> {
     }
 
     if (Platform.OS === "android") {
+      // Two channels so a partner can keep offers loud and status updates
+      // quiet in Android settings. Ids must match backend push_service.
       await Notifications.setNotificationChannelAsync("jobs", {
         name: "Job updates",
+        description: "Partner assigned, on the way, work started, completed",
         importance: Notifications.AndroidImportance.HIGH,
+        lightColor: "#0F766E",
+      });
+      await Notifications.setNotificationChannelAsync("offers", {
+        name: "New job offers",
+        description: "A new roadside job is waiting for your answer",
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 400, 200, 400],
+        lightColor: "#0F766E",
+        sound: "default",
+        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
       });
     }
 

@@ -47,7 +47,7 @@ describe("IncomingOfferScreen", () => {
   it("accept calls the API and opens the active job", async () => {
     respond.mockResolvedValue({});
     render(<IncomingOfferScreen />);
-    fireEvent.click(screen.getByText(/Accept Job/));
+    fireEvent.click(screen.getByText(/Accept job/i));
     await waitFor(() => expect(nav.replace).toHaveBeenCalledWith("ActiveJob", { jobId: "j1" }));
     expect(respond).toHaveBeenCalledWith("a1", "accept");
   });
@@ -59,7 +59,7 @@ describe("IncomingOfferScreen", () => {
   ])("accept failing with %s says %s and does not open the job", async (code, title) => {
     respond.mockRejectedValue(apiError(code));
     render(<IncomingOfferScreen />);
-    fireEvent.click(screen.getByText(/Accept Job/));
+    fireEvent.click(screen.getByText(/Accept job/i));
     await waitFor(() => expect(alert).toHaveBeenCalled());
     expect(alert.mock.calls[0][0]).toBe(title);
     expect(nav.replace).not.toHaveBeenCalled();

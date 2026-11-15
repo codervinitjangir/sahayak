@@ -91,3 +91,26 @@ def test_backlog_beyond_cap_is_dropped(monkeypatch):
     assert push_service._accepting() is False
     monkeypatch.setattr(push_service, "_tasks", set())
     assert push_service._accepting() is True
+
+
+def test_push_title_names_the_event_and_offers_use_the_loud_channel():
+    """Found 2026-11-15 on a device: every push read 'Sahayak / ...' and offers
+    shared the quiet default channel, so a new job looked like any update."""
+    pid = uuid.uuid4()
+    tokens = {("partner", pid): ["ExponentPushToken[aaaaaaaaaaaa]"]}
+    offer = push_service.build_messages(
+        [{"recipient_type": "partner", "recipient_id": pid, "message": "You have a new job offer.",
+          "event": "job_offered", "job_id": "j1"}], tokens)[0]
+    assert offer["title"] == "New job offer"
+    assert offer["channelId"] == "offers"
+
+    update = push_service.build_messages(
+        [{"recipient_type": "partner", "recipient_id": pid, "message": "x",
+          "event": "job_cancelled_by_owner", "job_id": "j1"}], tokens)[0]
+    assert update["title"] == "Job cancelled by owner"
+    assert update["channelId"] == "jobs"
+
+    unknown = push_service.build_messages(
+        [{"recipient_type": "partner", "recipient_id": pid, "message": "x",
+          "event": "something_new", "job_id": None}], tokens)[0]
+    assert unknown["title"] == "Sahayak"

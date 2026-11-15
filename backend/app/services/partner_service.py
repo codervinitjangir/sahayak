@@ -511,18 +511,32 @@ async def get_partner_services(
     so the app never has to keep a second price table in sync.
     """
     services = await partner_repository.get_partner_services(db, identity.local_id)
-    return PartnerServicesResponse(
-        partner_id=identity.local_id,
-        services=[
+
+    # Asked once, and only when it matters: the equipment rule is the one
+    # eligibility filter that differs per service (see dispatch_repository).
+    needs_equipment = any(
+        bool(getattr(service, "requires_vehicle_equipment", False)) for service in services
+    )
+    has_equipment = (
+        await partner_repository.has_verified_equipment(db, identity.local_id)
+        if needs_equipment
+        else False
+    )
+
+    items = []
+    for service in services:
+        requires = bool(getattr(service, "requires_vehicle_equipment", False))
+        items.append(
             PartnerServiceItem(
                 service_id=service.id,
                 code=service.code,
                 name=service.name,
                 base_price=job_service.base_price_for(service),
+                requires_equipment=requires,
+                dispatchable=(not requires) or has_equipment,
             )
-            for service in services
-        ],
-    )
+        )
+    return PartnerServicesResponse(partner_id=identity.local_id, services=items)
 
 
 # Payout windows are reported in the market's timezone, not UTC. A partner in

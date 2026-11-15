@@ -124,7 +124,7 @@ export const TermsPage: React.FC = () => (
             <a className="font-semibold text-[#0F766E] underline" href="mailto:support@sahayak.app">
               support@sahayak.app
             </a>{' '}
-            or call <a className="font-semibold text-[#0F766E] underline" href="tel:+918045678900">+91 80 4567 8900</a>.
+            or call <a className="font-semibold text-[#0F766E] underline" href="tel:+919250543490">+91 92505 43490</a>.
             Our operations team is available 24/7 for active roadside assistance.
           </p>
         ),

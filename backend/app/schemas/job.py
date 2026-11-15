@@ -4,6 +4,10 @@ from decimal import Decimal
 from typing import Optional, List, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
+# Sahayak support / dispatch helpline (confirmed by the team 2026-11-15).
+# Mirrors mobile/src/constants/support.ts and web LegalPage.
+SUPPORT_HELPLINE = "+91 92505 43490"
+
 
 # Job Assignment schemas
 class JobAssignmentBase(BaseModel):
@@ -492,7 +496,7 @@ class PublicJobTrackingResponse(BaseModel):
     partner_lng: Optional[float] = None
     partner_location_updated_at: Optional[str] = None
     estimated_arrival_min: Optional[int] = None
-    emergency_helpline: str = "+91 80 4567 8900"
+    emergency_helpline: str = SUPPORT_HELPLINE
     sos_number: str = "112"
     requested_at: datetime
     completed_at: Optional[datetime] = None

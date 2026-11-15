@@ -29,6 +29,7 @@ export default function HomeTab({
   const vehicles = useMyVehicles();
 
   const active = jobs.data?.find((j) => isActiveStatus(j.status));
+  // The live request is shown by the floating ActiveRequestBar in the shell.
   const recent = (jobs.data ?? []).filter((j) => j !== active).slice(0, 3);
   const refreshing = jobs.isRefetching || vehicles.isRefetching;
 
@@ -71,28 +72,6 @@ export default function HomeTab({
       </View>
 
       <SafetyActions />
-
-      {/* A request already in flight comes first */}
-      {active ? (
-        <Pressable
-          onPress={() => nav.navigate("OwnerFlow", { jobId: active.id })}
-          accessibilityRole="button"
-          accessibilityLabel={`Your request for ${active.service_name ?? "roadside help"} is in progress. Track it.`}
-          style={styles.activeCard}
-        >
-          <View style={styles.activeIcon}>
-            <Ionicons name="radio" size={22} color="#fff" />
-          </View>
-          <View style={{ flex: 1, gap: 6 }}>
-            <Text style={styles.activeKicker}>Your request is in progress</Text>
-            <Text style={styles.activeTitle} numberOfLines={1}>
-              {active.service_name ?? "Roadside help"}
-            </Text>
-            <StatusChip status={active.status} />
-          </View>
-          <Ionicons name="chevron-forward" size={22} color={Colors.brand700Dark} />
-        </Pressable>
-      ) : null}
 
       {/* Shortcuts */}
       <View>

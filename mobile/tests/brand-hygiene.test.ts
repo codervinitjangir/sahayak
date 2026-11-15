@@ -37,6 +37,14 @@ describe("brand hygiene", () => {
     });
   }
 
+  // A file once saved as cp1252-over-UTF-8 put "Accept Job âœ“" on a real
+  // device. These byte pairs are what ✓ … — · ₹ turn into when that happens.
+  it("contains no double-encoded UTF-8 (mojibake)", () => {
+    const re = /â€|âœ|â‚¹|Â·|â”/;
+    const hits = files.filter((f) => re.test(readFileSync(f, "utf8")));
+    expect(hits).toEqual([]);
+  });
+
   it("does not invent money, coupons or tips in the UI", () => {
     const re = /\b(FIRST50|JUMP10|SAHAYAK20|GSTIN|walletBalance|Add a Tip)\b/;
     const hits = files.filter((f) => re.test(readFileSync(f, "utf8")));
