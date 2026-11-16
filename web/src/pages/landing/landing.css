@@ -337,7 +337,7 @@
   font-weight: 700;
   letter-spacing: 0.15em;
   text-transform: uppercase;
-  color: #0F766E;
+  color: #111111;
   margin: 0 0 16px;
 }
 
@@ -486,7 +486,7 @@
 }
 
 .hiw-choice:hover {
-  border-color: #0F766E;
+  border-color: #111111;
   background: rgba(15, 118, 110, 0.04);
   transform: translateY(-2px);
   box-shadow: 0 8px 20px -6px rgba(15, 118, 110, 0.15);
@@ -538,7 +538,7 @@
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #0F766E, #15803D);
+  background: linear-gradient(135deg, #111111, #15803D);
   color: #FFFFFF;
   font-weight: 700;
   font-size: 16px;
@@ -600,7 +600,7 @@
 
 .hiw-match-meta__item--green {
   background: rgba(15, 118, 110, 0.08);
-  color: #0F766E;
+  color: #111111;
 }
 
 .hiw-match-meta__item--amber {
@@ -612,7 +612,7 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #0F766E;
+  background: #111111;
   animation: pulse-dot 2s ease-in-out infinite;
   flex-shrink: 0;
 }
@@ -673,12 +673,12 @@
 }
 
 .hiw-track-step--active {
-  color: #0F766E;
+  color: #111111;
   font-weight: 600;
 }
 
 .hiw-track-step--active .hiw-track-step__indicator {
-  border-color: #0F766E;
+  border-color: #111111;
   background: #FFFFFF;
   box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.2);
   display: flex;
@@ -691,7 +691,7 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #0F766E;
+  background: #111111;
   animation: pulse-dot 1.5s ease-in-out infinite;
 }
 
@@ -921,7 +921,7 @@
 .reviews-badge__label {
   font-size: 12.5px;
   font-weight: 600;
-  color: #0F766E;
+  color: #111111;
 }
 
 /* Title */
@@ -1123,7 +1123,7 @@
 /* Partner Credit Line */
 .review-card__partner-credit {
   font-size: 11.5px;
-  color: #0F766E;
+  color: #111111;
   font-weight: 550;
   margin-top: 1px;
   white-space: nowrap;
@@ -1144,7 +1144,7 @@
   width: 8px;
   height: 8px;
   border-radius: 9999px;
-  border: 1.5px solid #0F766E;
+  border: 1.5px solid #111111;
   background: transparent;
   cursor: pointer;
   padding: 0;
@@ -1158,7 +1158,7 @@
 
 .reviews-dot--active {
   width: 24px;
-  background: #0F766E;
+  background: #111111;
   opacity: 1;
 }
 
@@ -1284,7 +1284,7 @@
   font-size: 11px;
   font-weight: 700;
   background: rgba(15, 118, 110, 0.12);
-  color: #0F766E;
+  color: #111111;
 }
 
 .pricing-grid {
@@ -1406,7 +1406,7 @@
   padding: 2.5px 8px;
   border-radius: 9999px;
   background: rgba(15, 118, 110, 0.12);
-  color: #0F766E;
+  color: #111111;
   letter-spacing: 0.01em;
   white-space: nowrap;
 }
@@ -1429,7 +1429,7 @@
 .pricing-card__inherit {
   font-size: 12.5px;
   font-weight: 600;
-  color: #0F766E;
+  color: #111111;
   margin-bottom: 12px;
   letter-spacing: 0.01em;
 }
@@ -1458,7 +1458,7 @@
   width: 16px;
   height: 16px;
   margin-top: 2px;
-  color: #0F766E;
+  color: #111111;
 }
 /* WCAG AA checkmark on Fleet dark card: #86EFAC provides 13.5:1 contrast against #1B1712 */
 .pricing-card--featured .pricing-card__feature svg {
@@ -1528,11 +1528,11 @@
   transition: color 0.2s;
 }
 .pricing-compare__link:hover {
-  color: #0F766E;
+  color: #111111;
 }
 .pricing-compare__link span {
   font-weight: 600;
-  color: #0F766E;
+  color: #111111;
   text-decoration: underline;
   text-underline-offset: 3px;
 }
@@ -1739,7 +1739,7 @@
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.14em;
-  color: #0F766E;
+  color: #111111;
   text-transform: uppercase;
   margin-bottom: 12px;
 }
@@ -1768,7 +1768,7 @@
   padding: 4px 14px;
   background: rgba(15, 118, 110, 0.1);
   border-radius: 8px;
-  color: #0F766E;
+  color: #111111;
 }
 
 .landing-footer__newsletter {
@@ -2017,7 +2017,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #0F766E;
+  color: #111111;
 }
 .upload-card__text {
   font-size: 13px;
@@ -2034,7 +2034,7 @@
   align-items: center;
   justify-content: center;
   margin: 12px 0;
-  color: #0F766E;
+  color: #111111;
 }
 
 .quiz-preview {
@@ -2128,7 +2128,7 @@
 .landing-footer__newsletter-btn:focus-visible,
 .landing-footer__col-links a:focus-visible,
 .theme-switcher__btn:focus-visible {
-  outline: 2px solid #0F766E !important;
+  outline: 2px solid #111111 !important;
   outline-offset: 3px !important;
   box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.25) !important;
 }

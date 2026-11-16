@@ -123,7 +123,7 @@ export const NotificationsDropdown: React.FC<NotificationsDropdownProps> = ({
               <button
                 type="button"
                 onClick={handleMarkAllRead}
-                className="text-xs text-[#0F766E] hover:text-[#115E59] font-semibold flex items-center gap-1 cursor-pointer"
+                className="text-xs text-[#111111] hover:text-[#000000] font-semibold flex items-center gap-1 cursor-pointer"
               >
                 <CheckCheck className="w-3.5 h-3.5" />
                 Mark all read
@@ -150,7 +150,7 @@ export const NotificationsDropdown: React.FC<NotificationsDropdownProps> = ({
                 >
                   <div
                     className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${
-                      !item.is_read ? 'bg-[#0F766E] ring-2 ring-[#0F766E]/20' : 'bg-transparent'
+                      !item.is_read ? 'bg-[#111111] ring-2 ring-[#111111]/20' : 'bg-transparent'
                     }`}
                   />
                   <div className="flex-1 min-w-0">

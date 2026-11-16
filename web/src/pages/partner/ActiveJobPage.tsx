@@ -96,7 +96,7 @@ export const ActiveJobPage: React.FC = () => {
       <div className="mx-auto w-full max-w-xl lg:max-w-5xl px-4 py-4 pb-8">
         <Link
           to="/partner/dashboard"
-          className="inline-flex items-center gap-1.5 min-h-[44px] text-sm font-semibold text-slate-500 hover:text-slate-800 focus:ring-2 focus:ring-teal-600 focus:outline-none rounded-lg"
+          className="inline-flex items-center gap-1.5 min-h-[44px] text-sm font-semibold text-slate-500 hover:text-slate-800 focus:ring-2 focus:ring-slate-600 focus:outline-none rounded-lg"
         >
           <ArrowLeft className="w-4 h-4" aria-hidden="true" />
           Dashboard
@@ -198,7 +198,7 @@ export const ActiveJobPage: React.FC = () => {
                   maxLength={4}
                   value={startCode}
                   onChange={(e) => setStartCode(e.target.value.replace(/\D/g, '').slice(0, 4))}
-                  className="mt-2 w-full min-h-[48px] rounded-xl border border-slate-300 px-4 text-2xl tracking-[0.5em] font-bold text-slate-900 focus:ring-2 focus:ring-teal-600 focus:outline-none"
+                  className="mt-2 w-full min-h-[48px] rounded-xl border border-slate-300 px-4 text-2xl tracking-[0.5em] font-bold text-slate-900 focus:ring-2 focus:ring-slate-600 focus:outline-none"
                   placeholder="••••"
                 />
                 <p className="mt-2 text-sm text-slate-500">Ask the owner for the code shown on their tracking screen. Work starts only after it matches.</p>
@@ -222,7 +222,7 @@ export const ActiveJobPage: React.FC = () => {
                   // replaces it instead of appending (499 -> 499499).
                   onFocus={(e) => e.target.select()}
                   aria-invalid={priceTooHigh}
-                  className="mt-2 w-full min-h-[48px] rounded-xl border border-slate-300 px-4 text-lg font-bold text-slate-900 focus:ring-2 focus:ring-teal-600 focus:outline-none"
+                  className="mt-2 w-full min-h-[48px] rounded-xl border border-slate-300 px-4 text-lg font-bold text-slate-900 focus:ring-2 focus:ring-slate-600 focus:outline-none"
                 />
                 {priceTooHigh && (
                   <p role="alert" className="mt-2 text-sm font-semibold text-red-700">

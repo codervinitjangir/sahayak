@@ -2,12 +2,15 @@
 // Four tabs: Home, Services, Activity, Account. The request flow itself lives in
 // OwnerHelpFlowScreen and is pushed on top of this shell.
 import React, { useCallback, useState } from "react";
-import { View, Text, Pressable, StyleSheet, StatusBar } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
-import { Colors, Typography, Spacing } from "../../../constants/theme";
+import { View, StyleSheet } from "react-native";
+import { Colors } from "../../../constants/theme";
 import LogoMark from "../../../components/brand/LogoMark";
-import TabBar, { type TabDef } from "../../../components/ui/TabBar";
+import ScreenHero, { HeroPill } from "../../../components/ui/ScreenHero";
+import { useAuthStore } from "../../../store/authStore";
+import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import type { OwnerStackParamList } from "../../../types";
+import TabBar, { TAB_BAR_SPACE, type TabDef } from "../../../components/ui/TabBar";
 import HomeTab from "../../home/HomeTab";
 import ServicesTab from "../../services/screens/ServicesTab";
 import ActivityTab from "../../activity/screens/ActivityTab";
@@ -28,6 +31,7 @@ export default function HomeScreen() {
   const unread = useUnreadCount().data ?? 0;
   const jobs = useMyJobs();
   const qc = useQueryClient();
+  const nav = useNavigation<NativeStackNavigationProp<OwnerStackParamList>>();
 
   // React Query cannot see screen focus on native. Coming back from the
   // request flow must re-read the job list, or the shell keeps showing the
@@ -45,25 +49,37 @@ export default function HomeScreen() {
     { key: "account", label: "Account", icon: "person-outline", iconActive: "person" },
   ];
 
-  return (
-    <SafeAreaView style={styles.root} edges={["top"]}>
-      <StatusBar barStyle="dark-content" />
+  const user = useAuthStore((st) => st.user);
+  const first = (user?.name ?? "").split(" ")[0];
+  const named = first && !/^(vehicle|service)$/i.test(first);
+  const heroCopy: Record<TabKey, { title: string; greeting?: string; subtitle?: string }> = {
+    home: { title: "Sahayak", greeting: named ? `Hello, ${first}` : "Hello there", subtitle: "Stuck on the road? Help is a few taps away." },
+    services: { title: "Services", greeting: "What do you need?", subtitle: "Verified partners for every roadside problem" },
+    activity: { title: "Activity", greeting: "Your requests", subtitle: "Follow live jobs and look back at past ones" },
+    account: { title: "Account", greeting: named ? `Hello, ${first}` : "Your account", subtitle: "Profile, vehicles and help" },
+  };
+  const h = heroCopy[tab];
+  const bell = { icon: "notifications-outline" as const, label: unread > 0 ? `Notifications, ${unread} unread` : "Notifications", onPress: () => setNotifOpen(true), dot: unread > 0 };
 
-      <View style={styles.header}>
-        <View style={styles.brand}>
-          <LogoMark size={32} />
-          <Text style={styles.brandText}>Sahayak</Text>
-        </View>
-        <Pressable
-          onPress={() => setNotifOpen(true)}
-          accessibilityRole="button"
-          accessibilityLabel={unread > 0 ? `Notifications, ${unread} unread` : "Notifications"}
-          style={styles.bell}
-        >
-          <Ionicons name="notifications-outline" size={26} color={Colors.textPrimary} />
-          {unread > 0 ? <View style={styles.bellDot} /> : null}
-        </Pressable>
-      </View>
+  return (
+    <View style={styles.root}>
+      <ScreenHero
+        title={h.title}
+        greeting={h.greeting}
+        subtitle={h.subtitle}
+        center={tab !== "home"}
+        left={<LogoMark size={36} />}
+        right={bell}
+      >
+        {tab === "home" ? (
+          <HeroPill
+            title="Request roadside help"
+            subtitle="Where you are · What happened"
+            actionIcon="arrow-forward"
+            onPress={() => nav.navigate("OwnerFlow", { initialStep: "service_select" })}
+          />
+        ) : null}
+      </ScreenHero>
 
       <View style={styles.body}>
         {tab === "home" && (
@@ -74,33 +90,19 @@ export default function HomeScreen() {
         {tab === "account" && <AccountTab onAddVehicle={() => setAddVehicleOpen(true)} />}
       </View>
 
-      <View style={styles.barDock}>
+      <View style={styles.barDock} pointerEvents="box-none">
         <ActiveRequestBar jobs={jobs.data} />
       </View>
       <TabBar tabs={tabs} active={tab} onChange={setTab} />
 
       <AddVehicleModal visible={addVehicleOpen} onClose={() => setAddVehicleOpen(false)} />
       <NotificationsModal visible={notifOpen} onClose={() => setNotifOpen(false)} />
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.surfaceWhite },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Spacing.screenHorizontal,
-    minHeight: 56,
-    backgroundColor: Colors.surfaceWhite,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.border,
-  },
-  brand: { flexDirection: "row", alignItems: "center", gap: 10 },
-  brandText: { fontSize: Typography.fontSize.xl, fontFamily: Typography.fontFamily.bold, color: Colors.textPrimary, letterSpacing: Typography.letterSpacing.section },
-  bell: { width: 48, height: 48, alignItems: "center", justifyContent: "center", marginRight: -8 },
-  bellDot: { position: "absolute", top: 10, right: 10, width: 10, height: 10, borderRadius: 5, backgroundColor: Colors.emergency, borderWidth: 2, borderColor: Colors.surfaceWhite },
-  body: { flex: 1, backgroundColor: Colors.surface },
-  barDock: { backgroundColor: Colors.surface },
+  root: { flex: 1, backgroundColor: Colors.surface },
+  body: { flex: 1, backgroundColor: Colors.surface, paddingBottom: TAB_BAR_SPACE - 24 },
+  barDock: { position: "absolute", left: 0, right: 0, bottom: TAB_BAR_SPACE },
 });

@@ -6,14 +6,14 @@ export default {
     extend: {
       colors: {
         brand: {
-          50: '#F0FDFA',
-          100: '#CCFBF1',
-          200: '#99F6E4',
-          500: '#14B8A6',
-          600: '#0D9488',
-          700: '#0F766E', // primary action
-          800: '#115E59',
-          900: '#134E4A',
+          50: '#F1F2F4',
+          100: '#E4E6EA',
+          200: '#D4D7DC',
+          500: '#3A3D44',
+          600: '#24262B',
+          700: '#111111', // primary action
+          800: '#000000',
+          900: '#141518',
         },
         emergency: {
           50: '#FEF2F2',
@@ -35,16 +35,16 @@ export default {
           info: '#0369A1',
         },
         ink: {
-          DEFAULT: '#0F172A',
+          DEFAULT: '#111111',
           soft: '#475569',
           muted: '#64748B',
         },
         line: {
-          DEFAULT: '#E2E8F0',
+          DEFAULT: '#E3E5E9',
           subtle: '#EEF2F6',
         },
         surface: '#FFFFFF',
-        canvas: '#F6F8FA',
+        canvas: '#EEF0F3',
         // Legacy alias, retained so shared primitives keep compiling; same as surface.
         paper: { DEFAULT: '#F6F8FA', card: '#FFFFFF' },
         pastel: {
@@ -57,12 +57,12 @@ export default {
       },
       fontFamily: {
         display: ['Fraunces', 'Georgia', 'serif'],
-        sans: ['Inter', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
+        sans: ['Urbanist', 'Inter', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
       },
       borderRadius: {
-        control: '12px',
-        card: '16px',
-        sheet: '24px',
+        control: '999px',
+        card: '24px',
+        sheet: '32px',
       },
       boxShadow: {
         '2xs': '0 1px rgb(0 0 0 / 0.05)',

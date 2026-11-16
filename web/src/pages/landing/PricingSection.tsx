@@ -12,7 +12,7 @@ export const PricingSection: React.FC = () => {
             fontWeight: 700,
             letterSpacing: '0.12em',
             textTransform: 'uppercase',
-            color: '#0F766E',
+            color: '#111111',
             marginBottom: '8px',
           }}
         >
@@ -58,7 +58,7 @@ export const PricingSection: React.FC = () => {
                 height: '44px',
                 borderRadius: '12px',
                 backgroundColor: 'rgba(15, 118, 110, 0.1)',
-                color: '#0F766E',
+                color: '#111111',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -179,7 +179,7 @@ export const PricingSection: React.FC = () => {
               justifyContent: 'center',
               padding: '14px 28px',
               borderRadius: '9999px',
-              backgroundColor: '#0F766E',
+              backgroundColor: '#111111',
               color: '#FFFFFF',
               fontWeight: 600,
               fontSize: '15px',

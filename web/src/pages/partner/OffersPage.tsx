@@ -46,7 +46,7 @@ export const OffersPage: React.FC = () => {
       <div className="mx-auto w-full max-w-xl lg:max-w-2xl px-4 py-4 space-y-3 pb-8">
         <Link
           to="/partner/dashboard"
-          className="inline-flex items-center gap-1.5 min-h-[44px] text-sm font-semibold text-slate-500 hover:text-slate-800 focus:ring-2 focus:ring-teal-600 focus:outline-none rounded-lg"
+          className="inline-flex items-center gap-1.5 min-h-[44px] text-sm font-semibold text-slate-500 hover:text-slate-800 focus:ring-2 focus:ring-slate-600 focus:outline-none rounded-lg"
         >
           <ArrowLeft className="w-4 h-4" aria-hidden="true" />
           Dashboard
@@ -79,8 +79,8 @@ export const OffersPage: React.FC = () => {
             <Card aria-label="Offer details" className="border-brand-700">
               <CardHeader eyebrow="Offer" title={offer.serviceName} />
 
-              <div className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-teal-50 border border-teal-200 text-teal-800 text-xs font-semibold">
-                <span className="w-2 h-2 rounded-full bg-teal-500 animate-pulse" />
+              <div className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-slate-800 text-xs font-semibold">
+                <span className="w-2 h-2 rounded-full bg-slate-500 animate-pulse" />
                 <span>Dispatch offer active · Awaiting your response</span>
               </div>
 

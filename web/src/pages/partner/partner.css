@@ -26,13 +26,13 @@
 }
 
 .step-indicator__dot--active {
-  background: #0F766E;
+  background: #111111;
   color: #fff;
   box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.15);
 }
 
 .step-indicator__dot--done {
-  background: #0F766E;
+  background: #111111;
   color: #fff;
 }
 
@@ -51,7 +51,7 @@
 }
 
 .step-indicator__line--done {
-  background: #0F766E;
+  background: #111111;
 }
 
 /* ── OTP Input ──────────────────────────────────────────────────────────── */
@@ -79,11 +79,11 @@
   color: #1E293B;
   outline: none;
   transition: border-color 0.2s, box-shadow 0.2s;
-  caret-color: #0F766E;
+  caret-color: #111111;
 }
 
 .otp-input-group__digit:focus {
-  border-color: #0F766E;
+  border-color: #111111;
   box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
 }
 
@@ -152,14 +152,14 @@
 }
 
 .toggle-switch:focus-visible {
-  outline: 2px solid #0F766E;
+  outline: 2px solid #111111;
   outline-offset: 2px;
 }
 
 /* Teal, not the accent red. "On" is the desired state on every switch in this
    console — a red ON in a teal console reads as an error, not as enabled. */
 .toggle-switch--active {
-  background: #0F766E;
+  background: #111111;
 }
 
 .toggle-switch:disabled {
@@ -298,11 +298,11 @@
 }
 
 .nav-active-pill {
-  background-color: #F0FDFA;
-  color: #115E59;
+  background-color: #F1F2F4;
+  color: #000000;
   font-weight: 600;
   border-radius: 12px;
-  box-shadow: inset 3px 0 0 #0F766E;
+  box-shadow: inset 3px 0 0 #111111;
 }
 
 /* Phone / small tablet: the sidebar becomes a one-row scrolling tab strip. */

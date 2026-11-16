@@ -5,7 +5,6 @@ import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Colors, Typography, Radius, Spacing, ServiceConfig } from "../../constants/theme";
 import type { OwnerStackParamList, ServiceType } from "../../types";
-import Button from "../../components/ui/Button";
 import Card from "../../components/ui/Card";
 import SafetyActions from "../../components/ui/SafetyActions";
 import { SectionHeader, StatusChip, Skeleton, EmptyState } from "../../components/ui/kit";
@@ -51,26 +50,6 @@ export default function HomeTab({
         />
       }
     >
-      {/* Primary action */}
-      <View style={styles.hero}>
-        <Text style={styles.heroEyebrow}>Roadside assistance in Bengaluru</Text>
-        <Text style={styles.heroTitle} accessibilityRole="header">
-          Stranded on the road?
-        </Text>
-        <Text style={styles.heroBody}>
-          Tell us where you are and what happened. We will match you with a verified partner nearby.
-        </Text>
-        <View style={{ marginTop: Spacing.lg }}>
-          <Button
-            label="Request help"
-            onPress={() => startFlow()}
-            style={{ backgroundColor: "#FFFFFF" }}
-            textStyle={{ color: Colors.primaryDeep }}
-            icon={<Ionicons name="medkit-outline" size={22} color={Colors.primaryDeep} />}
-          />
-        </View>
-      </View>
-
       <SafetyActions />
 
       {/* Shortcuts */}
@@ -174,7 +153,7 @@ export default function HomeTab({
 }
 
 const styles = StyleSheet.create({
-  content: { padding: Spacing.screenHorizontal, gap: Spacing.xl, paddingBottom: Spacing["4xl"] },
+  content: { padding: Spacing.screenHorizontal, gap: Spacing.xl, paddingBottom: Spacing["4xl"] + 40 },
   hero: { backgroundColor: Colors.primaryDeep, borderRadius: Radius["2xl"], padding: Spacing.xl },
   heroEyebrow: { color: Colors.brand700Light, fontSize: Typography.fontSize.sm, fontFamily: Typography.fontFamily.semiBold },
   heroTitle: { marginTop: 8, color: "#fff", fontSize: Typography.fontSize["4xl"], fontFamily: Typography.fontFamily.bold, letterSpacing: Typography.letterSpacing.display },
@@ -200,15 +179,13 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     minHeight: 104,
     borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: Colors.border,
     backgroundColor: Colors.surfaceWhite,
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
     padding: Spacing.md,
   },
-  tileIcon: { width: 48, height: 48, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  tileIcon: { width: 52, height: 52, borderRadius: 26, alignItems: "center", justifyContent: "center" },
   tileLabel: { fontSize: Typography.fontSize.base, fontFamily: Typography.fontFamily.semiBold, color: Colors.textPrimary, textAlign: "center" },
 
   vehicleRow: { flexDirection: "row", alignItems: "center", gap: Spacing.md, padding: Spacing.base, minHeight: 64 },

@@ -173,8 +173,8 @@ export const PublicTrackPage: React.FC = () => {
             )}
 
             {tracking.partner_lat != null && tracking.partner_lng != null && isLive && (
-              <div className="flex items-center gap-2 pt-2 border-t border-slate-200 text-teal-800 text-xs font-medium">
-                <Navigation className="w-3.5 h-3.5 text-teal-600 animate-pulse" />
+              <div className="flex items-center gap-2 pt-2 border-t border-slate-200 text-slate-800 text-xs font-medium">
+                <Navigation className="w-3.5 h-3.5 text-slate-600 animate-pulse" />
                 <span>
                   Live GPS signal received
                   {tracking.partner_location_updated_at ? ` · Updated recently` : ''}

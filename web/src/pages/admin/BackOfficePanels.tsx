@@ -35,7 +35,7 @@ const SearchBox: React.FC<{ value: string; onChange: (v: string) => void; placeh
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
-      className="w-full rounded-[10px] border border-[#EEF2F6] bg-white pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0F766E]/30"
+      className="w-full rounded-[10px] border border-[#EEF2F6] bg-white pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#111111]/30"
     />
   </label>
 );
@@ -208,7 +208,7 @@ export const JobsBoardPanel: React.FC = () => {
               type="button"
               aria-pressed={filter === f.id}
               onClick={() => { setFilter(f.id); setOffset(0); }}
-              className={`rounded-[8px] px-3 py-1.5 text-xs font-semibold ${filter === f.id ? 'bg-[#0F766E] text-white' : 'text-[#475569] hover:bg-[#F6F8FA]'}`}
+              className={`rounded-[8px] px-3 py-1.5 text-xs font-semibold ${filter === f.id ? 'bg-[#111111] text-white' : 'text-[#475569] hover:bg-[#F6F8FA]'}`}
             >
               {f.label}
             </button>
@@ -252,7 +252,7 @@ export const JobsBoardPanel: React.FC = () => {
                   <td className="px-3 py-2">
                     {j.owner_name ?? '—'}
                     {j.owner_phone && (
-                      <a href={`tel:${j.owner_phone}`} className="flex items-center gap-1 text-xs text-[#0F766E]">
+                      <a href={`tel:${j.owner_phone}`} className="flex items-center gap-1 text-xs text-[#111111]">
                         <Phone className="h-3 w-3" aria-hidden="true" />{j.owner_phone}
                       </a>
                     )}
@@ -261,7 +261,7 @@ export const JobsBoardPanel: React.FC = () => {
                     {j.partner_name ?? <span className="text-slate-400">None yet</span>}
                     {j.assignment_status && <div className="text-xs text-slate-500">{j.assignment_status}</div>}
                     {j.partner_phone && (
-                      <a href={`tel:${j.partner_phone}`} className="flex items-center gap-1 text-xs text-[#0F766E]">
+                      <a href={`tel:${j.partner_phone}`} className="flex items-center gap-1 text-xs text-[#111111]">
                         <Phone className="h-3 w-3" aria-hidden="true" />{j.partner_phone}
                       </a>
                     )}
@@ -287,7 +287,7 @@ export const JobsBoardPanel: React.FC = () => {
       )}
       {board.data && <Pager total={board.data.total} offset={offset} onOffset={setOffset} />}
 
-      {reassignNote && <p role="status" className="text-sm font-medium text-[#0F766E]">{reassignNote}</p>}
+      {reassignNote && <p role="status" className="text-sm font-medium text-[#111111]">{reassignNote}</p>}
 
       {reassigning && (
         <ReasonDialog
@@ -442,7 +442,7 @@ export const AuditPanel: React.FC = () => {
             type="button"
             aria-pressed={type === id}
             onClick={() => { setType(id); setOffset(0); }}
-            className={`rounded-[8px] px-3 py-1.5 text-xs font-semibold ${type === id ? 'bg-[#0F766E] text-white' : 'text-[#475569] hover:bg-[#F6F8FA]'}`}
+            className={`rounded-[8px] px-3 py-1.5 text-xs font-semibold ${type === id ? 'bg-[#111111] text-white' : 'text-[#475569] hover:bg-[#F6F8FA]'}`}
           >
             {label}
           </button>

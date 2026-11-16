@@ -20,6 +20,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RouteProp } from "@react-navigation/native";
 
 import { Colors, Typography, Spacing, Radius, Shadows } from "../../../constants/theme";
+import ScreenHero from "../../../components/ui/ScreenHero";
 import Button from "../../../components/ui/Button";
 import Card from "../../../components/ui/Card";
 import { jobsApi } from "../../../services/api/jobs";
@@ -153,8 +154,8 @@ export default function PartnerJobDoneScreen() {
   const firstName = firstNameFor(partnerName);
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
-      <StatusBar barStyle="dark-content" />
+    <SafeAreaView style={styles.safe} edges={[]}>
+      <ScreenHero title="Job complete" greeting={firstName ? `Great work, ${firstName}` : "Great work"} subtitle="Payment and summary for this job" center />
 
       <ScrollView
         contentContainerStyle={styles.content}
@@ -166,10 +167,6 @@ export default function PartnerJobDoneScreen() {
           >
             <Ionicons name="checkmark" size={48} color={Colors.textWhite} />
           </Animated.View>
-          <Text style={styles.successTitle}>Job complete</Text>
-          <Text style={styles.successSubtitle}>
-            {firstName ? `Great work, ${firstName}.` : "Great work."}
-          </Text>
         </View>
 
         {loading ? (

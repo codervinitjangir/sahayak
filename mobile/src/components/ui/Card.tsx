@@ -35,8 +35,7 @@ export default function Card({
 const styles = StyleSheet.create({
   card: {
     borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: Colors.border,
+    borderWidth: 0,
     overflow: "hidden",
   },
 });

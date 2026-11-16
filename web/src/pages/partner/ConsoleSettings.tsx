@@ -43,7 +43,7 @@ const ToggleRow: React.FC<{
   <div className="flex items-start justify-between gap-4 py-3 border-b border-[#F0EADB] last:border-b-0">
     <div className="flex items-start gap-3 min-w-0">
       <span className="w-8 h-8 rounded-[10px] bg-[#F6F8FA] border border-[#EEF2F6] flex items-center justify-center shrink-0 mt-0.5">
-        <Icon className={`w-4 h-4 ${checked ? 'text-[#0F766E]' : 'text-[#64748B]'}`} />
+        <Icon className={`w-4 h-4 ${checked ? 'text-[#111111]' : 'text-[#64748B]'}`} />
       </span>
       <div className="min-w-0">
         <div className="text-xs font-bold text-[#0F172A]">{label}</div>
@@ -89,7 +89,7 @@ function SegmentedRow<T extends string>({
     <div className="flex items-start justify-between gap-4 py-3 border-b border-[#F0EADB] last:border-b-0">
       <div className="flex items-start gap-3 min-w-0">
         <span className="w-8 h-8 rounded-[10px] bg-[#F6F8FA] border border-[#EEF2F6] flex items-center justify-center shrink-0 mt-0.5">
-          <Icon className="w-4 h-4 text-[#0F766E]" />
+          <Icon className="w-4 h-4 text-[#111111]" />
         </span>
         <div className="min-w-0">
           <div className="text-xs font-bold text-[#0F172A]">{label}</div>
@@ -111,7 +111,7 @@ function SegmentedRow<T extends string>({
               aria-checked={isActive}
               onClick={() => onChange(option.value)}
               className={`px-2.5 py-1 rounded-[8px] text-xs font-bold transition-all ${
-                isActive ? 'bg-[#0F766E] text-white shadow-2xs' : 'text-[#475569] hover:text-[#0F172A]'
+                isActive ? 'bg-[#111111] text-white shadow-2xs' : 'text-[#475569] hover:text-[#0F172A]'
               }`}
             >
               {option.label}
@@ -188,7 +188,7 @@ export const ConsoleSettingsView: React.FC<{
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-              <span className="text-xs font-bold tracking-wider text-[#0F766E] uppercase bg-[#0F766E]/10 px-2.5 py-0.5 rounded-full border border-[#0F766E]/20">
+              <span className="text-xs font-bold tracking-wider text-[#111111] uppercase bg-[#111111]/10 px-2.5 py-0.5 rounded-full border border-[#111111]/20">
                 Console Preferences
               </span>
               <span className="text-xs font-medium text-[#475569]">Applies to this device</span>
@@ -207,7 +207,7 @@ export const ConsoleSettingsView: React.FC<{
               onClick={handleReset}
               className="px-3.5 py-1.5 rounded-[10px] bg-white hover:bg-[#FFFFFF] border border-[#EEF2F6] shadow-2xs text-xs font-semibold text-[#0F172A] flex items-center gap-1.5 transition-all"
             >
-              <RotateCcw className="w-3.5 h-3.5 text-[#0F766E]" />
+              <RotateCcw className="w-3.5 h-3.5 text-[#111111]" />
               <span>Restore defaults</span>
             </button>
           </div>
@@ -217,7 +217,7 @@ export const ConsoleSettingsView: React.FC<{
       {notice && (
         <div
           role="status"
-          className="flex items-start justify-between gap-3 rounded-[14px] border border-[#0F766E]/25 bg-[#0F766E]/8 px-4 py-3"
+          className="flex items-start justify-between gap-3 rounded-[14px] border border-[#111111]/25 bg-[#111111]/8 px-4 py-3"
         >
           <p className="text-xs font-semibold text-[#0F5C55]">{notice}</p>
           <button
@@ -348,7 +348,7 @@ export const ConsoleSettingsView: React.FC<{
       <div className="max-w-6xl mx-auto">
         <PartnerTopBar />
         <div className="flex items-center gap-2 mb-4 text-[#475569]">
-          <Settings className="w-4 h-4 text-[#0F766E]" />
+          <Settings className="w-4 h-4 text-[#111111]" />
           <span className="text-xs font-bold uppercase tracking-wider">Roadside Dispatch</span>
         </div>
         {body}

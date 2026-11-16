@@ -7,16 +7,16 @@ import { Platform } from "react-native";
 // ─── Colors ───────────────────────────────────────────────────────────────────
 export const Colors = {
   // Brand: teal. brand700 is THE primary action colour (white text on it = 5.9:1).
-  brand700: "#0F766E",
-  brand700Dark: "#115E59",
-  brand700Light: "#CCFBF1",
-  brand700Muted: "#F0FDFA",
+  brand700: "#111111",
+  brand700Dark: "#000000",
+  brand700Light: "#E4E6EA",
+  brand700Muted: "#F1F2F4",
 
-  primary: "#0F766E",
-  primaryDark: "#115E59",
-  primaryDeep: "#134E4A",
-  primaryLight: "#CCFBF1",
-  primaryMuted: "#F0FDFA",
+  primary: "#111111",
+  primaryDark: "#000000",
+  primaryDeep: "#0B0B0C",
+  primaryLight: "#E4E6EA",
+  primaryMuted: "#F1F2F4",
   /** Text and icons that sit on a primary-coloured surface. */
   onPrimary: "#FFFFFF",
 
@@ -26,13 +26,13 @@ export const Colors = {
   secondaryLight: "#334155",
 
   // Surfaces
-  surface: "#F6F8FA", // app background
+  surface: "#EEF0F3", // app background
   surfaceWhite: "#FFFFFF", // cards, sheets
   surfaceCard: "#FFFFFF",
 
   // Borders
-  border: "#E2E8F0",
-  borderLight: "#EEF2F6",
+  border: "#E3E5E9",
+  borderLight: "#F1F2F4",
 
   // Semantic. Never the only signal: pair with an icon and a word.
   success: "#15803D",
@@ -62,8 +62,8 @@ export const Colors = {
   mapShadow: "rgba(15,23,42,0.08)",
 
   // Partner offer card
-  offerAlertBg: "#F0FDFA",
-  offerAlertBorder: "#99F6E4",
+  offerAlertBg: "#F1F2F4",
+  offerAlertBorder: "#D4D7DC",
 
   // Status colours
   statusPending: "#B45309",
@@ -77,19 +77,19 @@ export const Colors = {
 
   // Skeleton / shimmer
   shimmerBase: "#E2E8F0",
-  shimmerHighlight: "#F6F8FA",
+  shimmerHighlight: "#F1F2F4",
 } as const;
 
 // ─── Typography ───────────────────────────────────────────────────────────────
-// Inter. The heaviest weight is 700; `extraBold` is kept as an alias so older
+// Urbanist (regular + medium lead, per the style guide). The heaviest weight is 700; `extraBold` is kept as an alias so older
 // call sites resolve to a font that is actually loaded.
 export const Typography = {
   fontFamily: {
-    regular: "Inter_400Regular",
-    medium: "Inter_500Medium",
-    semiBold: "Inter_600SemiBold",
-    bold: "Inter_700Bold",
-    extraBold: "Inter_700Bold",
+    regular: "Urbanist_400Regular",
+    medium: "Urbanist_500Medium",
+    semiBold: "Urbanist_600SemiBold",
+    bold: "Urbanist_700Bold",
+    extraBold: "Urbanist_700Bold",
   },
 
   // Body copy is never below 15. Captions bottom out at 12.
@@ -151,11 +151,11 @@ export const TouchTarget = 48;
 export const Radius = {
   xs: 6,
   sm: 8,
-  md: 12, // controls
-  lg: 16, // cards
-  xl: 20,
-  "2xl": 24, // sheet top corners
-  "3xl": 32,
+  md: 16, // controls
+  lg: 24, // cards
+  xl: 28,
+  "2xl": 32, // sheet top corners
+  "3xl": 40,
   full: 9999,
 } as const;
 
@@ -183,7 +183,7 @@ export const Shadows = {
 
   button: Platform.select({
     ios: {
-      shadowColor: "#0F766E",
+      shadowColor: "#000000",
       shadowOffset: { width: 0, height: 2 },
       shadowOpacity: 0.18,
       shadowRadius: 6,
@@ -225,7 +225,7 @@ export const ServiceConfig: Record<
 > = {
   towing: { label: "Towing", icon: "car-outline", color: "#0F172A", bg: "#F1F5F9" },
   battery: { label: "Battery", icon: "battery-charging-outline", color: "#B45309", bg: "#FEF3C7" },
-  tyre: { label: "Flat tyre", icon: "disc-outline", color: "#0F766E", bg: "#CCFBF1" },
+  tyre: { label: "Flat tyre", icon: "disc-outline", color: "#111111", bg: "#E4E6EA" },
   fuel: { label: "Fuel", icon: "water-outline", color: "#0369A1", bg: "#E0F2FE" },
   lockout: { label: "Lockout", icon: "key-outline", color: "#7C3AED", bg: "#EDE9FE" },
   mechanic: { label: "Repair", icon: "construct-outline", color: "#15803D", bg: "#DCFCE7" },
@@ -242,4 +242,16 @@ export const JobStatusConfig = {
   complete: { label: "Completed", color: Colors.success, bg: Colors.successLight },
   cancelled: { label: "Cancelled", color: Colors.error, bg: Colors.errorLight },
   no_match_found: { label: "No partner found", color: Colors.warning, bg: Colors.warningLight },
+} as const;
+
+// ─── Hero header (shared screen template) ─────────────────────────────────────
+// Every top-level screen opens with the same dark hero: rounded bottom corners,
+// greeting/title in white, an optional frosted pill underneath.
+export const Hero = {
+  bg: "#141518",
+  bgSoft: "#24262B",
+  glass: "rgba(255,255,255,0.16)",
+  glassBorder: "rgba(255,255,255,0.22)",
+  textSoft: "rgba(255,255,255,0.72)",
+  radius: 32,
 } as const;

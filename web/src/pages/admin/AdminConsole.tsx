@@ -89,10 +89,10 @@ export const AdminConsole: React.FC = () => {
           {/* Brand Header */}
           <div className="mb-6 pb-4 border-b border-[#EEF2F6]">
             <Link to="/admin" className="block group focus:outline-none">
-              <span className="font-semibold text-xl tracking-tight text-[#0F172A] block leading-tight group-hover:text-[#0F766E] transition-colors">
+              <span className="font-semibold text-xl tracking-tight text-[#0F172A] block leading-tight group-hover:text-[#111111] transition-colors">
                 Sahayak
               </span>
-              <span className="text-xs font-bold text-[#0F766E] tracking-wider uppercase block mt-0.5">
+              <span className="text-xs font-bold text-[#111111] tracking-wider uppercase block mt-0.5">
                 Operations & Analytics
               </span>
             </Link>
@@ -117,7 +117,7 @@ export const AdminConsole: React.FC = () => {
                       : 'text-[#475569] hover:text-[#0F172A] rounded-[10px] hover:bg-[#F6F8FA]/70'
                   }`}
                 >
-                  <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-[#0F766E]'}`} />
+                  <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-[#111111]'}`} />
                   <span>{label}</span>
                 </button>
               );
@@ -156,7 +156,7 @@ export const AdminConsole: React.FC = () => {
         {/* Bottom Profile Badge & Sign out */}
         <div className="pt-4 border-t border-[#EEF2F6] flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 rounded-full bg-[#0F766E] text-white flex items-center justify-center text-xs font-bold shrink-0">
+            <div className="w-8 h-8 rounded-full bg-[#111111] text-white flex items-center justify-center text-xs font-bold shrink-0">
               A
             </div>
             <div className="min-w-0">
@@ -182,7 +182,7 @@ export const AdminConsole: React.FC = () => {
         <div className="w-full flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 pb-4 border-b border-[#EEF2F6]">
           <div>
             <div className="flex items-center gap-2 mb-1.5">
-              <span className="px-2 py-0.5 rounded-[6px] text-xs font-bold bg-[#E6F4F1] text-[#0F766E] uppercase tracking-wider">
+              <span className="px-2 py-0.5 rounded-[6px] text-xs font-bold bg-[#E6F4F1] text-[#111111] uppercase tracking-wider">
                 {isOps ? OPS_COPY[active].tag : 'Live Ops Console'}
               </span>
             </div>
@@ -212,7 +212,7 @@ export const AdminConsole: React.FC = () => {
                     aria-pressed={preset === p.id}
                     className={`rounded-[8px] px-3 py-1.5 text-xs font-semibold transition-all ${
                       preset === p.id
-                        ? 'bg-[#0F766E] text-white shadow-2xs'
+                        ? 'bg-[#111111] text-white shadow-2xs'
                         : 'text-[#475569] hover:text-[#0F172A] hover:bg-[#F6F8FA]'
                     }`}
                   >
@@ -228,7 +228,7 @@ export const AdminConsole: React.FC = () => {
                 className="flex items-center gap-1.5 rounded-[12px] border border-[#EEF2F6] bg-white hover:bg-[#FFFFFF] px-3.5 py-2 text-xs font-semibold text-[#0F172A] transition-colors shadow-2xs disabled:opacity-50"
               >
                 <RefreshCw
-                  className={`h-3.5 w-3.5 text-[#0F766E] ${query.isFetching ? 'animate-spin' : ''}`}
+                  className={`h-3.5 w-3.5 text-[#111111] ${query.isFetching ? 'animate-spin' : ''}`}
                   aria-hidden="true"
                 />
                 <span>Refresh</span>
@@ -290,7 +290,7 @@ export const AdminConsole: React.FC = () => {
           </div>
         ) : (
           <div className="py-24 text-center">
-            <RefreshCw className="w-6 h-6 text-[#0F766E] animate-spin mx-auto mb-3" />
+            <RefreshCw className="w-6 h-6 text-[#111111] animate-spin mx-auto mb-3" />
             <p className="text-sm font-semibold text-[#475569]">Loading report…</p>
           </div>
         )}

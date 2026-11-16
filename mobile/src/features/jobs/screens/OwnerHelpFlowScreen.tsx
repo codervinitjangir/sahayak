@@ -6,6 +6,7 @@
 //   done      → completed (rate) or ended (cancelled / no partner)
 // Nothing here is simulated: a request that does not reach the backend says so
 // and stays on the details sheet.
+import { useKeyboardHeight } from "../../../hooks/useKeyboardHeight";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { View, Text, ScrollView, Pressable, TextInput, StyleSheet, Linking, Animated, KeyboardAvoidingView, Platform, StatusBar } from "react-native";
 import { showDialog } from "../../../components/ui/AppDialog";
@@ -134,6 +135,7 @@ export default function OwnerHelpFlowScreen() {
   const [canRate, setCanRate] = useState(false);
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState("");
+  const keyboardHeight = useKeyboardHeight();
   const [rated, setRated] = useState(false);
   const [rateBusy, setRateBusy] = useState(false);
   const [rateError, setRateError] = useState<string | null>(null);
@@ -355,9 +357,12 @@ export default function OwnerHelpFlowScreen() {
     try {
       await jobsApi.submitRating(jobId, rating, comment.trim() || undefined);
       setRated(true);
+      goBack();
     } catch (e: any) {
-      if (e?.response?.status === 409) setRated(true);
-      else setRateError("Could not submit your rating. Try again.");
+      if (e?.response?.status === 409) {
+        setRated(true);
+        goBack();
+      } else setRateError(`Could not submit your rating. ${e?.message ?? "Try again."}`);
     } finally {
       setRateBusy(false);
     }
@@ -414,7 +419,7 @@ export default function OwnerHelpFlowScreen() {
       {/* Floating back control */}
       <SafeAreaView style={styles.topBar} edges={["top"]} pointerEvents="box-none">
         <Pressable onPress={goBack} accessibilityRole="button" accessibilityLabel="Back" style={[styles.fab, Shadows.floating as object]}>
-          <Ionicons name="chevron-back" size={24} color={Colors.textPrimary} />
+          <Ionicons name="chevron-back" size={24} color="#fff" />
         </Pressable>
         {phase === "details" && !pickup ? (
           <View style={styles.mapHint}>
@@ -423,7 +428,11 @@ export default function OwnerHelpFlowScreen() {
         ) : null}
       </SafeAreaView>
 
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.sheetWrap} pointerEvents="box-none">
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        style={[styles.sheetWrap, Platform.OS === "android" && keyboardHeight > 0 && { bottom: keyboardHeight }]}
+        pointerEvents="box-none"
+      >
         <View style={[styles.sheet, Shadows.sheet as object, { paddingBottom: Math.max(insets.bottom, Spacing.base) }]}>
           <View style={styles.grabber} />
 
@@ -658,9 +667,6 @@ export default function OwnerHelpFlowScreen() {
                         style={[styles.input, { minHeight: 72, textAlignVertical: "top", paddingTop: 12 }]}
                       />
                       {rateError ? <Text style={styles.warn}>{rateError}</Text> : null}
-                      <View style={{ marginTop: Spacing.md }}>
-                        <Button label="Submit rating" onPress={submitRating} disabled={rating === 0} loading={rateBusy} />
-                      </View>
                     </View>
                   ) : (
                     <View style={styles.thanks}>
@@ -687,7 +693,11 @@ export default function OwnerHelpFlowScreen() {
                 </View>
               )}
               <View style={{ marginTop: Spacing.base, gap: Spacing.sm }}>
-                <Button label={job.status === "completed" ? "Done" : "Request again"} onPress={job.status === "completed" ? goBack : startAnother} />
+                <Button
+                  label={job.status === "completed" ? (canRate && !rated && rating > 0 ? "Submit & done" : "Done") : "Request again"}
+                  onPress={job.status !== "completed" ? startAnother : canRate && !rated && rating > 0 ? submitRating : goBack}
+                  loading={rateBusy}
+                />
                 {job.status !== "completed" ? <Button label="Back to home" variant="ghost" onPress={goBack} /> : null}
               </View>
             </ScrollView>
@@ -734,9 +744,9 @@ function Pulse() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.surface },
   topBar: { position: "absolute", top: 0, left: 0, right: 0, paddingHorizontal: Spacing.base, paddingTop: Spacing.sm, flexDirection: "row", alignItems: "center", gap: Spacing.md },
-  fab: { width: 48, height: 48, borderRadius: 24, backgroundColor: Colors.surfaceWhite, alignItems: "center", justifyContent: "center" },
-  mapHint: { flex: 1, backgroundColor: Colors.surfaceWhite, borderRadius: Radius.full, paddingHorizontal: 14, minHeight: 40, justifyContent: "center" },
-  mapHintText: { fontSize: Typography.fontSize.sm, fontFamily: Typography.fontFamily.semiBold, color: Colors.textPrimary },
+  fab: { width: 48, height: 48, borderRadius: 24, backgroundColor: "#141518", alignItems: "center", justifyContent: "center" },
+  mapHint: { flex: 1, backgroundColor: "rgba(20,21,24,0.88)", borderRadius: Radius.full, paddingHorizontal: 14, minHeight: 40, justifyContent: "center" },
+  mapHintText: { fontSize: Typography.fontSize.sm, fontFamily: Typography.fontFamily.medium, color: "#fff" },
 
   sheetWrap: { position: "absolute", left: 0, right: 0, bottom: 0 },
   sheet: { backgroundColor: Colors.surfaceWhite, borderTopLeftRadius: Radius["2xl"], borderTopRightRadius: Radius["2xl"], paddingHorizontal: Spacing.lg, paddingTop: Spacing.sm },

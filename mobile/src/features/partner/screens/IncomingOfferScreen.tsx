@@ -14,6 +14,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RouteProp } from "@react-navigation/native";
 
 import { Colors, Typography, Spacing, Radius, Shadows } from "../../../constants/theme";
+import ScreenHero from "../../../components/ui/ScreenHero";
 import Button from "../../../components/ui/Button";
 import Card from "../../../components/ui/Card";
 import { jobsApi } from "../../../services/api/jobs";
@@ -150,27 +151,20 @@ export default function IncomingOfferScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
-      <StatusBar barStyle="dark-content" />
-
-      {/* ── Header: what this is and how fresh it is ── */}
-      <View style={styles.alertHeader}>
-        <View style={styles.alertLeft}>
-          <View style={[styles.alertIconWrap, { backgroundColor: meta.bg }]}>
-            <Ionicons name={meta.icon as any} size={22} color={meta.color} />
+    <SafeAreaView style={styles.safe} edges={[]}>
+      <ScreenHero
+        title="New job offer"
+        greeting={meta.label ?? "Roadside job"}
+        subtitle={offeredAt ? `Offered ${relativeAge.toLowerCase()}` : "Live roadside dispatch"}
+        left={{ icon: "arrow-back", label: "Back to dashboard", onPress: () => nav.goBack() }}
+        right={
+          <View style={styles.livePill} accessibilityLabel="Live offer">
+            <View style={styles.liveDot} />
+            <Text style={styles.liveText}>LIVE</Text>
           </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.alertTitle}>New job offer</Text>
-            <Text style={styles.alertSubtitle}>
-              {offeredAt ? `Offered ${relativeAge.toLowerCase()}` : "Live roadside dispatch"}
-            </Text>
-          </View>
-        </View>
-        <View style={styles.livePill} accessibilityLabel="Live offer">
-          <View style={styles.liveDot} />
-          <Text style={styles.liveText}>LIVE</Text>
-        </View>
-      </View>
+        }
+        center
+      />
 
       <ScrollView
         style={styles.scroll}

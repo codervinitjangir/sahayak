@@ -90,7 +90,7 @@ export default function Button({
           width: fullWidth ? "100%" : undefined,
           opacity: isDisabled ? 0.55 : 1,
         },
-        vr.shadow ? (Shadows.button as ViewStyle) : undefined,
+        undefined,
         style,
       ]}
     >
@@ -111,7 +111,7 @@ export default function Button({
 
 const styles = StyleSheet.create({
   base: {
-    borderRadius: Radius.md,
+    borderRadius: Radius.full,
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
@@ -122,7 +122,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   label: {
-    fontFamily: Typography.fontFamily.semiBold,
+    fontFamily: Typography.fontFamily.medium,
   },
   iconLeft: { marginRight: Spacing.sm },
   iconRight: { marginLeft: Spacing.sm },

@@ -59,6 +59,19 @@ apiClient.interceptors.response.use(
         console.warn("[API Network Error]", error.message ?? "Backend unreachable at " + API_BASE_URL);
       }
     }
+    // axios's own message ("Request failed with status code 409") is useless
+    // to a user. Replace it with the server's reason, or a plain network
+    // message, so every `err.message` shown in a dialog says why.
+    if (error && typeof error === "object") {
+      const serverMsg = error.response?.data?.error?.message;
+      if (typeof serverMsg === "string" && serverMsg.trim()) {
+        error.message = serverMsg;
+      } else if (!error.response) {
+        error.message = "Could not reach Sahayak. Check your connection and try again.";
+      } else {
+        error.message = `Something went wrong on our side (error ${error.response.status}). Please try again.`;
+      }
+    }
     return Promise.reject(error);
   }
 );

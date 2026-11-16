@@ -11,10 +11,10 @@ export default function LogoMark({
   tile?: boolean;
 }) {
   const pin = tile ? "#FFFFFF" : "#FFFFFF";
-  const cut = "#0F766E";
+  const cut = "#111111";
   return (
     <Svg width={size} height={size} viewBox="0 0 64 64" accessibilityLabel="Sahayak">
-      {tile && <Rect width={64} height={64} rx={16} fill="#0F766E" />}
+      {tile && <Rect width={64} height={64} rx={16} fill="#111111" />}
       <Path
         fill={pin}
         d="M32 11c-9.1 0-16.5 7.1-16.5 15.9 0 11.8 16.5 27.1 16.5 27.1s16.5-15.3 16.5-27.1C48.5 18.1 41.1 11 32 11z"

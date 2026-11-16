@@ -16,7 +16,8 @@ import { SUPPORT_PHONE_DISPLAY, SUPPORT_PHONE_TEL } from "../../../constants/sup
 import Card from "../../../components/ui/Card";
 import Button from "../../../components/ui/Button";
 import LogoMark from "../../../components/brand/LogoMark";
-import TabBar, { type TabDef } from "../../../components/ui/TabBar";
+import ScreenHero from "../../../components/ui/ScreenHero";
+import TabBar, { TAB_BAR_SPACE, type TabDef } from "../../../components/ui/TabBar";
 import { EmptyState, ErrorState, ListRow, SectionHeader, Skeleton, StatusChip } from "../../../components/ui/kit";
 import { useAuthStore } from "../../../store/authStore";
 import { useJobStore } from "../../../store/jobStore";
@@ -232,29 +233,19 @@ export default function PartnerHomeScreen() {
   const verified = verification === "verified";
 
   return (
-    <SafeAreaView style={styles.root} edges={["top"]}>
-      <StatusBar barStyle="dark-content" />
-      <View style={styles.header}>
-        <View style={styles.brand}>
-          <LogoMark size={32} />
-          <Text style={styles.brandText}>Sahayak Partner</Text>
+    <View style={styles.root}>
+      <ScreenHero
+        title={tab === "home" ? "Sahayak Partner" : tab === "earnings" ? "Earnings" : "Account"}
+        greeting={user?.name && !/^service partner$/i.test(user.name) ? `Hello, ${user.name.split(" ")[0]}` : "Hello, partner"}
+        subtitle={tab === "home" ? "Stay on duty to receive nearby jobs" : tab === "earnings" ? "What you have earned on Sahayak" : "Profile, settings and help"}
+        left={<LogoMark size={36} />}
+        right={{ icon: "notifications-outline", label: unread > 0 ? `Notifications, ${unread} unread` : "Notifications", onPress: () => setNotifOpen(true), dot: unread > 0 }}
+      >
+        <View style={styles.dutyPill} accessible accessibilityLabel={isOnline ? "On duty" : "Off duty"}>
+          <View style={[styles.dutyDot, { backgroundColor: isOnline ? "#4ADE80" : Colors.offline }]} />
+          <Text style={styles.dutyText}>{isOnline ? "On duty · receiving offers" : "Off duty"}</Text>
         </View>
-        <View style={styles.headerRight}>
-          <View style={[styles.dutyPill, isOnline ? styles.dutyOn : styles.dutyOff]}>
-            <View style={[styles.dutyDot, { backgroundColor: isOnline ? Colors.success : Colors.offline }]} />
-            <Text style={[styles.dutyText, { color: isOnline ? Colors.success : Colors.textSecondary }]}>{isOnline ? "On duty" : "Off duty"}</Text>
-          </View>
-          <Pressable
-            onPress={() => setNotifOpen(true)}
-            accessibilityRole="button"
-            accessibilityLabel={unread > 0 ? `Notifications, ${unread} unread` : "Notifications"}
-            style={styles.bell}
-          >
-            <Ionicons name="notifications-outline" size={26} color={Colors.textPrimary} />
-            {unread > 0 ? <View style={styles.bellDot} /> : null}
-          </Pressable>
-        </View>
-      </View>
+      </ScreenHero>
       <NotificationsModal visible={notifOpen} onClose={() => setNotifOpen(false)} />
       <EditProfileModal
         visible={editNameOpen}
@@ -644,7 +635,7 @@ export default function PartnerHomeScreen() {
       </View>
 
       <TabBar tabs={TABS} active={tab} onChange={setTab} />
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -659,20 +650,20 @@ function Stat({ label, value, sub }: { label: string; value: string; sub?: strin
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.surfaceWhite },
+  root: { flex: 1, backgroundColor: Colors.surface },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: Spacing.screenHorizontal, minHeight: 56, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.border },
   brand: { flexDirection: "row", alignItems: "center", gap: 10 },
   headerRight: { flexDirection: "row", alignItems: "center", gap: 4 },
   bell: { width: 48, height: 48, alignItems: "center", justifyContent: "center", marginRight: -8 },
   bellDot: { position: "absolute", top: 10, right: 10, width: 10, height: 10, borderRadius: 5, backgroundColor: Colors.emergency, borderWidth: 2, borderColor: Colors.surfaceWhite },
   brandText: { fontSize: Typography.fontSize.lg, fontFamily: Typography.fontFamily.bold, color: Colors.textPrimary },
-  dutyPill: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, minHeight: 36, borderRadius: Radius.full, borderWidth: 1 },
+  dutyPill: { flexDirection: "row", alignItems: "center", alignSelf: "flex-start", gap: 8, paddingHorizontal: 16, minHeight: 40, borderRadius: Radius.full, borderWidth: 1, backgroundColor: "rgba(255,255,255,0.16)", borderColor: "rgba(255,255,255,0.22)" },
   dutyOn: { backgroundColor: Colors.successLight, borderColor: "#86EFAC" },
   dutyOff: { backgroundColor: "#F1F5F9", borderColor: Colors.border },
   dutyDot: { width: 8, height: 8, borderRadius: 4 },
-  dutyText: { fontSize: Typography.fontSize.sm, fontFamily: Typography.fontFamily.semiBold },
+  dutyText: { fontSize: Typography.fontSize.sm, fontFamily: Typography.fontFamily.medium, color: "#fff" },
   body: { flex: 1, backgroundColor: Colors.surface },
-  content: { padding: Spacing.screenHorizontal, gap: Spacing.xl, paddingBottom: Spacing["4xl"] },
+  content: { padding: Spacing.screenHorizontal, gap: Spacing.xl, paddingBottom: TAB_BAR_SPACE + 16 },
   title: { fontSize: Typography.fontSize["4xl"], fontFamily: Typography.fontFamily.bold, color: Colors.textPrimary, letterSpacing: Typography.letterSpacing.display },
   muted: { fontSize: Typography.fontSize.base, color: Colors.textSecondary, fontFamily: Typography.fontFamily.regular, lineHeight: 21 },
 

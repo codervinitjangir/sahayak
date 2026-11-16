@@ -31,9 +31,6 @@ export default function ActivityTab() {
   return (
     <View style={{ flex: 1 }}>
       <View style={styles.head}>
-        <Text style={styles.title} accessibilityRole="header">
-          Activity
-        </Text>
         <View style={styles.filters}>
           {(["all", "active", "past"] as const).map((f) => (
             <Chip key={f} label={f === "all" ? "All" : f === "active" ? "Active" : "Past"} selected={filter === f} onPress={() => setFilter(f)} />
@@ -52,7 +49,7 @@ export default function ActivityTab() {
         <FlatList
           data={items}
           keyExtractor={(j) => j.id}
-          contentContainerStyle={[styles.pad, { paddingBottom: Spacing["4xl"], gap: Spacing.md }]}
+          contentContainerStyle={[styles.pad, { paddingBottom: Spacing["4xl"] + 40, gap: Spacing.md }]}
           refreshControl={<RefreshControl refreshing={jobs.isRefetching} onRefresh={() => void jobs.refetch()} tintColor={Colors.brand700} />}
           ListEmptyComponent={
             <EmptyState

@@ -35,7 +35,7 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, className = ''
     assigned: {
       label: 'Partner Assigned',
       icon: UserCheck,
-      classes: 'bg-teal-50 text-brand-800 border-teal-300',
+      classes: 'bg-slate-50 text-brand-800 border-slate-300',
     },
     partner_en_route: {
       label: 'En Route',
@@ -45,7 +45,7 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, className = ''
     in_progress: {
       label: 'In Progress',
       icon: Wrench,
-      classes: 'bg-teal-50 text-brand-800 border-teal-300',
+      classes: 'bg-slate-50 text-brand-800 border-slate-300',
     },
     completed: {
       label: 'Completed',

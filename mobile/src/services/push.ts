@@ -45,14 +45,14 @@ export async function registerForPush(): Promise<string | null> {
         name: "Job updates",
         description: "Partner assigned, on the way, work started, completed",
         importance: Notifications.AndroidImportance.HIGH,
-        lightColor: "#0F766E",
+        lightColor: "#111111",
       });
       await Notifications.setNotificationChannelAsync("offers", {
         name: "New job offers",
         description: "A new roadside job is waiting for your answer",
         importance: Notifications.AndroidImportance.MAX,
         vibrationPattern: [0, 400, 200, 400],
-        lightColor: "#0F766E",
+        lightColor: "#111111",
         sound: "default",
         lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
       });

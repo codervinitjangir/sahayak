@@ -46,9 +46,6 @@ export default function ServicesTab() {
 
   return (
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-      <Text style={styles.title} accessibilityRole="header">
-        Services
-      </Text>
 
       <View>
         <SectionHeader title="What happened?" />
@@ -111,7 +108,7 @@ export default function ServicesTab() {
 }
 
 const styles = StyleSheet.create({
-  content: { padding: Spacing.screenHorizontal, gap: Spacing.xl, paddingBottom: Spacing["4xl"] },
+  content: { padding: Spacing.screenHorizontal, gap: Spacing.xl, paddingBottom: Spacing["4xl"] + 40 },
   title: { fontSize: Typography.fontSize["4xl"], fontFamily: Typography.fontFamily.bold, color: Colors.textPrimary, letterSpacing: Typography.letterSpacing.display },
   symptom: { flexDirection: "row", alignItems: "center", gap: Spacing.md, paddingHorizontal: Spacing.base, minHeight: 60 },
   symptomIcon: { width: 40, height: 40, borderRadius: Radius.md, backgroundColor: Colors.brand700Muted, alignItems: "center", justifyContent: "center" },

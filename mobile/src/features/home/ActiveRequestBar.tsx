@@ -139,7 +139,7 @@ export default function ActiveRequestBar({ jobs }: { jobs: BackendJob[] | undefi
     >
       <View style={styles.main}>
         <View style={[styles.iconWrap, { backgroundColor: "rgba(255,255,255,0.14)" }]}>
-          <PulseDot color={searching ? "#FCD34D" : "#5EEAD4"} />
+          <PulseDot color={searching ? "#FCD34D" : "#FFFFFF"} />
         </View>
         <View style={{ flex: 1 }}>
           <Text style={[styles.title, { color: Colors.textWhite }]} numberOfLines={1}>{title}</Text>

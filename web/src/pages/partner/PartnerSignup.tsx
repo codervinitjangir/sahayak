@@ -464,7 +464,7 @@ export const PartnerSignup: React.FC = () => {
                                 type="checkbox"
                                 checked={on}
                                 onChange={() => toggleService(s.code)}
-                                className="mt-1 w-5 h-5 accent-[#0F766E]"
+                                className="mt-1 w-5 h-5 accent-[#111111]"
                               />
                               <span>
                                 <span className="flex items-center gap-2 font-semibold">

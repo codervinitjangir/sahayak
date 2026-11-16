@@ -101,9 +101,6 @@ export default function AccountTab({ onAddVehicle }: { onAddVehicle: () => void 
 
   return (
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-      <Text style={styles.title} accessibilityRole="header">
-        Account & Settings
-      </Text>
 
       {/* Profile Card */}
       <Card>
@@ -323,7 +320,7 @@ export default function AccountTab({ onAddVehicle }: { onAddVehicle: () => void 
 }
 
 const styles = StyleSheet.create({
-  content: { padding: Spacing.screenHorizontal, gap: Spacing.xl, paddingBottom: Spacing["4xl"] },
+  content: { padding: Spacing.screenHorizontal, gap: Spacing.xl, paddingBottom: Spacing["4xl"] + 40 },
   title: { fontSize: Typography.fontSize["4xl"], fontFamily: Typography.fontFamily.bold, color: Colors.textPrimary, letterSpacing: Typography.letterSpacing.display },
   profile: { flexDirection: "row", alignItems: "center", gap: Spacing.base },
   avatar: { width: 56, height: 56, borderRadius: 28, backgroundColor: Colors.brand700, alignItems: "center", justifyContent: "center" },

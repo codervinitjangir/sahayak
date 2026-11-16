@@ -5,6 +5,7 @@
 // in_progress is POST /jobs/{id}/start with the owner's code, and completion
 // requires the partner to enter the amount actually charged.
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useKeyboardHeight } from "../../../hooks/useKeyboardHeight";
 import { View, Text, StyleSheet, TouchableOpacity, Platform, StatusBar, Animated, Linking, Pressable, TextInput, ActivityIndicator, Keyboard, ScrollView } from "react-native";
 import { showDialog } from "../../../components/ui/AppDialog";
 import { Ionicons } from "@expo/vector-icons";
@@ -57,18 +58,7 @@ export default function ActiveJobScreen() {
   const slideAnim = useRef(new Animated.Value(100)).current;
   // The start-code boxes and the amount field sit at the bottom of the sheet;
   // without lifting it, the number pad covers exactly what is being typed.
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
-
-  useEffect(() => {
-    const showEvt = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
-    const hideEvt = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
-    const show = Keyboard.addListener(showEvt, (e) => setKeyboardHeight(e.endCoordinates.height));
-    const hide = Keyboard.addListener(hideEvt, () => setKeyboardHeight(0));
-    return () => {
-      show.remove();
-      hide.remove();
-    };
-  }, []);
+  const keyboardHeight = useKeyboardHeight();
 
   const loadJob = useCallback(
     async (showSpinner: boolean) => {
@@ -663,7 +653,7 @@ const styles = StyleSheet.create({
   mapStatus: { backgroundColor: "#FFFFFF", borderRadius: 999, paddingHorizontal: 14, minHeight: 40, flexDirection: "row", alignItems: "center", gap: 8, elevation: 4 },
   mapStatusDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: Colors.brand700 },
   mapLoading: { flex: 1, backgroundColor: "#EEF2F6" },
-  mapStatusText: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#0F172A" },
+  mapStatusText: { fontSize: 13, fontFamily: "Urbanist_600SemiBold", color: "#0F172A" },
   container: { flex: 1, backgroundColor: "#E2E8F0" },
   map: { ...(StyleSheet.absoluteFill as object) },
   mapFallback: {
@@ -909,7 +899,7 @@ const styles = StyleSheet.create({
   },
 
   inProgressContainer: {
-    backgroundColor: "#F0FDFA",
+    backgroundColor: "#F1F2F4",
     borderRadius: Radius.xl,
     borderWidth: 1,
     borderColor: Colors.brand700Light,

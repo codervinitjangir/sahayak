@@ -38,7 +38,7 @@ export const StatusPill: React.FC<StatusPillProps> = ({ status, size = 'sm', cla
         <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" aria-hidden="true" />
       )}
       {status === 'partner_en_route' && (
-        <span className="w-1.5 h-1.5 rounded-full bg-teal-300 animate-pulse" aria-hidden="true" />
+        <span className="w-1.5 h-1.5 rounded-full bg-slate-300 animate-pulse" aria-hidden="true" />
       )}
       <span>{config.label}</span>
     </Badge>

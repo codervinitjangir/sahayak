@@ -28,9 +28,9 @@ window.addEventListener('message',function(ev){
   if(partner){map.removeLayer(partner);partner=null;}
   if(s.partner){partner=L.marker([s.partner.latitude,s.partner.longitude],{icon:pin('🚗')}).addTo(map);}
   if(radar){map.removeLayer(radar);radar=null;}
-  if(s.radar){radar=L.circle(u,{radius:s.radarRadius,color:'#0F766E',fillColor:'#0F766E',fillOpacity:.18}).addTo(map);}
+  if(s.radar){radar=L.circle(u,{radius:s.radarRadius,color:'#111111',fillColor:'#111111',fillOpacity:.18}).addTo(map);}
   if(line){map.removeLayer(line);line=null;}
-  if(s.route&&s.route.length>1){line=L.polyline(s.route.map(function(p){return [p.latitude,p.longitude];}),{color:'#0F766E',weight:5}).addTo(map);}
+  if(s.route&&s.route.length>1){line=L.polyline(s.route.map(function(p){return [p.latitude,p.longitude];}),{color:'#111111',weight:5}).addTo(map);}
   var key=u.join(',')+'|'+(s.partner?'p':'');
   if(key!==lastKey){lastKey=key;
     if(line){map.fitBounds(line.getBounds(),{paddingTopLeft:[40,60],paddingBottomRight:[40,260]});}

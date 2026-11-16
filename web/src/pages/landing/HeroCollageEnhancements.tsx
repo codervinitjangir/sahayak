@@ -5,7 +5,7 @@ import React from 'react';
    - Natural, believable vehicle & human proportions
    - Cream bodywork (#FBF8F1)
    - Consistent charcoal outlines (#3A3630)
-   - Restrained Sahayak teal accents (#0F766E / #14B8A6) on uniform vest, cap, vehicle rocker sill, and tool kit
+   - Restrained Sahayak teal accents (#111111 / #14B8A6) on uniform vest, cap, vehicle rocker sill, and tool kit
    - Grounded naturally right above the bottom road
    ══════════════════════════════════════════════════════════════ */
 export const RoadsideScene: React.FC = () => (
@@ -30,7 +30,7 @@ export const RoadsideScene: React.FC = () => (
       {/* Toolbox body */}
       <rect x="18" y="110" width="18" height="10" rx="1.5" fill="#FBF8F1" stroke="#3A3630" strokeWidth="1.8" />
       {/* Restrained teal accent line on toolbox */}
-      <rect x="18" y="113.5" width="18" height="2.2" fill="#0F766E" />
+      <rect x="18" y="113.5" width="18" height="2.2" fill="#111111" />
       {/* Metal latch */}
       <rect x="25.5" y="112.5" width="3" height="3.5" rx="0.5" fill="#3A3630" />
       {/* Toolbox handle */}
@@ -49,7 +49,7 @@ export const RoadsideScene: React.FC = () => (
       {/* Service cap with restrained teal crown */}
       <path
         d="M 47.5 64 C 47.5 59 58.5 58 61 61.5 L 67 62"
-        fill="#0F766E"
+        fill="#111111"
         stroke="#3A3630"
         strokeWidth="1.9"
         strokeLinejoin="round"
@@ -58,7 +58,7 @@ export const RoadsideScene: React.FC = () => (
       {/* Torso & Uniform Vest (Sahayak brand teal with clean charcoal outline) */}
       <path
         d="M 50 71.5 L 60 71.5 L 72 93 L 56 96 Z"
-        fill="#0F766E"
+        fill="#111111"
         stroke="#3A3630"
         strokeWidth="2.2"
         strokeLinejoin="round"
@@ -182,9 +182,9 @@ export const RoadsideScene: React.FC = () => (
 
       {/* Restrained Teal Accents on Vehicle */}
       {/* Lower rocker sill pinstripe in Sahayak teal */}
-      <line x1="156" y1="105" x2="224" y2="105" stroke="#0F766E" strokeWidth="2.4" strokeLinecap="round" />
+      <line x1="156" y1="105" x2="224" y2="105" stroke="#111111" strokeWidth="2.4" strokeLinecap="round" />
       {/* Front fender badge */}
-      <rect x="135" y="77.5" width="4.5" height="2" rx="0.8" fill="#0F766E" />
+      <rect x="135" y="77.5" width="4.5" height="2" rx="0.8" fill="#111111" />
 
       {/* Lights */}
       {/* Front amber headlight cluster */}

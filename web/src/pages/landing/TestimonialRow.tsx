@@ -8,7 +8,7 @@ const STEPS = [
     title: 'Share your location & issue',
     desc: 'Puncture, dead battery, need towing, or out of fuel — pick your vehicle issue and pinpoint your coordinates.',
     icon: MapPin,
-    color: '#0F766E',
+    color: '#111111',
     colorLight: 'rgba(15, 118, 110, 0.1)',
     visual: (
       /* Illustration of the picker, not the picker itself. Rendered inert so

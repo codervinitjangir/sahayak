@@ -48,7 +48,7 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({
         </div>
         <div className="flex flex-col items-end">
           {service.base_price && (
-            <span className="text-xs font-bold text-[#0F766E] bg-teal-50 border border-teal-100 px-2 py-0.5 rounded">
+            <span className="text-xs font-bold text-[#111111] bg-slate-50 border border-slate-100 px-2 py-0.5 rounded">
               From ₹{Number(service.base_price).toLocaleString('en-IN')}
             </span>
           )}

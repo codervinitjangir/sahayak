@@ -20,6 +20,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Colors, Typography, Radius, Spacing } from "../../../constants/theme";
 import Button from "../../../components/ui/Button";
 import LogoMark from "../../../components/brand/LogoMark";
+import ScreenHero from "../../../components/ui/ScreenHero";
 import { identityService } from "../../../services/identity";
 import { usersApi } from "../../../services/api/users";
 import { partnerApi } from "../../../services/api/partner";
@@ -229,23 +230,15 @@ export default function LoginScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
-      <StatusBar barStyle="dark-content" />
+    <SafeAreaView style={styles.safe} edges={["bottom"]}>
+      <ScreenHero
+        title="Sahayak"
+        greeting={step === "phone" ? "Welcome" : undefined}
+        subtitle={step === "phone" ? "Verified roadside help across Bengaluru" : undefined}
+        left={step === "phone" ? <LogoMark size={36} /> : { icon: "arrow-back", label: "Back", onPress: back }}
+      />
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-          <View style={styles.topRow}>
-            {step === "phone" ? (
-              <View style={styles.brand}>
-                <LogoMark size={36} />
-                <Text style={styles.brandText}>Sahayak</Text>
-              </View>
-            ) : (
-              <Pressable onPress={back} accessibilityRole="button" accessibilityLabel="Back" style={styles.backBtn}>
-                <Ionicons name="arrow-back" size={24} color={Colors.textPrimary} />
-              </Pressable>
-            )}
-          </View>
-
           {step === "phone" && (
             <View>
               <Text style={styles.title} accessibilityRole="header">
@@ -450,7 +443,7 @@ export default function LoginScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.surfaceWhite },
-  scroll: { flexGrow: 1, padding: Spacing.screenHorizontal, paddingBottom: Spacing["3xl"] },
+  scroll: { flexGrow: 1, padding: Spacing.screenHorizontal, paddingTop: Spacing.xl, paddingBottom: Spacing["3xl"] },
   topRow: { minHeight: 56, justifyContent: "center", marginBottom: Spacing.lg },
   brand: { flexDirection: "row", alignItems: "center", gap: 10 },
   brandText: { fontSize: Typography.fontSize["2xl"], fontFamily: Typography.fontFamily.bold, color: Colors.textPrimary },

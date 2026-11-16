@@ -130,7 +130,7 @@ export const PartnersPanel: React.FC = () => {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2">
-              <ShieldCheck className="w-5 h-5 text-[#0F766E]" />
+              <ShieldCheck className="w-5 h-5 text-[#111111]" />
               <h2 className="text-lg font-bold text-[#0F172A]">
                 Mechanic & Workshop Verification
               </h2>
@@ -147,7 +147,7 @@ export const PartnersPanel: React.FC = () => {
               disabled={loading}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-[8px] border border-[#EEF2F6] bg-white hover:bg-[#F6F8FA] text-[#0F172A] transition-colors"
             >
-              <RefreshCw className={`w-3.5 h-3.5 text-[#0F766E] ${loading ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 text-[#111111] ${loading ? 'animate-spin' : ''}`} />
               <span>Refresh</span>
             </button>
           </div>
@@ -187,7 +187,7 @@ export const PartnersPanel: React.FC = () => {
               onClick={() => setStatusFilter('verified')}
               className={`px-3 py-1 text-xs font-semibold rounded-[6px] transition-all flex items-center gap-1.5 ${
                 statusFilter === 'verified'
-                  ? 'bg-[#0F766E] text-white shadow-2xs'
+                  ? 'bg-[#111111] text-white shadow-2xs'
                   : 'text-[#065F46] bg-[#D1FAE5] hover:bg-[#A7F3D0]'
               }`}
             >
@@ -215,7 +215,7 @@ export const PartnersPanel: React.FC = () => {
               placeholder="Search partner or phone..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full sm:w-64 pl-8 pr-3 py-1.5 text-xs rounded-[8px] border border-[#EEF2F6] bg-white text-[#0F172A] focus:outline-none focus:border-[#0F766E]"
+              className="w-full sm:w-64 pl-8 pr-3 py-1.5 text-xs rounded-[8px] border border-[#EEF2F6] bg-white text-[#0F172A] focus:outline-none focus:border-[#111111]"
             />
           </div>
         </div>
@@ -228,7 +228,7 @@ export const PartnersPanel: React.FC = () => {
         </div>
       ) : loading ? (
         <div className="py-20 text-center">
-          <RefreshCw className="w-6 h-6 text-[#0F766E] animate-spin mx-auto mb-2" />
+          <RefreshCw className="w-6 h-6 text-[#111111] animate-spin mx-auto mb-2" />
           <p className="text-xs text-[#475569]">Loading partners from database…</p>
         </div>
       ) : filteredPartners.length === 0 ? (
@@ -248,7 +248,7 @@ export const PartnersPanel: React.FC = () => {
             return (
               <div
                 key={partner.id}
-                className="bg-white rounded-[16px] border border-[#EEF2F6] p-5 shadow-2xs flex flex-col justify-between hover:border-[#0F766E]/40 transition-colors"
+                className="bg-white rounded-[16px] border border-[#EEF2F6] p-5 shadow-2xs flex flex-col justify-between hover:border-[#111111]/40 transition-colors"
               >
                 <div>
                   {/* Top Bar: Name & Verification Status Badge */}
@@ -283,7 +283,7 @@ export const PartnersPanel: React.FC = () => {
                     <div>
                       <span className="text-xs uppercase font-bold text-[#64748B] block">Rating</span>
                       <span className="font-semibold text-[#0F172A] flex items-center gap-1 mt-0.5">
-                        <Star className="w-3 h-3 text-[#0F766E]" />
+                        <Star className="w-3 h-3 text-[#111111]" />
                         {partner.rating_count ? `${Number(partner.rating_avg).toFixed(1)} (${partner.rating_count})` : 'No ratings yet'}
                       </span>
                     </div>
@@ -314,7 +314,7 @@ export const PartnersPanel: React.FC = () => {
                       type="button"
                       disabled={isProcessing}
                       onClick={() => openReview(partner.id)}
-                      className="px-3 py-1.5 rounded-[8px] border border-[#0F766E] text-[#0F766E] hover:bg-[#F0FDFA] text-xs font-semibold transition-colors flex items-center gap-1 disabled:opacity-50"
+                      className="px-3 py-1.5 rounded-[8px] border border-[#111111] text-[#111111] hover:bg-[#F1F2F4] text-xs font-semibold transition-colors flex items-center gap-1 disabled:opacity-50"
                     >
                       <FileText className="w-3.5 h-3.5" />
                       <span>Review</span>
@@ -324,7 +324,7 @@ export const PartnersPanel: React.FC = () => {
                         type="button"
                         disabled={isProcessing}
                         onClick={() => handleUpdateStatus(partner.id, 'verified')}
-                        className="px-3 py-1.5 rounded-[8px] bg-[#0F766E] hover:bg-[#0D655E] text-white text-xs font-semibold transition-colors flex items-center gap-1 disabled:opacity-50"
+                        className="px-3 py-1.5 rounded-[8px] bg-[#111111] hover:bg-[#0D655E] text-white text-xs font-semibold transition-colors flex items-center gap-1 disabled:opacity-50"
                       >
                         <CheckCircle2 className="w-3.5 h-3.5" />
                         <span>Approve</span>
@@ -486,7 +486,7 @@ export const PartnersPanel: React.FC = () => {
                       type="button"
                       disabled={actionLoadingId === detail.id}
                       onClick={() => handleUpdateStatus(detail.id, 'verified')}
-                      className="px-3 py-2 rounded-[8px] bg-[#0F766E] text-white font-semibold flex items-center gap-1 disabled:opacity-50"
+                      className="px-3 py-2 rounded-[8px] bg-[#111111] text-white font-semibold flex items-center gap-1 disabled:opacity-50"
                     >
                       <CheckCircle2 className="w-3.5 h-3.5" /> Approve
                     </button>

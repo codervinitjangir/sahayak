@@ -139,3 +139,18 @@ Hindi and Kannada localisation · dark theme · membership plans.
   every pressable in mobile.
 * Text scales with system font size; layouts wrap instead of clipping.
 * `prefers-reduced-motion` respected.
+
+## 2026-11-17 visual refresh (supersedes the colour/type/radius values above)
+
+User-directed restyle after a monochrome car-rental reference. Product, features and
+copy rules are unchanged; only the look moved:
+
+* **Primary is ink `#111111`** (was teal). `brand-*` tokens now map to the grey ramp
+  `#F1F2F4 / #E4E6EA / #D4D7DC / #3A3D44 / #24262B / #111111 / #000000 / #141518`.
+  Canvas `#EEF0F3`. Red stays reserved for SOS/destructive.
+* **Font: Urbanist** (regular + medium lead), Inter kept as fallback on web.
+* **Radius:** controls/buttons are pills, cards 24, sheets 32. Cards are borderless white on the grey canvas.
+* **Screen template (mobile):** `components/ui/ScreenHero` — dark hero with rounded bottom
+  corners, centred title, greeting, optional frosted `HeroPill`. Every tab shell uses it.
+  `TabBar` is a floating frosted pill of round icon buttons, active = black circle;
+  pad scroll content by `TAB_BAR_SPACE`.

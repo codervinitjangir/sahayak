@@ -83,7 +83,7 @@ export const PartnerConsole: React.FC = () => {
           <div className="mt-4 flex flex-col gap-2">
             {notPartner ? (
               <>
-                <Link to="/partner/signup" className="min-h-[44px] inline-flex items-center justify-center rounded-xl bg-[#0F766E] text-white font-bold">
+                <Link to="/partner/signup" className="min-h-[44px] inline-flex items-center justify-center rounded-xl bg-[#111111] text-white font-bold">
                   Register as a partner
                 </Link>
                 <Link to="/login" className="min-h-[44px] inline-flex items-center justify-center rounded-xl border border-[#EEF2F6] font-bold text-[#0F172A]">
@@ -91,7 +91,7 @@ export const PartnerConsole: React.FC = () => {
                 </Link>
               </>
             ) : (
-              <button type="button" onClick={() => void stats.refetch()} className="min-h-[44px] rounded-xl bg-[#0F766E] text-white font-bold">
+              <button type="button" onClick={() => void stats.refetch()} className="min-h-[44px] rounded-xl bg-[#111111] text-white font-bold">
                 Retry
               </button>
             )}

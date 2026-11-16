@@ -3,13 +3,13 @@
 @tailwind utilities;
 
 :root {
-  --color-primary: #0F766E;
-  --color-primary-hover: #115E59;
+  --color-primary: #111111;
+  --color-primary-hover: #000000;
   --color-danger: #B91C1C;
   --color-success: #15803D;
   --color-warning: #B45309;
   --color-surface: #FFFFFF;
-  --color-canvas: #F6F8FA;
+  --color-canvas: #EEF0F3;
   --color-ink: #0F172A;
   --color-line: #E2E8F0;
 
@@ -46,7 +46,7 @@
   --mint-cta: #9BD8A9;
 
   --font-display: 'Fraunces', Georgia, serif;
-  --font-body: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-body: 'Urbanist', 'Inter', system-ui, -apple-system, sans-serif;
 
   --shadow-warm: 0 18px 40px -12px rgba(27, 23, 18, 0.16);
   --shadow-warm-sm: 0 8px 20px -6px rgba(27, 23, 18, 0.12);
@@ -73,7 +73,7 @@ body {
 
 /* Visible focus (WCAG 2.2 SC 2.4.7 / 2.4.11). */
 :where(button, input, select, textarea, a, [tabindex]):focus-visible {
-  outline: 2px solid #0F766E;
+  outline: 2px solid #111111;
   outline-offset: 2px;
 }
 

@@ -45,7 +45,7 @@ export const FeatureBlocks: React.FC = () => {
             ))}
           </div>
           <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#5B5346', fontWeight: 600 }}>
-            <span style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#0F766E', display: 'inline-block' }} />
+            <span style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#111111', display: 'inline-block' }} />
             <span>Active roadside dispatch network across Bengaluru</span>
           </div>
         </div>
@@ -75,7 +75,7 @@ export const FeatureBlocks: React.FC = () => {
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'rgba(255,255,255,0.7)', padding: '12px 16px', borderRadius: 12 }}>
-              <MapPin size={18} color="#0F766E" />
+              <MapPin size={18} color="#111111" />
               <div style={{ fontSize: 12 }}>
                 <div style={{ fontWeight: 600, color: '#1B1712' }}>Breakdown Location Pinpointed</div>
                 <div style={{ color: '#5B5346' }}>Precise GPS breakdown coordinates</div>
@@ -89,7 +89,7 @@ export const FeatureBlocks: React.FC = () => {
               </div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'rgba(255,255,255,0.7)', padding: '12px 16px', borderRadius: 12 }}>
-              <ShieldCheck size={18} color="#0F766E" />
+              <ShieldCheck size={18} color="#111111" />
               <div style={{ fontSize: 12 }}>
                 <div style={{ fontWeight: 600, color: '#1B1712' }}>On-Site Assistance &amp; Completion</div>
                 <div style={{ color: '#5B5346' }}>Verified service delivery confirmation</div>
@@ -144,7 +144,7 @@ export const FeatureBlocks: React.FC = () => {
               <span>Flatbed and towing transport</span>
             </div>
             <div className="quiz-preview__item">
-              <CheckCircle size={14} color="#0F766E" />
+              <CheckCircle size={14} color="#111111" />
               <span>Emergency jumpstart and fuel delivery</span>
             </div>
           </div>

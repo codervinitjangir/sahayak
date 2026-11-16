@@ -11,6 +11,7 @@ import {
   ScrollView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useKeyboardHeight } from "../../hooks/useKeyboardHeight";
 import { useQueryClient } from "@tanstack/react-query";
 import { Colors, Typography, Radius, Spacing } from "../../constants/theme";
 import Button from "../../components/ui/Button";
@@ -35,6 +36,7 @@ export default function AddVehicleModal({
   const [type, setType] = useState<VehicleType>("four_wheeler");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const keyboardHeight = useKeyboardHeight();
 
   const set = (k: keyof typeof EMPTY) => (v: string) => {
     setError(null);
@@ -67,9 +69,9 @@ export default function AddVehicleModal({
       const apiMsg = e?.response?.data?.error?.message;
       const code = e?.response?.data?.error?.code;
       setError(
-        code === "VEHICLE_ALREADY_REGISTERED" || e?.response?.status === 409
+        code === "VEHICLE_ALREADY_REGISTERED"
           ? "This registration number is already saved."
-          : apiMsg ?? (e?.response ? "The vehicle could not be saved." : "Could not reach Sahayak. Check your connection.")
+          : apiMsg ?? e?.message ?? "The vehicle could not be saved."
       );
     } finally {
       setSaving(false);
@@ -80,7 +82,7 @@ export default function AddVehicleModal({
     <Modal visible={visible} animationType="slide" transparent onRequestClose={close}>
       <KeyboardAvoidingView style={styles.scrim} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <Pressable style={styles.scrimTap} onPress={close} accessibilityLabel="Close" />
-        <View style={styles.sheet}>
+        <View style={[styles.sheet, Platform.OS === "android" && keyboardHeight > 0 && { marginBottom: keyboardHeight, maxHeight: "75%" }]}>
           <View style={styles.grabber} />
           <Text style={styles.title} accessibilityRole="header">
             Add a vehicle

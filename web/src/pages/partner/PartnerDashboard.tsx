@@ -117,7 +117,7 @@ export const PartnerSidebar: React.FC<{
       }`;
       const icon = (
         <Icon
-          className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : view === 'settings' ? 'text-[#475569]' : 'text-[#0F766E]'}`}
+          className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : view === 'settings' ? 'text-[#475569]' : 'text-[#111111]'}`}
         />
       );
 
@@ -158,7 +158,7 @@ export const PartnerSidebar: React.FC<{
             }}
             className="block group focus:outline-none"
           >
-            <span className="font-semibold text-xl tracking-tight text-[#0F172A] block leading-tight group-hover:text-[#0F766E] transition-colors">
+            <span className="font-semibold text-xl tracking-tight text-[#0F172A] block leading-tight group-hover:text-[#111111] transition-colors">
               Sahayak
             </span>
             <span className="text-xs font-bold text-[#475569] tracking-wider uppercase block mt-0.5">
@@ -229,8 +229,8 @@ export const PartnerSidebar: React.FC<{
           <div className="text-xs text-[#475569] font-medium truncate mt-0.5">
             {profile.phone || 'Service partner'}
           </div>
-          <div className="text-xs text-[#0F766E] font-semibold flex items-center gap-1 mt-0.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#0F766E]" />
+          <div className="text-xs text-[#111111] font-semibold flex items-center gap-1 mt-0.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#111111]" />
             <span>{verificationBadgeLabel(sidebarStats?.verificationStatus)}</span>
           </div>
         </div>
@@ -263,7 +263,7 @@ const TopBar: React.FC<{
           <div className="flex items-center gap-5 mt-3 text-xs font-semibold text-[#475569]">
             <button
               type="button"
-              className="text-[#0F172A] font-bold pb-1 border-b-2 border-[#0F766E] cursor-pointer"
+              className="text-[#0F172A] font-bold pb-1 border-b-2 border-[#111111] cursor-pointer"
             >
               All dispatches
             </button>
@@ -285,7 +285,7 @@ const TopBar: React.FC<{
         {/* Right Action: Capability Badge */}
         <div className="flex items-center gap-2 self-start sm:self-auto">
           <div className="hidden lg:flex items-center gap-1.5 bg-white rounded-[10px] px-3 py-1.5 border border-[#EEF2F6] shadow-2xs text-xs font-bold text-[#0F172A]">
-            <Wrench className="w-3.5 h-3.5 text-[#0F766E]" />
+            <Wrench className="w-3.5 h-3.5 text-[#111111]" />
             <span>{capability}</span>
           </div>
         </div>
@@ -581,7 +581,7 @@ const EarningsAndSettlementsCard: React.FC = () => {
             {changePct !== null && !privacyMode && (
               <span
                 className={`inline-flex items-center gap-1 text-xs font-bold ${
-                  changePct >= 0 ? 'text-[#0F766E]' : 'text-rose-700'
+                  changePct >= 0 ? 'text-[#111111]' : 'text-rose-700'
                 }`}
               >
                 <TrendingUp
@@ -657,7 +657,7 @@ const EarningsAndSettlementsCard: React.FC = () => {
             <span className="text-xs font-bold text-[#64748B] uppercase tracking-wider">
               {window === 'today' ? "Today's Settled Payout" : "This Week's Settled Payout"}
             </span>
-            <div className="text-2xl font-bold text-[#0F766E] mt-1.5 tabular-nums">
+            <div className="text-2xl font-bold text-[#111111] mt-1.5 tabular-nums">
               {privacyMode ? '₹••••' : formatRupees(earnings?.amountEarned ?? 0)}
             </div>
             <div className="text-xs text-[#475569] mt-1">
@@ -728,7 +728,7 @@ const RecentDispatchActivityCard: React.FC = () => {
                     </span>
                   </div>
 
-                  <span className="w-7 h-7 rounded-full bg-[#0F766E] text-white flex items-center justify-center shrink-0">
+                  <span className="w-7 h-7 rounded-full bg-[#111111] text-white flex items-center justify-center shrink-0">
                     <Truck className="w-3.5 h-3.5" />
                   </span>
 
@@ -878,14 +878,14 @@ const PartnerStandingCard: React.FC<{ profile: PartnerProfile }> = ({ profile })
             aria-label="Offer acceptance rate"
             className="h-1.5 w-full rounded-full bg-[#EFE8DA] overflow-hidden"
           >
-            <div className="h-full rounded-full bg-[#0F766E]" style={{ width: `${acceptance}%` }} />
+            <div className="h-full rounded-full bg-[#111111]" style={{ width: `${acceptance}%` }} />
           </div>
         </div>
       </div>
 
       <div className="pt-3 border-t border-[#EEF2F6] flex items-center gap-1.5">
-        <ShieldCheck className="w-3.5 h-3.5 text-[#0F766E] shrink-0" />
-        <span className="text-xs font-bold text-[#0F766E]">{verificationBadgeLabel(stats?.verificationStatus)}</span>
+        <ShieldCheck className="w-3.5 h-3.5 text-[#111111] shrink-0" />
+        <span className="text-xs font-bold text-[#111111]">{verificationBadgeLabel(stats?.verificationStatus)}</span>
       </div>
     </section>
   );

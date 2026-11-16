@@ -121,10 +121,10 @@ export const TermsPage: React.FC = () => (
           <p>
             If you need support with an active request, have questions about these terms, or need billing assistance,
             reach the Sahayak team at{' '}
-            <a className="font-semibold text-[#0F766E] underline" href="mailto:support@sahayak.app">
+            <a className="font-semibold text-[#111111] underline" href="mailto:support@sahayak.app">
               support@sahayak.app
             </a>{' '}
-            or call <a className="font-semibold text-[#0F766E] underline" href="tel:+919250543490">+91 92505 43490</a>.
+            or call <a className="font-semibold text-[#111111] underline" href="tel:+919250543490">+91 92505 43490</a>.
             Our operations team is available 24/7 for active roadside assistance.
           </p>
         ),
@@ -196,11 +196,11 @@ export const PrivacyPage: React.FC = () => (
             You can turn location access off in your device settings (you can still set a pin by hand), and partners can
             go off duty at any time. To ask about your information, request correction or deletion, or contact our privacy
             officer, email{' '}
-            <a className="font-semibold text-[#0F766E] underline" href="mailto:privacy@sahayak.app">
+            <a className="font-semibold text-[#111111] underline" href="mailto:privacy@sahayak.app">
               privacy@sahayak.app
             </a>{' '}
             or{' '}
-            <a className="font-semibold text-[#0F766E] underline" href="mailto:support@sahayak.app">
+            <a className="font-semibold text-[#111111] underline" href="mailto:support@sahayak.app">
               support@sahayak.app
             </a>.
           </p>
