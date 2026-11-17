@@ -4,7 +4,9 @@ import { AlertTriangle, ArrowLeft, Car, MapPin, Wrench } from 'lucide-react';
 import { Card, CardHeader } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { usePartnerAvailability } from '../../features/partners/usePartnerAvailability';
-import { useActiveJob, useOfferResponse, usePendingOffer } from '../../features/partners/useOffers';
+import { PARTNER_OFFER_KEY, useActiveJob, useOfferResponse, usePendingOffer } from '../../features/partners/useOffers';
+import { useOfferCountdown } from '../../features/partners/offerCountdown';
+import { OfferCountdown } from '../../features/partners/OfferCountdownPill';
 import './partner.css';
 
 const RUPEES = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 });
@@ -15,7 +17,8 @@ function formatDistance(metres: number): string {
 
 /**
  * The full-page view of the offer the dashboard shows inline.
- * Accept / reject come from useOfferResponse. Offers do not expire server-side.
+ * Accept / reject come from useOfferResponse. The offer expires 60 s after it
+ * was made (ADR-032); the countdown shows how long is left.
  */
 export const OffersPage: React.FC = () => {
   const navigate = useNavigate();
@@ -28,6 +31,7 @@ export const OffersPage: React.FC = () => {
   const offer = offerQuery.data ?? null;
 
   const { accept, reject, isResponding, error } = useOfferResponse();
+  const countdown = useOfferCountdown(offer, PARTNER_OFFER_KEY);
 
   const handleAccept = async () => {
     if (!offer) return;
@@ -81,7 +85,8 @@ export const OffersPage: React.FC = () => {
 
               <div className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-slate-800 text-xs font-semibold">
                 <span className="w-2 h-2 rounded-full bg-slate-500 animate-pulse" />
-                <span>Dispatch offer active · Awaiting your response</span>
+                <span>Dispatch offer active</span>
+                <OfferCountdown countdown={countdown} />
               </div>
 
               <dl className="mt-4 space-y-3">
@@ -131,7 +136,7 @@ export const OffersPage: React.FC = () => {
               <Button variant="secondary" size="lg" className="flex-1" disabled={isResponding} onClick={handleReject}>
                 Reject
               </Button>
-              <Button variant="primary" size="lg" className="flex-1" disabled={isResponding} onClick={handleAccept}>
+              <Button variant="primary" size="lg" className="flex-1" disabled={isResponding || countdown.expired} onClick={handleAccept}>
                 Accept
               </Button>
             </div>

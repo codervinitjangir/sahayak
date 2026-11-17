@@ -2360,3 +2360,44 @@ card, pickup coordinates and vehicle until the next poll. Merge only `status` in
 The server's duty state. Seed the on/off-duty switch from it on every load and app resume. Found on a
 device: the app kept duty in memory only, so after a restart it read "Off duty" and stopped polling offers
 while the server still had `is_available = true` and dispatch kept sending jobs.
+
+## 21. Offers now expire; the search continues without the owner's app (ADR-032, 2026-11-17)
+
+No new endpoints. Two additive fields and two behaviour changes.
+
+**Fields (additive):**
+- `GET /partners/me/offers` items: `expires_at` (ISO datetime) = `offered_at` + 60 s.
+- `GET /admin/analytics/dispatch` → `offers.timed_out` (int). Offers the worker timed out; they
+  are no longer counted in `declined`, so `acceptance_rate_of_answered` only counts real answers.
+  `accepted + declined + timed_out + unanswered = total`. The note code
+  `UNANSWERED_OFFERS_HAVE_NO_EXPIRY` is renamed `UNANSWERED_OFFERS_ARE_NOT_REFUSALS`.
+
+**Behaviour:**
+- **An offer is timed out 60 s after it was made** (within one 15 s worker tick after that). The
+  assignment becomes `timed_out`, leaves `GET /partners/me/offers`, and the job goes to the next
+  partner. Answering it afterwards returns **409 `ASSIGNMENT_ALREADY_ANSWERED`**, as a late tap
+  already did.
+- **A `no_match_found` job inside its ten-minute window can move back to `matching` with no call
+  from the client.** The server widens the search every 15 s itself. `POST /jobs/{id}/retry-search`
+  still works (same response, same limit) for the searching screen's live radius.
+
+**Client changes already made (2026-11-17, at the user's request, an exception to the usual
+"backend fixes only the boundary" split):**
+
+| Where | Change |
+|---|---|
+| web `features/partners/offerCountdown.ts`, `OfferCountdownPill.tsx` | Deadline from `expires_at` (fallback `offered_at` + 60 s), 1 s tick, refetch of the offer list at zero |
+| web `PartnerDashboard.tsx`, `OffersPage.tsx` | "Respond within 0:42" on the offer card (warning colour under 15 s); at zero "Time is up", Accept disabled |
+| web `partner.service.ts`, `types/partner.ts` | `expires_at` → `PartnerOffer.expiresAt` |
+| web `features/jobs/hooks.ts` | `useJob` keeps polling a `no_match_found` job every 15 s while it is under 10 min old |
+| web `DispatchPanel.tsx`, `types/admin.ts`, `viz/tokens.ts` | "Timed out" segment (new neutral `SERIES.four`), "never answered" counts both |
+| web `useOffers.ts`, `OffersPage.tsx`, `JobTrackingPage.tsx` | Comments that said offers never expire |
+| mobile `features/partner/offerCountdown.ts` | Same helpers + `useSecondsLeft` |
+| mobile `IncomingOfferScreen.tsx` | Subtitle countdown replaces "Offered 2m ago"; Accept becomes "Offer expired" and disabled at zero; polite live note under 15 s |
+| mobile `PartnerHomeScreen.tsx` | Offer card shows "0:42 left" (`OfferTimer`, own tick) instead of "x min ago" |
+| mobile `ownerData.ts`, `ActiveRequestBar.tsx` | `isStillSearching`: a `no_match_found` job under 10 min old keeps the jobs list polling and shows on the bar as "Still searching wider…", not "No partner found" |
+| docs | `mobile/CLAUDE.md` rule 4, `docs/DESIGN-SYSTEM.md` item 8, `docs/FRONTEND-GUIDE.md` §4.4 no longer say "no countdown" |
+
+Tests: web 153 (new: `tests/services/offerCountdown.test.ts`, dashboard countdown and expired
+Accept, `expiresAt` mapping); mobile 65 (new: `tests/offer-countdown.test.ts`, request-bar window
+cases). `tsc` and `check:rule-a` pass on both. **Not yet seen in a browser or on a device.**

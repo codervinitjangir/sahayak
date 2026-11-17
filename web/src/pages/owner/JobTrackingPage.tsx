@@ -57,7 +57,10 @@ export const JobTrackingPage: React.FC = () => {
   const { data: job, isLoading, error, refetch: refetchJob } = useJob(jobId);
 
   // ADR-023: a no_match_found job keeps being re-searched, wider each time, for
-  // ten minutes after it was raised. null once the window has closed.
+  // ten minutes after it was raised. null once the window has closed. Since
+  // ADR-032 the server does the searching itself; this call only reads the
+  // live radius and elapsed time for the copy below (and still widens if the
+  // worker has not got there yet), so leaving the page does not stop anything.
   const [widening, setWidening] = useState<SearchStatus | null>(null);
   useEffect(() => {
     if (!jobId || job?.status !== 'no_match_found') {

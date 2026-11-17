@@ -114,7 +114,7 @@ Shipped now (all backed by existing endpoints or purely client-side):
    backend releases the partner's number.
 6. **Cancel with reason, rate after completion, job history, notifications.**
 7. **Vehicles**: list and add (backend has no edit/delete; UI doesn't pretend).
-8. **Partner shift toggle, offers with relative age (no countdown), accept/decline with
+8. **Partner shift toggle, offers with a countdown to `expires_at` (ADR-032), accept/decline with
    reason, start-code job start, complete with final price, earnings, stats, services,
    verification status.**
 9. **Navigate** (partner): deep-link to the maps app for the pickup. Client-side.

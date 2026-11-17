@@ -8,6 +8,23 @@ import { TERMINAL_STATUSES, type BackendJobStatus } from "../../components/ui/ki
 /** Re-poll while a request is in flight; stay quiet otherwise. */
 const ACTIVE_POLL_MS = 8000;
 
+/** ADR-023 search window: a no_match_found job is searched for this long after it was raised. */
+export const SEARCH_WINDOW_MS = 10 * 60_000;
+
+/**
+ * ADR-032: a no_match_found job inside its window is still being searched for
+ * by the server, with or without the app open, and can move back to
+ * 'matching' on its own. Treat it as in flight, not as finished.
+ */
+export function isStillSearching(
+  job: { status: string; requested_at?: string | null },
+  now: number = Date.now()
+): boolean {
+  if (job.status !== "no_match_found" || !job.requested_at) return false;
+  const requested = Date.parse(job.requested_at);
+  return !Number.isNaN(requested) && now - requested < SEARCH_WINDOW_MS;
+}
+
 export const QK = {
   jobs: ["owner", "jobs"] as const,
   vehicles: ["owner", "vehicles"] as const,
@@ -21,7 +38,11 @@ export function useMyJobs() {
     queryKey: QK.jobs,
     queryFn: () => jobsApi.fetchMyJobs(50, 0).then((p) => p.items),
     refetchInterval: (q) =>
-      q.state.data?.some((j) => !TERMINAL_STATUSES.includes(j.status as BackendJobStatus)) ? ACTIVE_POLL_MS : false,
+      q.state.data?.some(
+        (j) => !TERMINAL_STATUSES.includes(j.status as BackendJobStatus) || isStillSearching(j)
+      )
+        ? ACTIVE_POLL_MS
+        : false,
   });
 }
 

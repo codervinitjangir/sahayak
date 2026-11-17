@@ -22,6 +22,7 @@ import type { BackendPartnerOfferItem } from "../../../services/api/jobs";
 import type { PartnerStackParamList } from "../../../types";
 import type { ViewStyle } from "react-native";
 import { inr, metresToKm, serviceMetaFor } from "../partnerFormat";
+import { OFFER_URGENT_S, formatCountdown, offerDeadlineMs, useSecondsLeft } from "../offerCountdown";
 
 type Nav = NativeStackNavigationProp<PartnerStackParamList, "IncomingOffer">;
 type Route = RouteProp<PartnerStackParamList, "IncomingOffer">;
@@ -34,8 +35,9 @@ export default function IncomingOfferScreen() {
   const meta = serviceMetaFor(job?.service_code);
   const assignmentId = route.params?.assignmentId;
 
-  const offeredAt = offer?.offered_at;
-  const [relativeAge, setRelativeAge] = useState<string>("Just now");
+  // ADR-032: the offer is passed to the next partner 60 s after it was made.
+  const left = useSecondsLeft(offerDeadlineMs(offer));
+  const expired = left === 0;
   const [accepting, setAccepting] = useState(false);
   const [declining, setDeclining] = useState(false);
   const slideAnim = useRef(new Animated.Value(50)).current;
@@ -47,17 +49,7 @@ export default function IncomingOfferScreen() {
       tension: 60,
       friction: 10,
     }).start();
-
-    if (!offeredAt) return;
-    const calc = () => {
-      const diffMins = Math.floor((Date.now() - new Date(offeredAt).getTime()) / 60000);
-      if (diffMins <= 0) setRelativeAge("Just now");
-      else setRelativeAge(`${diffMins}m ago`);
-    };
-    calc();
-    const interval = setInterval(calc, 30000);
-    return () => clearInterval(interval);
-  }, [offeredAt]);
+  }, [slideAnim]);
 
   if (!offer || !job) {
     return (
@@ -155,7 +147,13 @@ export default function IncomingOfferScreen() {
       <ScreenHero
         title="New job offer"
         greeting={meta.label ?? "Roadside job"}
-        subtitle={offeredAt ? `Offered ${relativeAge.toLowerCase()}` : "Live roadside dispatch"}
+        subtitle={
+          left === null
+            ? "Live roadside dispatch"
+            : expired
+            ? "Time is up. Passing to the next partner"
+            : `Respond within ${formatCountdown(left)}`
+        }
         left={{ icon: "arrow-back", label: "Back to dashboard", onPress: () => nav.goBack() }}
         right={
           <View style={styles.livePill} accessibilityLabel="Live offer">
@@ -268,16 +266,21 @@ export default function IncomingOfferScreen() {
             accessibilityLabel="Decline this offer"
           />
           <Button
-            label={accepting ? "Accepting…" : "Accept job"}
+            label={accepting ? "Accepting…" : expired ? "Offer expired" : "Accept job"}
             onPress={handleAccept}
             loading={accepting}
-            disabled={declining}
+            disabled={declining || expired}
             variant="primary"
             style={styles.acceptBtn}
             fullWidth={false}
-            accessibilityLabel="Accept this job"
+            accessibilityLabel={expired ? "Offer expired" : "Accept this job"}
           />
         </View>
+        {left !== null && !expired && left <= OFFER_URGENT_S ? (
+          <Text style={styles.urgentNote} accessibilityLiveRegion="polite">
+            {left} seconds left before this job goes to another partner.
+          </Text>
+        ) : null}
       </Animated.View>
     </SafeAreaView>
   );
@@ -285,6 +288,13 @@ export default function IncomingOfferScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.surface },
+  urgentNote: {
+    marginTop: Spacing.sm,
+    textAlign: "center",
+    fontSize: Typography.fontSize.sm,
+    fontFamily: Typography.fontFamily.semiBold,
+    color: Colors.warning,
+  },
   scroll: { flex: 1 },
   content: { padding: Spacing.lg },
 

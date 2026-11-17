@@ -126,8 +126,10 @@ export default function OwnerHelpFlowScreen() {
   const [jobId, setJobId] = useState<string | null>(resumeJobId);
   const [job, setJob] = useState<BackendJob | null>(null);
   const [pollFailed, setPollFailed] = useState(false);
-  // ADR-023: while a no_match_found job is under 10 minutes old the server keeps
-  // widening the search each time we ask; null once the window has closed.
+  // ADR-023: while a no_match_found job is under 10 minutes old the search keeps
+  // widening; null once the window has closed. Since ADR-032 the server widens
+  // it on its own timer, so this screen's retry-search call only reads the live
+  // radius for the copy (and nudges the search if the worker has not yet).
   const [widening, setWidening] = useState<SearchStatus | null>(null);
   const [cancelling, setCancelling] = useState(false);
 

@@ -37,7 +37,8 @@ store/       authStore · jobStore
 3. **Location is never defaulted.** The map may look at Bengaluru before a GPS fix, but a request
    is only sendable with a real pin (GPS or a dragged marker).
 4. **Job vs. assignment.** The owner tracks a *job*; the partner responds to an *assignment*
-   (`POST /job-assignments/{id}/respond`). Offers have no countdown: show relative age.
+   (`POST /job-assignments/{id}/respond`). Offers expire 60 s after they are made (ADR-032):
+   show the countdown from the server's `expires_at` (`features/partner/offerCountdown.ts`).
 5. **Contact release follows assignment** (ADR-017). The call button appears only when the
    backend returns `partner_phone`.
 6. **Accessibility.** 48dp touch targets, `accessibilityRole`/`Label` on every pressable, status

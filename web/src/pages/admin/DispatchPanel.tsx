@@ -19,8 +19,8 @@ import { ORDINAL, SERIES, compact, dur, pct } from '../../features/admin/viz/tok
  * The hero is acceptance rate **of answered offers**, because that is the one an
  * operator can act on — it measures whether mechanics who looked at an offer
  * took it. The other rate, of *all* offers, is published immediately beside it
- * rather than buried: offers never expire in this system, so an unanswered offer
- * sits open forever and the two rates can diverge without bound. Shipping only
+ * rather than buried: an offer nobody answers times out after 60 s (ADR-032) and
+ * is not a refusal, so the two rates diverge with every timeout. Shipping only
  * one of them would be a choice about which way to flatter the number.
  */
 export const DispatchPanel: React.FC<{ data: AnalyticsDispatch }> = ({ data }) => {
@@ -29,7 +29,8 @@ export const DispatchPanel: React.FC<{ data: AnalyticsDispatch }> = ({ data }) =
   const outcomeSegments = [
     { label: 'Accepted', value: offers.accepted, color: SERIES.one },
     { label: 'Declined', value: offers.declined, color: SERIES.two },
-    { label: 'Unanswered', value: offers.unanswered, color: SERIES.three },
+    { label: 'Timed out', value: offers.timed_out ?? 0, color: SERIES.four },
+    { label: 'Still open', value: offers.unanswered, color: SERIES.three },
   ];
 
   // Ordered bins, so an ordered ramp: rank is a position, and the ramp's
@@ -62,7 +63,8 @@ export const DispatchPanel: React.FC<{ data: AnalyticsDispatch }> = ({ data }) =
                 {pct(offers.acceptance_rate_of_all)}
               </dd>
               <dd className="text-xs text-[#64748B]">
-                {compact(offers.unanswered)} never answered
+                {compact((offers.timed_out ?? 0) + offers.unanswered)} never answered
+                {(offers.timed_out ?? 0) > 0 ? ` (${compact(offers.timed_out)} timed out)` : ''}
               </dd>
             </div>
             <div>

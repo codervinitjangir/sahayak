@@ -69,6 +69,8 @@ export interface BackendPartnerOfferItem {
   assignment_id: string;
   job_id: string;
   offered_at: string;
+  /** offered_at + 60 s (ADR-032): when dispatch may time the offer out. */
+  expires_at?: string | null;
   distance_at_offer_m: number | null;
   estimated_arrival_min: number | null;
   assignment_rank: number | null;

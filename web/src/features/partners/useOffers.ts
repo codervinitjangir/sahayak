@@ -79,7 +79,8 @@ export interface OfferResponse {
 
 /**
  * Accept / reject in one place.
- * Server-side offers never expire automatically.
+ * Offers expire: dispatch times one out 60 s after it was made (ADR-032), and a
+ * late answer then gets 409, which reads as OFFER_GONE_MESSAGE here.
  */
 export function useOfferResponse(): OfferResponse {
   const queryClient = useQueryClient();

@@ -669,24 +669,22 @@ free up capacity the offer is still answerable. Don't remove the card.
 Only jobs that are actually live count against the cap: completing or cancelling a job frees the
 slot immediately, so a mechanic can work any number of jobs in a day.
 
-### 4.4 Offers do not expire — build no countdown
+### 4.4 Offers expire after 60 s (ADR-032, 2026-11-17)
 
-**There is no timeout mechanism.** The `timed_out` assignment status exists in the schema and
-nothing has ever written it. There is no background worker. An offer a mechanic never answers
-stays `offered` **indefinitely**, and the job stays `matching` indefinitely with it.
+Superseded: this section used to say "build no countdown", because nothing timed an offer out.
+Since ADR-032 a dispatch worker on the server does:
 
-Three things follow, and the first is the one I most want you to take away:
-
-- **Do not build a countdown ring, a "respond within 30s" label, or an auto-decline.** Every one
-  of those implies a server-side deadline that does not exist. The timer would expire, the UI
-  would remove the card, and the assignment would still be sitting there `offered` — the job
-  silently stuck, with nothing in the system to unstick it.
-- An owner can sit in "Finding a mechanic…" forever if the mechanics it reached all ignore it.
-  That's a real product hole, it's on the backlog, and it is not something the frontend can
-  paper over. What the owner screen *can* do is make cancelling obvious after a while — the
-  cancel button is available from `matching`, so after ~60 s of searching, promote it.
-- Show `offered_at` as relative age on the offer card ("4 min ago"). That's honest — it's how
-  old the offer is — and it does the useful half of what a countdown would do without the lie.
+- An offer unanswered **60 s** after `offered_at` is marked `timed_out` (within one 15 s worker
+  tick) and the job goes to the next partner. `GET /partners/me/offers` items carry
+  `expires_at`; the countdown reads that, never a constant of its own (web
+  `features/partners/offerCountdown.ts`, mobile `features/partner/offerCountdown.ts`).
+- At zero the card says "Time is up", disables Accept and refetches the list. A tap that still
+  reaches the server after the timeout gets **409 `ASSIGNMENT_ALREADY_ANSWERED`**, handled as
+  "offer no longer available".
+- The owner no longer sits in "Finding a mechanic…" forever: each unanswered offer moves on
+  after 60 s, and a `no_match_found` job keeps being searched for, wider, for ten minutes after
+  it was raised, **with or without the owner's app open**. Treat a `no_match_found` job inside
+  that window as in flight (keep polling it); it can come back as `matching` or `assigned`.
 
 ---
 

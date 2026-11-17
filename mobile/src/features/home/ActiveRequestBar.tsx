@@ -3,6 +3,8 @@
 // trip in view after you leave the trip screen. Two states, both from the
 // owner's real job list (GET /jobs), nothing invented:
 //   * a request in flight: live status, tap to track;
+//   * a no_match_found request inside its ten-minute search window counts as
+//     in flight: the server keeps searching for it (ADR-032);
 //   * a request that just ended with no partner (within RECENT_MISS_MS): the
 //     owner may have left the search screen before it finished, so the outcome
 //     is shown here instead of silently vanishing. Dismissable.
@@ -15,7 +17,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Colors, Typography, Spacing, Radius, Shadows } from "../../constants/theme";
 import type { OwnerStackParamList } from "../../types";
 import type { BackendJob } from "../../services/api/jobs";
-import { isActiveStatus } from "../shared/ownerData";
+import { isActiveStatus, isStillSearching } from "../shared/ownerData";
 
 type Nav = NativeStackNavigationProp<OwnerStackParamList>;
 
@@ -25,6 +27,8 @@ export const RECENT_MISS_MS = 15 * 60_000;
 const LIVE_COPY: Record<string, string> = {
   requested: "Finding a partner…",
   matching: "Finding a partner…",
+  // ADR-032: inside its ten-minute window the server is still searching, wider.
+  no_match_found: "Still searching wider…",
   assigned: "Partner assigned",
   partner_en_route: "Partner on the way",
   in_progress: "Work in progress",
@@ -40,6 +44,7 @@ export function pickBarJob(
   const live = jobs.find((j) => isActiveStatus(j.status));
   if (live) return { job: live, kind: "live" };
   const newest = jobs[0];
+  if (isStillSearching(newest, now)) return { job: newest, kind: "live" };
   if (
     newest.status === "no_match_found" &&
     !dismissed.has(newest.id) &&
@@ -123,7 +128,7 @@ export default function ActiveRequestBar({ jobs }: { jobs: BackendJob[] | undefi
     );
   }
 
-  const searching = job.status === "requested" || job.status === "matching";
+  const searching = job.status === "requested" || job.status === "matching" || job.status === "no_match_found";
   const eta = job.current_assignment?.estimated_arrival_min;
   const title =
     job.status === "partner_en_route" && eta != null

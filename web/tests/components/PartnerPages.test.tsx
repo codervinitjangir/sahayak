@@ -395,6 +395,42 @@ describe('Partner Flow', () => {
         expect(screen.queryByTestId('map-overlay-idle')).not.toBeInTheDocument();
       });
 
+      it('an incoming offer shows how long is left to respond (ADR-032)', () => {
+        saveStoredPartnerProfile({ ...DEFAULT_PARTNER_PROFILE, isAvailable: true });
+        renderDashboard((qc) => {
+          qc.setQueryData(['partner', 'active-job'], null);
+          qc.setQueryData(['partner', 'offer'], {
+            id: 'offer-test-2',
+            serviceName: 'Flat-Tyre Support',
+            vehicleNumber: 'KA-05-NB-1290',
+            pickupAddressText: '100ft Road, Indiranagar',
+            distanceAtOfferM: 2400,
+            offeredAt: new Date().toISOString(),
+            expiresAt: new Date(Date.now() + 42_000).toISOString(),
+          });
+        });
+        expect(screen.getByTestId('offer-countdown')).toHaveTextContent(/Respond within 0:4[12]/);
+        expect(screen.getByRole('button', { name: /accept job/i })).toBeEnabled();
+      });
+
+      it('an offer past its deadline cannot be accepted', () => {
+        saveStoredPartnerProfile({ ...DEFAULT_PARTNER_PROFILE, isAvailable: true });
+        renderDashboard((qc) => {
+          qc.setQueryData(['partner', 'active-job'], null);
+          qc.setQueryData(['partner', 'offer'], {
+            id: 'offer-test-3',
+            serviceName: 'Flat-Tyre Support',
+            vehicleNumber: 'KA-05-NB-1290',
+            pickupAddressText: '100ft Road, Indiranagar',
+            distanceAtOfferM: 2400,
+            offeredAt: new Date(Date.now() - 90_000).toISOString(),
+            expiresAt: new Date(Date.now() - 30_000).toISOString(),
+          });
+        });
+        expect(screen.getByTestId('offer-countdown')).toHaveTextContent(/Time is up/);
+        expect(screen.getByRole('button', { name: /accept job/i })).toBeDisabled();
+      });
+
       it('an active job', () => {
         saveStoredPartnerProfile({ ...DEFAULT_PARTNER_PROFILE, isAvailable: true });
         renderDashboard((qc) =>

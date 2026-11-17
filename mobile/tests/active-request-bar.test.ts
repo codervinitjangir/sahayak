@@ -22,12 +22,18 @@ describe("pickBarJob", () => {
     expect(picked).toEqual({ job: expect.objectContaining({ id: "b" }), kind: "live" });
   });
 
-  it("surfaces a request that just ended with no partner (owner left before it finished)", () => {
-    expect(pickBarJob([job("a", "no_match_found", 1)], new Set(), NOW)?.kind).toBe("missed");
+  it("treats a no-partner job inside its 10-minute window as still searching (ADR-032)", () => {
+    // The server keeps widening the search with the app closed, so this is in flight.
+    expect(pickBarJob([job("a", "no_match_found", 1)], new Set(), NOW)?.kind).toBe("live");
+    expect(pickBarJob([job("a", "no_match_found", 9)], new Set(["a"]), NOW)?.kind).toBe("live");
+  });
+
+  it("surfaces a request that ended with no partner once its search window closed", () => {
+    expect(pickBarJob([job("a", "no_match_found", 11)], new Set(), NOW)?.kind).toBe("missed");
   });
 
   it("drops the no-partner outcome once dismissed or stale", () => {
-    expect(pickBarJob([job("a", "no_match_found", 1)], new Set(["a"]), NOW)).toBeNull();
+    expect(pickBarJob([job("a", "no_match_found", 11)], new Set(["a"]), NOW)).toBeNull();
     const staleMins = RECENT_MISS_MS / 60_000 + 1;
     expect(pickBarJob([job("a", "no_match_found", staleMins)], new Set(), NOW)).toBeNull();
   });

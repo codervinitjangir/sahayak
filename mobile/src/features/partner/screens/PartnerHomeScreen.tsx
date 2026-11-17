@@ -31,6 +31,7 @@ import {
 } from "../../../services/api/partner";
 import type { PartnerStackParamList } from "../../../types";
 import { inr, metresToKm } from "../partnerFormat";
+import { OFFER_URGENT_S, formatCountdown, offerDeadlineMs, useSecondsLeft } from "../offerCountdown";
 import { WEB_URL } from "../../../constants";
 import NotificationsModal from "../../shared/NotificationsModal";
 import EditProfileModal from "../../account/EditProfileModal";
@@ -45,10 +46,16 @@ const TABS: TabDef<TabKey>[] = [
   { key: "account", label: "Account", icon: "person-outline", iconActive: "person" },
 ];
 
-const ageLabel = (iso: string): string => {
-  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
-  return mins <= 0 ? "Just now" : `${mins} min ago`;
-};
+/** "0:42 left" on an offer card (ADR-032). Owns its own 1 s tick so the list does not re-render. */
+function OfferTimer({ offer }: { offer: { offered_at: string; expires_at?: string | null } }) {
+  const left = useSecondsLeft(offerDeadlineMs(offer));
+  if (left === null) return null;
+  return (
+    <Text style={[styles.offerAge, left <= OFFER_URGENT_S && { color: Colors.warning }]}>
+      {left === 0 ? "Time is up" : `${formatCountdown(left)} left`}
+    </Text>
+  );
+}
 
 export default function PartnerHomeScreen() {
   const nav = useNavigation<Nav>();
@@ -362,7 +369,7 @@ export default function PartnerHomeScreen() {
                       >
                         <View style={styles.offerTop}>
                           <Text style={styles.offerTitle} numberOfLines={1}>{o.job.service_name ?? "Roadside job"}</Text>
-                          <Text style={styles.offerAge}>{ageLabel(o.offered_at)}</Text>
+                          <OfferTimer offer={o} />
                         </View>
                         <Text style={styles.muted} numberOfLines={2}>{o.job.pickup_address_text ?? "Pickup location"}</Text>
                         <View style={styles.offerMeta}>

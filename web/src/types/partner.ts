@@ -407,6 +407,11 @@ export interface PartnerOffer {
   /** ISO timestamp. The countdown derives from this; it is never stored ticking. */
   offeredAt: string;
   /**
+   * ISO timestamp from the server (ADR-032): when dispatch may time the offer
+   * out and pass the job on. Absent on an older response; see offerCountdown.ts.
+   */
+  expiresAt?: string;
+  /**
    * Absent until the job is priced. Callers must omit the payout line entirely
    * rather than render "₹0", which reads as "this job pays nothing".
    */

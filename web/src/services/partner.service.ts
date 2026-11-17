@@ -35,6 +35,8 @@ export interface PartnerOfferItem {
   assignment_id: string;
   job_id: string;
   offered_at: string;
+  /** offered_at + 60 s (ADR-032). Optional so an older backend still parses. */
+  expires_at?: string | null;
   distance_at_offer_m: string; // Decimal string — parse before arithmetic
   estimated_arrival_min: number;
   assignment_rank: number;
@@ -91,6 +93,7 @@ export const partnerService = {
       vehicleNumber: item.job.vehicle_number ?? '',
       issueDescription: item.job.issue_description ?? '',
       offeredAt: item.offered_at,
+      expiresAt: item.expires_at ?? undefined,
       payoutEstimate:
         item.job.price_estimate != null ? parseFloat(item.job.price_estimate) : undefined,
     };

@@ -25,7 +25,9 @@ import {
   useOfferResponse,
   usePartnerEarnings,
   usePartnerTrustStats,
-  usePendingOffer, usePartnerServices } from '../../features/partners/useOffers';
+  usePendingOffer, usePartnerServices, PARTNER_OFFER_KEY } from '../../features/partners/useOffers';
+import { useOfferCountdown } from '../../features/partners/offerCountdown';
+import { OfferCountdown } from '../../features/partners/OfferCountdownPill';
 import { jobsService } from '../../services/jobs.service';
 import {
   verificationBadgeLabel,
@@ -329,6 +331,7 @@ const LiveZoneMap: React.FC<LiveZoneMapProps> = ({
 }) => {
   const navigate = useNavigate();
   const { accept, reject, isResponding } = useOfferResponse();
+  const countdown = useOfferCountdown(offer, PARTNER_OFFER_KEY);
 
   const handleAccept = async () => {
     if (!offer) return;
@@ -452,7 +455,7 @@ const LiveZoneMap: React.FC<LiveZoneMapProps> = ({
               <span className="text-xs font-bold uppercase tracking-wide text-emergency-700 bg-emergency-50 px-2.5 py-1 rounded-full border border-emergency-100">
                 Incoming dispatch offer
               </span>
-              <span className="text-xs font-semibold text-brand-800">Awaiting response</span>
+              <OfferCountdown countdown={countdown} />
             </div>
 
             <h2 className="mt-3 text-lg font-bold truncate">{offer.serviceName}</h2>
@@ -488,7 +491,7 @@ const LiveZoneMap: React.FC<LiveZoneMapProps> = ({
                 type="button"
                 variant="primary"
                 size="lg"
-                disabled={isResponding}
+                disabled={isResponding || countdown.expired}
                 onClick={handleAccept}
                 className="flex-1"
               >

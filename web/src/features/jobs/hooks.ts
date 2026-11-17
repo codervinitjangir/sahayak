@@ -13,6 +13,9 @@ export function useJobs() {
   });
 }
 
+/** ADR-023 search window: a no_match_found job is searched for this long after it was raised. */
+export const SEARCH_WINDOW_MS = 10 * 60 * 1000;
+
 export function useJob(jobId: string | undefined) {
   return useQuery({
     queryKey: ['jobs', jobId],
@@ -31,8 +34,15 @@ export function useJob(jobId: string | undefined) {
           return 7000;
         case 'in_progress':
           return 15000;
+        case 'no_match_found': {
+          // ADR-032: the server keeps widening the search for ten minutes after
+          // the request, with or without this page open, so the job can move
+          // back to 'matching' on its own. Keep checking until that window ends.
+          const requested = Date.parse(query.state.data?.requested_at ?? '');
+          return !Number.isNaN(requested) && Date.now() - requested < SEARCH_WINDOW_MS ? 15000 : false;
+        }
         default:
-          // completed / cancelled / no_match_found — nothing further will change.
+          // completed / cancelled — nothing further will change.
           return false;
       }
     },

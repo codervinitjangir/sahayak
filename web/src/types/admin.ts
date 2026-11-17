@@ -76,6 +76,8 @@ export interface OfferOutcomes {
   total: number;
   accepted: number;
   declined: number;
+  /** Offers the dispatch worker timed out after 60 s (ADR-032). Not declines. */
+  timed_out: number;
   unanswered: number;
   jobs_offered: number;
   partners_offered: number;

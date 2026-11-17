@@ -102,6 +102,7 @@ const DISPATCH: AnalyticsDispatch = {
     total: 61,
     accepted: 33,
     declined: 12,
+    timed_out: 0,
     unanswered: 16,
     jobs_offered: 40,
     partners_offered: 9,

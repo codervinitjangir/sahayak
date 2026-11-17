@@ -54,6 +54,7 @@ function offerListResponse(assignmentId = 'asgn-001', jobId = 'job-001') {
         assignment_id: assignmentId,
         job_id: jobId,
         offered_at: '2026-09-27T11:03:30.784705Z',
+        expires_at: '2026-09-27T11:04:30.784705Z',
         distance_at_offer_m: '988.74',
         estimated_arrival_min: 4,
         assignment_rank: 1,
@@ -121,6 +122,14 @@ describe('partner.service — real-path contract tests', () => {
       const [url, options] = vi.mocked(fetch).mock.calls[0];
       expect(url).toMatch(/\/partners\/me\/offers$/);
       expect(options?.method).toBe('GET');
+    });
+
+    it('carries the server expiry deadline through as expiresAt (ADR-032)', async () => {
+      vi.mocked(fetch).mockResolvedValue(offerListResponse());
+
+      const offer = await partnerService.getPendingOffer();
+
+      expect(offer?.expiresAt).toBe('2026-09-27T11:04:30.784705Z');
     });
 
     it('returns the first item from the list as a PartnerOffer', async () => {

@@ -50,6 +50,12 @@ export const SERIES = {
   two: '#eb6834',
   /** Slot 3. Third state in a part-to-whole stack. */
   three: '#4a3aa7',
+  /**
+   * Slot 4. A neutral "nothing happened" state (an offer that timed out,
+   * ADR-032). Slate, so it reads as absence rather than as a fourth outcome
+   * competing with the three hues above.
+   */
+  four: '#94A3B8',
 } as const;
 
 /**
