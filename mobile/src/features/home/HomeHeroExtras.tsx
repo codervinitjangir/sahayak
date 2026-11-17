@@ -18,7 +18,7 @@ export function VehicleChip({ vehicle, onPress }: { vehicle?: BackendVehicle; on
       style={({ pressed }) => [styles.chip, pressed && { opacity: 0.85 }]}
     >
       <View style={styles.chipArt}>
-        <ServiceArt name={two ? "bike" : "car"} width={34} />
+        <ServiceArt name={two ? "bike" : "car"} fill />
       </View>
       <Text style={styles.chipText} numberOfLines={1}>
         {vehicle ? `${vehicle.make} ${vehicle.model}` : "Add vehicle"}
@@ -84,7 +84,7 @@ export function HeroCarousel({ slides }: { slides: Slide[] }) {
                 </View>
               ) : null}
             </View>
-            <ServiceArt name={s.art} width={118} />
+            <ServiceArt name={s.art} width={118} height={104} radius={18} />
           </Pressable>
         ))}
       </ScrollView>

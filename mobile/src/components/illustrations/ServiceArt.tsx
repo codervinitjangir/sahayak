@@ -2,6 +2,7 @@
 // Hand-drawn flat SVG scenes, original to Sahayak. One per service plus a few
 // for banners. viewBox 120×90 so they sit in tiles, banners and empty states.
 import React from "react";
+import { Image, type ImageSourcePropType } from "react-native";
 import Svg, { Circle, Rect, Path, G, Ellipse, Line, Defs, LinearGradient, Stop } from "react-native-svg";
 
 export type ArtName =
@@ -299,10 +300,52 @@ const MAP: Record<ArtName, () => React.ReactElement> = {
   map: MapArt,
 };
 
-export default function ServiceArt({ name, width = 96, height }: { name: ArtName; width?: number; height?: number }) {
+// Real photos (Unsplash licence, see assets/photos/CREDITS.md). Names without
+// a photo fall back to the drawing.
+const PHOTOS: Partial<Record<ArtName, ImageSourcePropType>> = {
+  tyre: require("../../../assets/photos/tyre.jpg"),
+  battery: require("../../../assets/photos/battery.jpg"),
+  towing: require("../../../assets/photos/towing.jpg"),
+  mechanic: require("../../../assets/photos/mechanic.jpg"),
+  lockout: require("../../../assets/photos/lockout.jpg"),
+  car: require("../../../assets/photos/car.jpg"),
+  bike: require("../../../assets/photos/bike.jpg"),
+  map: require("../../../assets/photos/slide-tow.jpg"),
+  partner: require("../../../assets/photos/slide-partner.jpg"),
+};
+
+export default function ServiceArt({
+  name,
+  width = 96,
+  height,
+  fill = false,
+  drawing = false,
+  radius = 14,
+}: {
+  name: ArtName;
+  width?: number;
+  height?: number;
+  /** Cover the parent box (the parent should clip with overflow: hidden). */
+  fill?: boolean;
+  /** Force the vector drawing even when a photo exists. */
+  drawing?: boolean;
+  radius?: number;
+}) {
+  const h = height ?? (width * 90) / 120;
+  const photo = !drawing ? PHOTOS[name] : undefined;
+  if (photo) {
+    return (
+      <Image
+        source={photo}
+        resizeMode="cover"
+        accessibilityIgnoresInvertColors
+        style={fill ? { position: "absolute", top: 0, left: 0, width: "100%", height: "100%" } : { width, height: h, borderRadius: radius }}
+      />
+    );
+  }
   const Comp = MAP[name] ?? All;
   return (
-    <Svg width={width} height={height ?? (width * 90) / 120} viewBox="0 0 120 90" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+    <Svg width={width} height={h} viewBox="0 0 120 90" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
       <Comp />
     </Svg>
   );

@@ -74,7 +74,7 @@ export default function HomeTab({
                 style={({ pressed }) => [styles.tile, pressed && styles.pressed]}
               >
                 <View style={[styles.tileArt, { backgroundColor: cfg.bg }]}>
-                  <ServiceArt name={ART[t]} width={78} />
+                  <ServiceArt name={ART[t]} fill />
                 </View>
                 <Text style={styles.tileLabel} numberOfLines={2}>{cfg.label}</Text>
               </Pressable>
@@ -103,7 +103,7 @@ export default function HomeTab({
         accessibilityLabel="Need help now? Get a mechanic"
         style={({ pressed }) => [styles.strip, pressed && { opacity: 0.9 }]}
       >
-        <View style={styles.stripArt}><ServiceArt name="partner" width={58} /></View>
+        <View style={styles.stripArt}><ServiceArt name="partner" fill /></View>
         <View style={{ flex: 1 }}>
           <Text style={styles.stripKicker}>Need help now?</Text>
           <Text style={styles.stripTitle}>Get a mechanic</Text>
@@ -134,7 +134,7 @@ export default function HomeTab({
             {(vehicles.data ?? []).map((v) => (
               <View key={v.id} style={styles.vehicleCard}>
                 <View style={styles.vehicleArt}>
-                  <ServiceArt name={v.vehicle_type === "two_wheeler" ? "bike" : "car"} width={110} />
+                  <ServiceArt name={v.vehicle_type === "two_wheeler" ? "bike" : "car"} fill />
                 </View>
                 <Text style={styles.vehicleName} numberOfLines={1}>{v.make} {v.model}</Text>
                 <View style={styles.plateBox}><Text style={styles.plate}>{v.vehicle_number}</Text></View>
@@ -216,16 +216,16 @@ const styles = StyleSheet.create({
   grid: { flexDirection: "row", flexWrap: "wrap", gap: Spacing.md },
   tile: { width: "30%", flexGrow: 1, borderRadius: Radius.xl, backgroundColor: Colors.surfaceWhite, alignItems: "center", gap: 8, padding: Spacing.sm, paddingBottom: Spacing.md, borderWidth: 1, borderColor: Colors.border },
   pressed: { transform: [{ scale: 0.97 }], opacity: 0.9 },
-  tileArt: { width: "100%", height: 76, borderRadius: Radius.lg, alignItems: "center", justifyContent: "center" },
+  tileArt: { width: "100%", height: 84, borderRadius: Radius.lg, overflow: "hidden", alignItems: "center", justifyContent: "center" },
   tileLabel: { fontSize: Typography.fontSize.base, fontFamily: Typography.fontFamily.semiBold, color: Colors.textPrimary, textAlign: "center" },
   strip: { flexDirection: "row", alignItems: "center", gap: Spacing.md, padding: Spacing.md, borderRadius: Radius.xl, backgroundColor: "#047857" },
-  stripArt: { width: 64, height: 56, borderRadius: Radius.lg, backgroundColor: "#ECFDF5", alignItems: "center", justifyContent: "center" },
+  stripArt: { width: 72, height: 60, borderRadius: Radius.lg, overflow: "hidden", backgroundColor: "#ECFDF5", alignItems: "center", justifyContent: "center" },
   stripKicker: { color: "#A7F3D0", fontSize: Typography.fontSize.sm, fontFamily: Typography.fontFamily.medium },
   stripTitle: { color: "#fff", fontSize: Typography.fontSize["2xl"], fontFamily: Typography.fontFamily.bold },
   stripGo: { width: 44, height: 44, borderRadius: 22, backgroundColor: "#D1FAE5", alignItems: "center", justifyContent: "center" },
   addVehicle: { flexDirection: "row", alignItems: "center", gap: Spacing.md, padding: Spacing.base, borderRadius: Radius.xl, backgroundColor: Colors.surfaceWhite, borderWidth: 1, borderColor: Colors.border },
   vehicleCard: { width: 168, padding: Spacing.md, borderRadius: Radius.xl, backgroundColor: Colors.surfaceWhite, borderWidth: 1, borderColor: Colors.border, gap: 6 },
-  vehicleArt: { height: 84, borderRadius: Radius.lg, backgroundColor: "#EFF6FF", alignItems: "center", justifyContent: "center", marginBottom: 4 },
+  vehicleArt: { height: 96, borderRadius: Radius.lg, overflow: "hidden", backgroundColor: "#EFF6FF", alignItems: "center", justifyContent: "center", marginBottom: 4 },
   vehicleAdd: { alignItems: "center", justifyContent: "center", borderStyle: "dashed", width: 120 },
   plateBox: { alignSelf: "flex-start", borderWidth: 1.5, borderColor: Colors.textPrimary, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2, backgroundColor: "#FEFCE8" },
   footer: { paddingTop: Spacing.lg, paddingBottom: Spacing.base },

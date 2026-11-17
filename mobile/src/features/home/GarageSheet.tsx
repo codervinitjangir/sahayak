@@ -29,7 +29,7 @@ export default function GarageSheet({
           {vehicles.map((v) => (
             <View key={v.id} style={styles.row}>
               <View style={[styles.art, { backgroundColor: v.vehicle_type === "two_wheeler" ? "#FEF2F2" : "#EFF6FF" }]}>
-                <ServiceArt name={v.vehicle_type === "two_wheeler" ? "bike" : "car"} width={72} />
+                <ServiceArt name={v.vehicle_type === "two_wheeler" ? "bike" : "car"} fill />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.name}>{v.make} {v.model}</Text>
@@ -60,7 +60,7 @@ const styles = StyleSheet.create({
   grabber: { alignSelf: "center", width: 40, height: 4, borderRadius: 2, backgroundColor: Colors.border },
   title: { fontSize: Typography.fontSize["2xl"], fontFamily: Typography.fontFamily.bold, color: Colors.textPrimary },
   row: { flexDirection: "row", alignItems: "center", gap: Spacing.md, padding: Spacing.md, borderRadius: Radius.xl, borderWidth: 1, borderColor: Colors.border },
-  art: { width: 84, height: 60, borderRadius: Radius.lg, alignItems: "center", justifyContent: "center" },
+  art: { width: 84, height: 60, borderRadius: Radius.lg, overflow: "hidden", alignItems: "center", justifyContent: "center" },
   name: { fontSize: Typography.fontSize.lg, fontFamily: Typography.fontFamily.bold, color: Colors.textPrimary },
   plate: { alignSelf: "flex-start", marginTop: 6, borderWidth: 1.5, borderColor: Colors.textPrimary, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2, backgroundColor: "#FEFCE8" },
   plateText: { fontSize: Typography.fontSize.sm, fontFamily: Typography.fontFamily.semiBold, letterSpacing: 1, color: Colors.textPrimary },

@@ -132,7 +132,7 @@ export default function AddVehicleModal({
                   style={({ pressed }) => [styles.typeCard, pressed && { transform: [{ scale: 0.98 }] }]}
                 >
                   <View style={[styles.typeArt, { backgroundColor: k === "two_wheeler" ? "#FEF2F2" : "#EFF6FF" }]}>
-                    <ServiceArt name={k === "two_wheeler" ? "bike" : "car"} width={150} />
+                    <ServiceArt name={k === "two_wheeler" ? "bike" : "car"} fill />
                   </View>
                   <View style={{ alignItems: "flex-end" }}>
                     <Text style={styles.typeSmall}>I have a</Text>
@@ -197,7 +197,7 @@ export default function AddVehicleModal({
                       style={({ pressed }) => [styles.modelTile, pressed && { opacity: 0.8 }]}
                     >
                       <View style={[styles.modelArt, { backgroundColor: kind === "two_wheeler" ? "#FEF2F2" : "#EFF6FF" }]}>
-                        <ServiceArt name={kind === "two_wheeler" ? "bike" : "car"} width={84} />
+                        <ServiceArt name={kind === "two_wheeler" ? "bike" : "car"} fill />
                       </View>
                       <Text style={styles.modelName} numberOfLines={2}>{m}</Text>
                     </Pressable>
@@ -210,7 +210,7 @@ export default function AddVehicleModal({
             <>
               <View style={styles.selected}>
                 <View style={[styles.modelArt, { width: 96, backgroundColor: kind === "two_wheeler" ? "#FEF2F2" : "#EFF6FF" }]}>
-                  <ServiceArt name={kind === "two_wheeler" ? "bike" : "car"} width={84} />
+                  <ServiceArt name={kind === "two_wheeler" ? "bike" : "car"} fill />
                 </View>
                 <View style={{ flex: 1 }}>
                   <View style={styles.selChip}>
@@ -265,7 +265,7 @@ const styles = StyleSheet.create({
   h1: { fontSize: 34, lineHeight: 40, fontFamily: Typography.fontFamily.bold, color: Hero.bg, marginTop: Spacing.sm },
   sub: { fontSize: 15, color: Colors.textSecondary, fontFamily: Typography.fontFamily.regular, lineHeight: 21 },
   typeCard: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: Spacing.md, borderRadius: Radius.xl, backgroundColor: Colors.surfaceWhite, borderWidth: 1, borderColor: Colors.border },
-  typeArt: { width: 170, height: 120, borderRadius: Radius.lg, alignItems: "center", justifyContent: "center" },
+  typeArt: { width: 170, height: 120, borderRadius: Radius.lg, overflow: "hidden", alignItems: "center", justifyContent: "center" },
   typeSmall: { fontSize: Typography.fontSize.base, fontFamily: Typography.fontFamily.semiBold, color: Colors.textPrimary },
   typeBig: { fontSize: 32, fontFamily: Typography.fontFamily.bold, color: "#16A34A" },
   search: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: Spacing.base, minHeight: 52, borderRadius: Radius.lg, backgroundColor: Colors.surfaceWhite, borderWidth: 1, borderColor: Colors.border },
@@ -277,7 +277,7 @@ const styles = StyleSheet.create({
   brandInitial: { color: "#fff", fontSize: 24, fontFamily: Typography.fontFamily.bold },
   brandName: { fontSize: Typography.fontSize.sm, fontFamily: Typography.fontFamily.bold, textAlign: "center", textTransform: "uppercase", letterSpacing: 0.4 },
   modelTile: { width: "46%", flexGrow: 1, maxWidth: "48.5%", padding: Spacing.sm, borderRadius: Radius.xl, backgroundColor: Colors.surfaceWhite, borderWidth: 1, borderColor: Colors.border, alignItems: "center", gap: 8 },
-  modelArt: { width: "100%", height: 76, borderRadius: Radius.lg, alignItems: "center", justifyContent: "center" },
+  modelArt: { width: "100%", height: 76, borderRadius: Radius.lg, overflow: "hidden", alignItems: "center", justifyContent: "center" },
   modelName: { fontSize: Typography.fontSize.base, fontFamily: Typography.fontFamily.semiBold, color: Colors.textPrimary, textAlign: "center", paddingBottom: 4 },
   input: { minHeight: 52, borderWidth: 1, borderColor: Colors.border, borderRadius: Radius.md, paddingHorizontal: Spacing.base, fontSize: 16, backgroundColor: Colors.surfaceWhite, color: Colors.textPrimary },
   selected: { flexDirection: "row", alignItems: "center", gap: Spacing.md, padding: Spacing.md, borderRadius: Radius.xl, backgroundColor: Colors.surfaceWhite, borderWidth: 1, borderColor: Colors.border },

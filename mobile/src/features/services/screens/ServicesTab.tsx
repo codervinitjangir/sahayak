@@ -59,7 +59,7 @@ export default function ServicesTab() {
               style={({ pressed }) => [styles.symCard, pressed && { transform: [{ scale: 0.97 }] }]}
             >
               <View style={[styles.symArt, { backgroundColor: ServiceConfig[s.type].bg }]}>
-                <ServiceArt name={s.type as ArtName} width={84} />
+                <ServiceArt name={s.type as ArtName} fill />
               </View>
               <Text style={styles.symText} numberOfLines={3}>{s.label}</Text>
             </Pressable>
@@ -88,7 +88,7 @@ export default function ServicesTab() {
                   <View key={s.id} style={styles.svcCard}>
                     <View style={styles.svcTop}>
                       <View style={[styles.svcArt, { backgroundColor: ServiceConfig[CODE_TO_TYPE[s.code] ?? "mechanic"].bg }]}>
-                        <ServiceArt name={artForService(s.code)} width={72} />
+                        <ServiceArt name={artForService(s.code)} fill />
                       </View>
                       <View style={{ flex: 1, gap: 6 }}>
                         <Text style={styles.svcName}>{s.name}</Text>
@@ -128,11 +128,11 @@ export default function ServicesTab() {
 const styles = StyleSheet.create({
   symGrid: { flexDirection: "row", flexWrap: "wrap", gap: Spacing.md },
   symCard: { width: "47%", flexGrow: 1, padding: Spacing.sm, borderRadius: Radius.xl, backgroundColor: Colors.surfaceWhite, borderWidth: 1, borderColor: Colors.border, gap: 8 },
-  symArt: { height: 80, borderRadius: Radius.lg, alignItems: "center", justifyContent: "center" },
+  symArt: { height: 96, borderRadius: Radius.lg, overflow: "hidden", alignItems: "center", justifyContent: "center" },
   symText: { fontSize: Typography.fontSize.base, fontFamily: Typography.fontFamily.semiBold, color: Colors.textPrimary, paddingHorizontal: 4, paddingBottom: 4 },
   svcCard: { padding: Spacing.base, borderRadius: Radius.xl, backgroundColor: Colors.surfaceWhite, borderWidth: 1, borderColor: Colors.border, gap: Spacing.md },
   svcTop: { flexDirection: "row", alignItems: "center", gap: Spacing.md },
-  svcArt: { width: 84, height: 68, borderRadius: Radius.lg, alignItems: "center", justifyContent: "center" },
+  svcArt: { width: 92, height: 72, borderRadius: Radius.lg, overflow: "hidden", alignItems: "center", justifyContent: "center" },
   svcName: { fontSize: Typography.fontSize.lg, fontFamily: Typography.fontFamily.bold, color: Colors.textPrimary },
   badge: { flexDirection: "row", alignItems: "center", gap: 4, alignSelf: "flex-start", backgroundColor: "#DCFCE7", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999 },
   badgeText: { fontSize: Typography.fontSize.xs, fontFamily: Typography.fontFamily.semiBold, color: "#15803D" },
