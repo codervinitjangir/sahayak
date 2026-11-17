@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import {
-  MapPin, Navigation, Wrench, Battery, Truck, Fuel,
+  MapPin, Navigation, Wrench, Battery, Truck,
   ShieldCheck, ArrowDown, FileText, CheckCircle, FolderOpen, Users
 } from 'lucide-react';
 
@@ -35,7 +35,6 @@ export const FeatureBlocks: React.FC = () => {
               { bg: '#FEF3E2', icon: <Wrench size={20} color="#6B4F0E" /> },
               { bg: '#FDEAE4', icon: <Battery size={20} color="#7A3421" /> },
               { bg: '#FEF3E2', icon: <Truck size={20} color="#6B4F0E" /> },
-              { bg: '#E8F4FD', icon: <Fuel size={20} color="#28486B" /> },
               { bg: '#FDEAE4', icon: <ShieldCheck size={20} color="#7A3421" /> },
               { bg: '#DCF2E5', icon: <Users size={20} color="#33502A" /> },
             ].map((cell, i) => (
@@ -109,7 +108,7 @@ export const FeatureBlocks: React.FC = () => {
             Join our network. Get matched to nearby jobs.
           </h3>
           <p className="feature-block__body" style={{ color: 'var(--butter-deep)' }}>
-            If you're a mechanic, tow operator, or fuel delivery provider —
+            If you're a mechanic or tow operator —
             join our network. Get matched to jobs in your area,
             accept with one tap, and build your customer base.
           </p>
@@ -145,7 +144,7 @@ export const FeatureBlocks: React.FC = () => {
             </div>
             <div className="quiz-preview__item">
               <CheckCircle size={14} color="#111111" />
-              <span>Emergency jumpstart and fuel delivery</span>
+              <span>Emergency jumpstart and tyre help</span>
             </div>
           </div>
         </div>
@@ -201,7 +200,7 @@ export const FeatureBlocks: React.FC = () => {
           <div className="cohort-badges">
             <span className="cohort-badge">🔧 Certified Mechanics</span>
             <span className="cohort-badge">🚛 Verified Tow Operators</span>
-            <span className="cohort-badge">⛽ Emergency Fuel Providers</span>
+            <span className="cohort-badge">🔋 Battery &amp; Tyre Specialists</span>
             <span className="cohort-badge">🔋 Battery Specialists</span>
           </div>
         </div>

@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 // ─── Sahayak — Auth Store (Zustand) ───────────────────────────────────────────
 import { create } from "zustand";
 
@@ -41,6 +42,37 @@ function registerPushLater(): void {
   void import("../services/push").then((m) => m.registerForPush()).catch(() => undefined);
 }
 
+// ─── Last signed-in account, kept on the device ──────────────────────────────
+// Only what the router needs (id, role, display name, phone). It is a hint for
+// opening the right screens before the backend answers, never an authority:
+// every request still carries the Supabase token and the backend re-checks it.
+const USER_CACHE_KEY = "sahayak_last_user";
+
+async function readCachedUser(): Promise<User | null> {
+  try {
+    const raw = await AsyncStorage.getItem(USER_CACHE_KEY);
+    return raw ? (JSON.parse(raw) as User) : null;
+  } catch {
+    return null;
+  }
+}
+async function writeCachedUser(user: User): Promise<void> {
+  try {
+    await AsyncStorage.setItem(USER_CACHE_KEY, JSON.stringify(user));
+  } catch {
+    // Cache is a convenience only.
+  }
+}
+async function clearCachedUser(): Promise<void> {
+  try {
+    await AsyncStorage.removeItem(USER_CACHE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   token: null,
@@ -50,6 +82,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   setUser: (user, token) => {
     set({ user, token, isAuthenticated: true, isLoading: false });
+    void writeCachedUser(user);
     registerPushLater();
   },
 
@@ -61,6 +94,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   logout: () => {
     const authToken = get().token;
     set({ user: null, token: null, isAuthenticated: false });
+    void clearCachedUser();
     // Drop this device's push token first (it needs the old access token), then
     // end the Supabase session, or the subscription below restores the token.
     void import("../services/push")
@@ -95,28 +129,20 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       .then(async ({ data }) => {
         if (cancelled) return;
         const restored = data.session?.access_token ?? null;
-        if (restored) {
-          get().setToken(restored);
-          try {
-            const { identityService } = await import("../services/identity");
-            const resolution = await identityService.resolve();
-            if (resolution.kind === "registered" && !cancelled) {
-              const role = appRoleFor(resolution.identity.role);
-              set({
-                user: {
-                  id: resolution.identity.id,
-                  phone: data.session?.user?.phone || "",
-                  role,
-                  name: role === "partner" ? "Service partner" : "Vehicle owner",
-                },
-                isAuthenticated: true,
-              });
-              registerPushLater();
-            }
-          } catch {
-            // Leave user as is if offline
-          }
+        if (!restored) {
+          void clearCachedUser();
+          return;
         }
+        get().setToken(restored);
+        // Open straight into the app with the account this phone last used, so
+        // a slow or sleeping backend (Render free tier wakes in ~30-50 s) does
+        // not drop a signed-in partner back on the OTP screen.
+        const cached = await readCachedUser();
+        if (cached && !cancelled) {
+          set({ user: cached, isAuthenticated: true, isRestoringSession: false });
+          registerPushLater();
+        }
+        await confirmIdentity(data.session?.user?.phone || "", () => cancelled, Boolean(cached));
       })
       .finally(() => {
         if (!cancelled) set({ isRestoringSession: false });
@@ -128,6 +154,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       get().setToken(nextToken);
       if (event === "SIGNED_OUT" || !nextToken) {
         set({ user: null, token: null, isAuthenticated: false });
+        void clearCachedUser();
       }
     });
 
@@ -144,3 +171,43 @@ export const useRole = (): UserRole | null =>
 
 export const useIsOwner = () => useAuthStore((s) => s.user?.role === "owner");
 export const useIsPartner = () => useAuthStore((s) => s.user?.role === "partner");
+
+/**
+ * Ask the backend who this token belongs to, retrying through a cold start.
+ * A definite answer (registered / not registered) wins over the cache; a
+ * network or 5xx failure keeps the cached account and keeps trying.
+ */
+async function confirmIdentity(phone: string, isCancelled: () => boolean, hasCache: boolean): Promise<void> {
+  const { identityService } = await import("../services/identity");
+  const delays = [0, 3000, 8000, 15000, 30000];
+  for (const wait of delays) {
+    if (wait) await sleep(wait);
+    if (isCancelled()) return;
+    const resolution = await identityService.resolve();
+    if (isCancelled()) return;
+    if (resolution.kind === "registered") {
+      const role = appRoleFor(resolution.identity.role);
+      const prev = useAuthStore.getState().user;
+      const user: User = {
+        id: resolution.identity.id,
+        phone: phone || prev?.phone || "",
+        role,
+        name:
+          prev && prev.id === resolution.identity.id && prev.name
+            ? prev.name
+            : role === "partner" ? "Service partner" : "Vehicle owner",
+      };
+      useAuthStore.setState({ user, isAuthenticated: true, isRestoringSession: false });
+      void writeCachedUser(user);
+      if (!hasCache) registerPushLater();
+      return;
+    }
+    if (resolution.kind === "needs-signup" || resolution.kind === "needs-linking") {
+      // The token is real but has no profile: the login flow handles signup.
+      useAuthStore.setState({ user: null, isRestoringSession: false });
+      void clearCachedUser();
+      return;
+    }
+    // kind === "error": cold start or offline, try again.
+  }
+}

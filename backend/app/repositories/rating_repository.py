@@ -21,7 +21,9 @@ from typing import List, Optional, Tuple
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.job import JobAssignment
+from app.models.job import Job, JobAssignment
+from app.models.service import Service
+from app.models.user import User
 from app.models.partner import Partner
 from app.models.rating import Rating
 from app.repositories.job_repository import RESPONSIBLE_ASSIGNMENT_STATUSES
@@ -144,3 +146,33 @@ async def recompute_partner_rating(
     if row is None:
         return None
     return row[0], row[1]
+
+
+async def list_partner_reviews(
+    db: AsyncSession, partner_id: uuid.UUID, limit: int, offset: int
+) -> list:
+    """Owner-written ratings on jobs this partner was responsible for, newest first.
+
+    Same "which ratings count" rule as recompute_partner_rating, so the list a
+    partner reads always adds up to the average they are shown. Returns rows of
+    (rating, comment, created_at, job_id, service_name, owner_name).
+    """
+    rated_jobs = (
+        select(JobAssignment.job_id)
+        .where(JobAssignment.partner_id == partner_id)
+        .where(JobAssignment.status.in_(RESPONSIBLE_ASSIGNMENT_STATUSES))
+    )
+    stmt = (
+        select(
+            Rating.rating, Rating.comment, Rating.created_at, Rating.job_id,
+            Service.name.label("service_name"), User.name.label("owner_name"),
+        )
+        .join(Job, Job.id == Rating.job_id)
+        .join(Service, Service.id == Job.service_id)
+        .join(User, User.id == Job.user_id, isouter=True)
+        .where(Rating.rated_by == "user", Rating.job_id.in_(rated_jobs))
+        .order_by(Rating.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    return list((await db.execute(stmt)).all())

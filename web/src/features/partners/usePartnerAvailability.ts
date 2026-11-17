@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   LOCATION_STALE_WARNING_S,
   MAX_LOCATION_AGE_S,
@@ -41,11 +41,45 @@ export type LocationProblem = 'denied' | 'unavailable' | 'unsupported';
  * Also owns the freshness clock and location reporting to Redis GEO while on shift.
  */
 export function usePartnerAvailability(): PartnerAvailability {
-  const isAvailable = usePartnerStore((s) => s.profile.isAvailable ?? true);
+  const isAvailable = usePartnerStore((s) => s.profile.isAvailable ?? false);
   const lastLocationAt = usePartnerStore((s) => s.lastLocationAt);
 
   const [, forceTick] = useState(0);
   const [locationProblem, setLocationProblem] = useState<LocationProblem | null>(null);
+  const pendingWrite = useRef(false);
+
+  // The server owns duty state: dispatch reads partners.is_available, and the
+  // same partner may flip it from the phone app or ops from the admin panel.
+  // Re-read it on mount, every 15 s, and whenever this tab regains focus, so
+  // this switch never disagrees with what dispatch is actually doing.
+  useEffect(() => {
+    if (import.meta.env.MODE === 'test') return undefined;
+    let cancelled = false;
+    const sync = () => {
+      if (pendingWrite.current) return;
+      partnerService
+        .getTrustStats()
+        .then((s) => {
+          if (!cancelled && !pendingWrite.current && typeof s.isAvailable === 'boolean') {
+            setPartnerAvailability(s.isAvailable);
+          }
+        })
+        .catch(() => undefined);
+    };
+    sync();
+    const id = setInterval(sync, 15000);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') sync();
+    };
+    window.addEventListener('focus', sync);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+      window.removeEventListener('focus', sync);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, []);
 
   // Freshness clock ticking every second while on duty
   useEffect(() => {
@@ -102,7 +136,8 @@ export function usePartnerAvailability(): PartnerAvailability {
     (next: boolean) => {
       setPartnerAvailability(next);
       if (import.meta.env.MODE !== 'test') {
-        partnerService.setAvailability(next).catch((err) => {
+        pendingWrite.current = true;
+        partnerService.setAvailability(next).finally(() => { pendingWrite.current = false; }).catch((err) => {
           // The server did not take the change, so the switch must not claim it did.
           console.warn('[usePartnerAvailability] Failed to sync availability to server:', err);
           setPartnerAvailability(!next);

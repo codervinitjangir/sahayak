@@ -100,7 +100,7 @@ JOB_TAG = "LOAD-QA"
 
 SERVICE_CODE = "battery_jumpstart"   # requires_vehicle_equipment = False
 SERVICE_ID = 3
-OTHER_SERVICES = ["flat_tyre", "minor_repair", "fuel_delivery"]
+OTHER_SERVICES = ["flat_tyre", "minor_repair"]
 
 # Ahmedabad, near CG Road — the same pickup point the integration harness uses,
 # so distances quoted in one file mean the same thing in the other.

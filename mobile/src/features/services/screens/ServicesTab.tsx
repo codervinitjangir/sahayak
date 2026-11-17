@@ -17,7 +17,6 @@ type IconName = keyof typeof Ionicons.glyphMap;
 const SYMPTOMS: { label: string; icon: IconName; type: ServiceType }[] = [
   { label: "Flat or punctured tyre", icon: "disc-outline", type: "tyre" },
   { label: "Car will not start", icon: "battery-dead-outline", type: "battery" },
-  { label: "Ran out of fuel", icon: "water-outline", type: "fuel" },
   { label: "Cannot drive it (accident, breakdown)", icon: "car-outline", type: "towing" },
   { label: "Strange noise or warning light", icon: "construct-outline", type: "mechanic" },
 ];
@@ -28,7 +27,6 @@ const CODE_TO_TYPE: Record<string, ServiceType> = {
   wheel_lift_towing: "towing",
   battery_jumpstart: "battery",
   flat_tyre: "tyre",
-  fuel_delivery: "fuel",
   minor_repair: "mechanic",
 };
 

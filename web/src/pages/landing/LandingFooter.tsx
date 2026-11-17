@@ -60,7 +60,6 @@ export const LandingFooter: React.FC = () => {
             <li><Link to="/owner/request">Puncture Repair</Link></li>
             <li><Link to="/owner/request">Battery Jumpstart</Link></li>
             <li><Link to="/owner/request">Flatbed Towing</Link></li>
-            <li><Link to="/owner/request">Emergency Fuel</Link></li>
             <li><Link to="/owner/request">Mechanical Triage</Link></li>
           </ul>
         </div>

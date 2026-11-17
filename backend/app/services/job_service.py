@@ -70,7 +70,6 @@ SERVICE_BASE_PRICES: dict[str, Decimal] = {
     "battery_jumpstart": Decimal("499.00"),
     "flat_tyre": Decimal("399.00"),
     "minor_repair": Decimal("599.00"),
-    "fuel_delivery": Decimal("449.00"),
 }
 
 # Used when a service has neither a stored price nor an entry above.

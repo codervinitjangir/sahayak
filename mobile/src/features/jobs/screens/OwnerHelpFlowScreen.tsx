@@ -44,7 +44,6 @@ const CODE_GROUP: Record<string, ServiceType> = {
   wheel_lift_towing: "towing",
   battery_jumpstart: "battery",
   flat_tyre: "tyre",
-  fuel_delivery: "fuel",
   minor_repair: "mechanic",
 };
 

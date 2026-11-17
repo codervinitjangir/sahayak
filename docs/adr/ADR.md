@@ -1357,3 +1357,13 @@ Consequence for callers: a partner whose offer was cancelled before they accepte
 **Not done.** Jobs left in `requested` by a crash between creation and dispatch are not swept: `dispatch_job` relies on being the only writer of `requested`, and making it sweep-safe is its own change. The partner is not told that an offer timed out (it leaves their list). (`expires_at` is now on the offer payload and both clients count down from it; HANDOFF §21.)
 
 **Related fix (2026-11-17).** `job_status_history.changed_at` was written as `now()`, the transaction start, so a transition that waited on the job lock (for example a cancel behind an accept) sorted before the one it waited for. `create_status_history_row` now writes `clock_timestamp()`, the time of the write. No migration: the column default is untouched and every history row goes through that function. This makes principle 4's timeline trustworthy under the lock waits this ADR adds.
+
+# ADR-033: Fuel delivery is withdrawn, past fuel jobs deleted
+
+**Date:** 2026-11-17 · **Status:** Accepted.
+
+**Context.** Delivering fuel to a roadside in India needs a PESO licence and an approved dispenser; it is not something Sahayak can lawfully offer everywhere. The team decided to remove the service rather than hide it.
+
+**Decision.** `alembic/0010_remove_fuel_delivery.sql` deletes the `fuel_delivery` service, the `fuel` category, every job on that service (with its ratings and payments; assignments, history, notifications and disputes cascade) and the partner links, then recomputes `rating_avg`/`rating_count` for partners who were responsible for those jobs using the ADR-018 rule. Applied to production on 2026-11-17: one job, one partner link. Every client list, seed and landing-page mention was removed.
+
+**Consequences.** This deletes data, which the project otherwise avoids (ADR-025 anonymises instead). It was the team's explicit choice; the job had no money owed. Re-adding fuel later is a new service row, not a revert.

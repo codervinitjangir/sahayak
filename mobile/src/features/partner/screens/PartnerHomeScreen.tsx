@@ -139,6 +139,20 @@ export default function PartnerHomeScreen() {
     return () => sub.remove();
   }, [load]);
 
+  // While this screen is open, re-read duty state every 15 s: the same partner
+  // may switch it from the browser, or ops from the admin panel.
+  useEffect(() => {
+    const id = setInterval(async () => {
+      try {
+        const s = await partnerApi.getStats();
+        if (typeof s.is_available === "boolean" && !dutyBusyRef.current) setOnline(s.is_available);
+      } catch {
+        // The next tick retries; a failed poll must not flip the switch.
+      }
+    }, 15000);
+    return () => clearInterval(id);
+  }, [setOnline]);
+
   const fetchOffers = useCallback(async () => {
     if (!isOnline) {
       setOffers([]);
@@ -393,7 +407,14 @@ export default function PartnerHomeScreen() {
                 <Skeleton height={88} />
               ) : stats ? (
                 <View style={styles.statRow}>
-                  <Stat label="Rating" value={stats.rating_count > 0 ? Number(stats.rating_avg).toFixed(1) : "New"} sub={`${stats.rating_count} ${stats.rating_count === 1 ? "rating" : "ratings"}`} />
+                  <Pressable
+                    style={{ flex: 1 }}
+                    onPress={() => nav.navigate("PartnerReviews")}
+                    accessibilityRole="button"
+                    accessibilityLabel="See all your reviews"
+                  >
+                    <Stat label="Rating" value={stats.rating_count > 0 ? Number(stats.rating_avg).toFixed(1) : "New"} sub={`${stats.rating_count} ${stats.rating_count === 1 ? "review" : "reviews"} ›`} />
+                  </Pressable>
                   <Stat label="Acceptance" value={`${Math.round(Number(stats.acceptance_rate_pct))}%`} sub="of offers" />
                   <Stat label="Jobs" value={String(stats.lifetime_jobs)} sub="lifetime" />
                 </View>

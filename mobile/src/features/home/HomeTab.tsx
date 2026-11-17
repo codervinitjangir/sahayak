@@ -14,7 +14,7 @@ type Nav = NativeStackNavigationProp<OwnerStackParamList>;
 
 // Shortcuts into the request flow. Each maps to a service group the flow already
 // understands; nothing here claims a price, an ETA or an availability.
-const SHORTCUTS: ServiceType[] = ["tyre", "battery", "fuel", "towing", "mechanic", "lockout"];
+const SHORTCUTS: ServiceType[] = ["tyre", "battery", "towing", "mechanic", "lockout"];
 
 export default function HomeTab({
   onOpenActivity,

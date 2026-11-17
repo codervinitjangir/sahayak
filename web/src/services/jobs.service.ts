@@ -56,19 +56,11 @@ export const SEEDED_SERVICES: Service[] = [
     name: 'On-Site Minor Repair',
     requires_vehicle_equipment: false,
   },
-  {
-    id: 6,
-    category_id: 3,
-    code: 'fuel_delivery',
-    name: 'Emergency Fuel Delivery',
-    requires_vehicle_equipment: false,
-  },
 ];
 
 export const SEEDED_SERVICE_CATEGORIES: ServiceCategory[] = [
   { id: 1, code: 'towing', name: 'Towing' },
   { id: 2, code: 'mechanical', name: 'Mechanical' },
-  { id: 3, code: 'fuel', name: 'Fuel' },
 ];
 
 export const jobsService = {

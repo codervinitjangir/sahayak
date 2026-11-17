@@ -78,7 +78,7 @@ export const PricingSection: React.FC = () => {
               Pay Per Service Only
             </h3>
             <p style={{ fontSize: '14px', color: '#5B5346', lineHeight: 1.6 }}>
-              Zero commitments or ongoing memberships. Select the service you need—puncture repair, jumpstart, towing, or fuel delivery—and pay strictly for completed work.
+              Zero commitments or ongoing memberships. Select the service you need—puncture repair, jumpstart, towing, or on-site repair—and pay strictly for completed work.
             </p>
           </div>
 

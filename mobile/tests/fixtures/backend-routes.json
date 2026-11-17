@@ -28,6 +28,7 @@
     "GET /api/v1/partners/me/earnings",
     "GET /api/v1/partners/me/jobs/active",
     "GET /api/v1/partners/me/offers",
+    "GET /api/v1/partners/me/reviews",
     "GET /api/v1/partners/me/services",
     "GET /api/v1/partners/me/stats",
     "GET /api/v1/payments/job/{job_id}",

@@ -18,8 +18,7 @@ import './partner.css';
 const OTP_COUNTDOWN_SECONDS = 30;
 const STEPS = ['Phone', 'About you', 'Services'];
 
-/** Fuel delivery is not offered through partner self-registration yet. */
-const CATEGORY_CHOICES = CATEGORIES.filter((c) => c.code !== 'fuel_delivery');
+const CATEGORY_CHOICES = CATEGORIES;
 
 const inputClass =
   'w-full min-h-[52px] px-4 bg-white border border-line rounded-control text-base text-ink placeholder:text-ink-muted focus:border-brand-700 focus:ring-2 focus:ring-brand-700 outline-none';

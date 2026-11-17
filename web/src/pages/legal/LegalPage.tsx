@@ -54,7 +54,7 @@ export const TermsPage: React.FC = () => (
         title: 'What Sahayak does',
         body: (
           <p>
-            Sahayak matches a vehicle owner&rsquo;s request with a verified partner (a mechanic, tow operator or fuel
+            Sahayak matches a vehicle owner&rsquo;s request with a verified partner (a mechanic or tow operator
             provider) and shows the progress of the request. Partners are independent service providers. They are not
             employees of Sahayak, and the repair, towing or delivery is carried out by them.
           </p>

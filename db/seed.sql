@@ -5,8 +5,7 @@
 -- 1. Service Categories
 INSERT INTO service_categories (code, name) VALUES
 ('towing', 'Towing'),
-('mechanical', 'Mechanical'),
-('fuel', 'Fuel')
+('mechanical', 'Mechanical')
 ON CONFLICT (code) DO NOTHING;
 
 -- 2. Services
@@ -15,8 +14,7 @@ INSERT INTO services (category_id, code, name, requires_vehicle_equipment) VALUE
 ((SELECT id FROM service_categories WHERE code='towing'), 'wheel_lift_towing', 'Wheel-Lift Towing', TRUE),
 ((SELECT id FROM service_categories WHERE code='mechanical'), 'battery_jumpstart', 'Battery Jumpstart', FALSE),
 ((SELECT id FROM service_categories WHERE code='mechanical'), 'flat_tyre', 'Flat Tyre Support', FALSE),
-((SELECT id FROM service_categories WHERE code='mechanical'), 'minor_repair', 'On-Site Minor Repair', FALSE),
-((SELECT id FROM service_categories WHERE code='fuel'), 'fuel_delivery', 'Emergency Fuel Delivery', FALSE)
+((SELECT id FROM service_categories WHERE code='mechanical'), 'minor_repair', 'On-Site Minor Repair', FALSE)
 ON CONFLICT (code) DO NOTHING;
 
 -- 3. Default Admins

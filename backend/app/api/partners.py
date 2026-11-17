@@ -25,7 +25,7 @@ not here. This module covers identity, shift status and coverage only.
 import uuid
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api import API_V1_PREFIX
@@ -33,6 +33,7 @@ from app.config.database import get_db
 from app.schemas.common import ApiResponse, ErrorResponse, envelope
 from app.schemas.job import JobDetailResponse
 from app.schemas.partner import (
+    PartnerReviewsResponse,
     PartnerAuthLinkResponse,
     PartnerAvailabilityRequest,
     PartnerAvailabilityResponse,
@@ -188,6 +189,23 @@ async def get_my_stats(
     """
     stats = await partner_service.get_partner_stats(db, identity)
     return envelope(stats)
+
+
+@router.get(
+    "/me/reviews",
+    response_model=ApiResponse[PartnerReviewsResponse],
+    status_code=status.HTTP_200_OK,
+    summary="List the ratings owners gave the caller, newest first",
+)
+async def list_my_reviews(
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    identity: Identity = Depends(require_partner),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[PartnerReviewsResponse]:
+    """Each owner rating behind the partner's average: stars, comment, the job's
+    service, and the owner's first name + last initial. No contact details."""
+    return envelope(await partner_service.list_my_reviews(db, identity, limit, offset))
 
 
 @router.get(

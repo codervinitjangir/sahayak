@@ -11,7 +11,6 @@ const SERVICE_TYPE_BY_CODE: Record<string, ServiceType> = {
   wheel_lift_towing: "towing",
   flat_tyre: "tyre",
   battery_jumpstart: "battery",
-  fuel_delivery: "fuel",
   minor_repair: "mechanic",
 };
 

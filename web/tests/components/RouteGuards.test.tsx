@@ -1,8 +1,23 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider, UserRole } from '../../src/app/AuthProvider';
 import { RequireRole } from '../../src/app/RouteGuards';
+
+const resolveMock = vi.fn();
+vi.mock('../../src/services/supabase', () => ({
+  IS_SUPABASE_CONFIGURED: false,
+  getSupabase: () => { throw new Error('not configured'); },
+  signOut: async () => undefined,
+}));
+vi.mock('../../src/services/identity.service', async (orig) => ({
+  ...(await orig<typeof import('../../src/services/identity.service')>()),
+  identityService: { resolve: () => resolveMock() },
+}));
+
+const BACKEND_ROLE: Record<UserRole, 'user' | 'partner' | 'admin'> = {
+  owner: 'user', partner: 'partner', ops: 'admin', super_admin: 'admin',
+};
 
 /**
  * Mounts the guard for `allowedRoles` at /start with the given active role, plus
@@ -13,6 +28,8 @@ import { RequireRole } from '../../src/app/RouteGuards';
  */
 function renderGuard(role: UserRole, allowedRoles: UserRole[]) {
   localStorage.setItem('sahayak_role', role);
+  localStorage.setItem('sahayak_token', 'test-token');
+  resolveMock.mockResolvedValue({ kind: 'registered', identity: { role: BACKEND_ROLE[role], id: 'id-1' } });
 
   return render(
     <AuthProvider>
@@ -29,6 +46,7 @@ function renderGuard(role: UserRole, allowedRoles: UserRole[]) {
           <Route path="/owner" element={<div>Owner Home</div>} />
           <Route path="/partner" element={<div>Partner Home</div>} />
           <Route path="/admin" element={<div>Admin Home</div>} />
+          <Route path="/login" element={<div>Login Page</div>} />
         </Routes>
       </MemoryRouter>
     </AuthProvider>
@@ -40,34 +58,49 @@ describe('RequireRole', () => {
     localStorage.clear();
   });
 
-  it('renders children when the active role is allowed', () => {
+  it('renders children when the active role is allowed', async () => {
     renderGuard('owner', ['owner']);
-    expect(screen.getByText('Protected Content')).toBeInTheDocument();
+    expect(await screen.findByText('Protected Content')).toBeInTheDocument();
   });
 
-  it('renders children when the role is one of several allowed', () => {
+  it('renders children when the role is one of several allowed', async () => {
     renderGuard('ops', ['ops', 'super_admin']);
-    expect(screen.getByText('Protected Content')).toBeInTheDocument();
+    expect(await screen.findByText('Protected Content')).toBeInTheDocument();
   });
 
-  it('sends a partner to the partner home when the route is not theirs', () => {
+  it('sends a partner to the partner home when the route is not theirs', async () => {
     renderGuard('partner', ['owner']);
-    expect(screen.getByText('Partner Home')).toBeInTheDocument();
+    expect(await screen.findByText('Partner Home')).toBeInTheDocument();
     expect(screen.queryByText('Protected Content')).not.toBeInTheDocument();
   });
 
-  it('sends ops to the admin console when the route is not theirs', () => {
+  it('sends ops to the admin console when the route is not theirs', async () => {
     renderGuard('ops', ['owner']);
-    expect(screen.getByText('Admin Home')).toBeInTheDocument();
+    expect(await screen.findByText('Admin Home')).toBeInTheDocument();
   });
 
-  it('sends a super_admin to the admin console when the route is not theirs', () => {
+  it('sends a super_admin to the admin console when the route is not theirs', async () => {
     renderGuard('super_admin', ['partner']);
-    expect(screen.getByText('Admin Home')).toBeInTheDocument();
+    expect(await screen.findByText('Admin Home')).toBeInTheDocument();
   });
 
-  it('falls back to the owner home for an owner on a route they cannot access', () => {
+  it('falls back to the owner home for an owner on a route they cannot access', async () => {
     renderGuard('owner', ['partner']);
-    expect(screen.getByText('Owner Home')).toBeInTheDocument();
+    expect(await screen.findByText('Owner Home')).toBeInTheDocument();
+  });
+
+  it('sends a signed-out visitor to the login page', async () => {
+    render(
+      <AuthProvider>
+        <MemoryRouter initialEntries={['/start']}>
+          <Routes>
+            <Route path="/start" element={<RequireRole allowedRoles={['owner']}><div>Protected Content</div></RequireRole>} />
+            <Route path="/login" element={<div>Login Page</div>} />
+          </Routes>
+        </MemoryRouter>
+      </AuthProvider>
+    );
+    expect(await screen.findByText('Login Page')).toBeInTheDocument();
+    expect(screen.queryByText('Protected Content')).not.toBeInTheDocument();
   });
 });

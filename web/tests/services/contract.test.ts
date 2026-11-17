@@ -327,14 +327,14 @@ describe('Backend Contract Compliance Tests', () => {
   describe('Service Catalogue', () => {
     it('returns seeded services matching database codes', async () => {
       const services = await jobsService.listServices();
-      expect(services.length).toBe(6);
+      expect(services.length).toBe(5);
       const codes = services.map((s) => s.code);
       expect(codes).toContain('flatbed_towing');
       expect(codes).toContain('wheel_lift_towing');
       expect(codes).toContain('battery_jumpstart');
       expect(codes).toContain('flat_tyre');
       expect(codes).toContain('minor_repair');
-      expect(codes).toContain('fuel_delivery');
+      expect(codes).not.toContain('fuel_delivery');
     });
   });
 });

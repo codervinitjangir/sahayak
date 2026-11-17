@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { getAuthToken, setAuthToken } from '../services/authToken';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import { QueryClientContext } from '@tanstack/react-query';
+import { getAuthToken, setAuthToken, TOKEN_STORAGE_KEY } from '../services/authToken';
 import { UNAUTHORIZED_EVENT } from '../services/api';
 import { identityService } from '../services/identity.service';
 import {
@@ -27,6 +28,12 @@ interface AuthContextType {
   setToken: (token: string | null) => void;
   /** True until the stored Supabase session has been restored on first load. */
   isRestoringSession: boolean;
+  /**
+   * 'restoring' until the stored session and the backend identity are both
+   * known; route guards and the login page wait on it so a signed-in visitor
+   * never sees a flash of the login form.
+   */
+  status: 'restoring' | 'signed-out' | 'ready';
   logout: () => void;
 }
 
@@ -52,6 +59,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 
   const [user, setUser] = useState<UserProfile | null>(null);
+  const [resolvedFor, setResolvedFor] = useState<string | null>(null);
+  // Optional so the provider also mounts in tests without a query cache.
+  const queryClient = useContext(QueryClientContext);
+  const lastIdentityId = useRef<string | null>(null);
 
   const setRole = (newRole: UserRole) => {
     setRoleState(newRole);
@@ -78,6 +89,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     window.addEventListener(UNAUTHORIZED_EVENT, handleUnauthorized);
     return () => window.removeEventListener(UNAUTHORIZED_EVENT, handleUnauthorized);
   }, [logout]);
+
+  // Every tab of this site shares one sign-in. When another tab signs in as a
+  // different account (or signs out), adopt its token here too instead of
+  // carrying on with a stale one and a stale role.
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === TOKEN_STORAGE_KEY) setToken(e.newValue);
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
 
   /**
    * Keep the bearer token in step with the Supabase session.
@@ -133,6 +155,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     if (!token) {
       setUser(null);
+      setResolvedFor(null);
+      if (lastIdentityId.current !== null) {
+        lastIdentityId.current = null;
+        queryClient?.clear();
+      }
       return undefined;
     }
     let cancelled = false;
@@ -146,9 +173,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           // Phone is cosmetic here.
         }
       }
-      const resolved = await identityService.resolve();
+      // Retry through a backend cold start (Render free tier sleeps when idle)
+      // instead of treating "server still waking up" as "not signed in".
+      let resolved = await identityService.resolve();
+      for (const wait of [3000, 8000, 15000, 30000]) {
+        if (cancelled || resolved.kind !== 'error') break;
+        await new Promise((r) => setTimeout(r, wait));
+        if (cancelled) return;
+        resolved = await identityService.resolve();
+      }
       if (cancelled) return;
       const backendRole = resolved.kind === 'registered' ? resolved.identity.role : undefined;
+      const identityId = resolved.kind === 'registered' ? `${backendRole}:${resolved.identity.id}` : `anon:${phone}`;
+      // A different account now owns this tab: nothing cached for the previous
+      // one (profile, jobs, vehicles) may be shown or reused.
+      if (lastIdentityId.current !== null && lastIdentityId.current !== identityId) {
+        queryClient?.clear();
+      }
+      lastIdentityId.current = identityId;
+      if (backendRole) {
+        // The backend decides the role; the stored value is only a hint used
+        // before this resolves.
+        setRole(backendRole === 'partner' ? 'partner' : backendRole === 'admin' ? 'ops' : 'owner');
+      }
+      setResolvedFor(token);
       setUser({
         id: resolved.kind === 'registered' ? resolved.identity.id : '',
         name: backendRole === 'partner' ? 'Partner' : backendRole === 'admin' ? 'Admin' : 'Owner',
@@ -159,11 +207,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
+
+  const status: AuthContextType['status'] = isRestoringSession
+    ? 'restoring'
+    : !token
+      ? 'signed-out'
+      : resolvedFor === token
+        ? 'ready'
+        : 'restoring';
 
   return (
     <AuthContext.Provider
-      value={{ user, role, setRole, token, setToken, isRestoringSession, logout }}
+      value={{ user, role, setRole, token, setToken, isRestoringSession, status, logout }}
     >
       {children}
     </AuthContext.Provider>

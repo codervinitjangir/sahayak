@@ -31,9 +31,6 @@ export const SEEDED_SUB_SERVICES: Record<ServiceType, SubService[]> = {
     { id: "tow_01", name: "Flatbed Towing", estimatedPrice: 1499 },
     { id: "tow_02", name: "Wheel-Lift Towing", estimatedPrice: 1199 },
   ],
-  fuel: [
-    { id: "fue_01", name: "Emergency Fuel Delivery (5L)", estimatedPrice: 449 },
-  ],
   lockout: [
     { id: "loc_01", name: "Emergency Vehicle Lockout Assist", estimatedPrice: 499 },
   ],

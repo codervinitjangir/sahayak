@@ -82,7 +82,6 @@ describe('Live Backend Verification Suite', () => {
         'battery_jumpstart',
         'flat_tyre',
         'flatbed_towing',
-        'fuel_delivery',
         'minor_repair',
         'wheel_lift_towing',
       ].sort();

@@ -15,13 +15,12 @@ import { getAuthToken } from '../../services/authToken';
 import { usersService } from '../../services/users.service';
 import { LocationPoint } from '../../types/jobs';
 
-type CategoryFilter = 'all' | 'mechanic' | 'towing' | 'fuel';
+type CategoryFilter = 'all' | 'mechanic' | 'towing';
 
 const FILTERS: { id: CategoryFilter; label: string }[] = [
   { id: 'all', label: 'All' },
   { id: 'mechanic', label: 'On-site repair' },
   { id: 'towing', label: 'Tow truck' },
-  { id: 'fuel', label: 'Fuel' },
 ];
 
 const StepHeading: React.FC<{ n: number; id: string; children: React.ReactNode; required?: boolean }> = ({
@@ -189,9 +188,7 @@ export const RequestHelpPage: React.FC = () => {
       case 'towing':
         return service.requires_vehicle_equipment || service.code.includes('tow');
       case 'mechanic':
-        return !service.requires_vehicle_equipment && !service.code.includes('fuel');
-      case 'fuel':
-        return service.code.includes('fuel');
+        return !service.requires_vehicle_equipment;
       default:
         return true;
     }

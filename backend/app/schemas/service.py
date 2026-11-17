@@ -75,7 +75,7 @@ class ServiceCatalogItem(BaseModel):
     )
     category_id: Optional[int] = None
     category_code: Optional[str] = Field(
-        None, description="'towing' | 'mechanical' | 'fuel'. Null only if unseeded."
+        None, description="'towing' | 'mechanical'. Null only if unseeded."
     )
     category_name: Optional[str] = None
 

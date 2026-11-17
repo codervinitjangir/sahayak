@@ -38,9 +38,11 @@ from app.config.redis_client import (
     location_updated_at_key,
 )
 from app.models.partner import Partner
-from app.repositories import dispatch_repository, partner_repository
+from app.repositories import dispatch_repository, partner_repository, rating_repository
 from app.schemas.job import JobDetailResponse
 from app.schemas.partner import (
+    PartnerReviewItem,
+    PartnerReviewsResponse,
     PartnerCreateRequest,
     PartnerEarningsResponse,
     PartnerServiceItem,
@@ -582,3 +584,28 @@ async def update_my_name(db: AsyncSession, identity: Identity, name: str) -> Par
         raise InternalError("Could not update your profile") from exc
     log_event("partner_profile_updated", partner_id=str(identity.local_id), outcome="success")
     return await partner_repository.get_partner_by_id(db, identity.local_id)
+
+
+def owner_display_name(full_name) -> str:
+    """'Mohana Laxmi' -> 'Mohana L.'; blank or anonymised (ADR-025) -> 'Customer'."""
+    parts = (full_name or "").split()
+    if not parts or parts[0].lower() in {"deleted", "anonymous"}:
+        return "Customer"
+    first = parts[0][:30]
+    return f"{first} {parts[-1][0].upper()}." if len(parts) > 1 else first
+
+
+async def list_my_reviews(db: AsyncSession, identity: Identity, limit: int, offset: int):
+    """The calling partner's reviews: who (first name + initial), what job, stars, comment."""
+    rows = await rating_repository.list_partner_reviews(db, identity.local_id, limit, offset)
+    return PartnerReviewsResponse(
+        items=[
+            PartnerReviewItem(
+                job_id=r.job_id, service_name=r.service_name, rating=r.rating,
+                comment=r.comment, owner_display_name=owner_display_name(r.owner_name),
+                created_at=r.created_at,
+            )
+            for r in rows
+        ],
+        limit=limit, offset=offset,
+    )

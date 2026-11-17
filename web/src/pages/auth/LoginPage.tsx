@@ -73,7 +73,14 @@ export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const redirectTo = safeOwnerRedirect(searchParams.get('redirect'));
-  const { setRole, setToken } = useAuth();
+  const { setRole, setToken, token: authToken, status: authStatus, user: authUser } = useAuth();
+
+  // Already signed in (saved session restored): skip the form entirely.
+  useEffect(() => {
+    if (authStatus !== 'ready' || !authUser?.id) return;
+    const backendRole = authUser.role === 'partner' ? 'partner' : authUser.role === 'owner' ? 'user' : 'admin';
+    navigate(backendRole === 'user' && redirectTo ? redirectTo : homeRouteForRole(backendRole), { replace: true });
+  }, [authStatus, authUser, navigate, redirectTo]);
 
   const [loginRole, setLoginRole] = useState<LoginRole>('owner');
   const [step, setStep] = useState<Step>('identify');
@@ -374,6 +381,14 @@ export const LoginPage: React.FC = () => {
 
   const primaryBtn =
     'w-full min-h-[52px] inline-flex items-center justify-center gap-2 rounded-control bg-brand-700 hover:bg-brand-800 active:bg-brand-900 text-white font-semibold text-base transition-colors disabled:opacity-50 disabled:cursor-not-allowed';
+
+  if (authStatus === 'restoring' && authToken && step === 'identify') {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-ink-soft" role="status" aria-live="polite">
+        Signing you in…
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-white lg:grid lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">

@@ -45,7 +45,6 @@ export type ServiceType =
   | "towing"
   | "battery"
   | "tyre"
-  | "fuel"
   | "lockout"
   | "mechanic";
 
@@ -167,4 +166,5 @@ export type PartnerStackParamList = {
   IncomingOffer: { jobId: string; assignmentId?: string; offerData?: any };
   ActiveJob: { jobId: string };
   PartnerJobDone: { jobId: string };
+  PartnerReviews: undefined;
 };

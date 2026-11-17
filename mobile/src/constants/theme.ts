@@ -215,7 +215,6 @@ export type ServiceType =
   | "towing"
   | "battery"
   | "tyre"
-  | "fuel"
   | "lockout"
   | "mechanic";
 
@@ -226,7 +225,6 @@ export const ServiceConfig: Record<
   towing: { label: "Towing", icon: "car-outline", color: "#0F172A", bg: "#F1F5F9" },
   battery: { label: "Battery", icon: "battery-charging-outline", color: "#B45309", bg: "#FEF3C7" },
   tyre: { label: "Flat tyre", icon: "disc-outline", color: "#111111", bg: "#E4E6EA" },
-  fuel: { label: "Fuel", icon: "water-outline", color: "#0369A1", bg: "#E0F2FE" },
   lockout: { label: "Lockout", icon: "key-outline", color: "#7C3AED", bg: "#EDE9FE" },
   mechanic: { label: "Repair", icon: "construct-outline", color: "#15803D", bg: "#DCFCE7" },
 };

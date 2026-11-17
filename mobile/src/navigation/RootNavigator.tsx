@@ -1,6 +1,8 @@
 // ─── Sahayak — Root Navigator ─────────────────────────────────────────────────
 // Role-aware routing: Auth → Owner flow OR Partner flow
 import React, { useEffect } from "react";
+import { View, ActivityIndicator } from "react-native";
+import { Colors } from "../constants/theme";
 import { NavigationContainer } from "@react-navigation/native";
 import { navigationRef, openNotificationRoute } from "./navigationRef";
 import * as Notifications from "expo-notifications";
@@ -21,6 +23,7 @@ import PartnerHomeScreen from "../features/partner/screens/PartnerHomeScreen";
 import IncomingOfferScreen from "../features/partner/screens/IncomingOfferScreen";
 import ActiveJobScreen from "../features/partner/screens/ActiveJobScreen";
 import PartnerJobDoneScreen from "../features/partner/screens/PartnerJobDoneScreen";
+import PartnerReviewsScreen from "../features/partner/screens/PartnerReviewsScreen";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 import type {
@@ -70,6 +73,7 @@ function PartnerNavigator() {
         component={PartnerJobDoneScreen}
         options={{ animation: "fade", gestureEnabled: false }}
       />
+      <PartnerStack.Screen name="PartnerReviews" component={PartnerReviewsScreen} />
     </PartnerStack.Navigator>
   );
 }
@@ -88,7 +92,7 @@ function AuthNavigator() {
 
 // ─── Root Navigator ───────────────────────────────────────────────────────────
 export default function RootNavigator() {
-  const { user } = useAuthStore();
+  const { user, isRestoringSession } = useAuthStore();
   const role = user?.role;
 
   // Tapping a push: route by its event and job. Also handles the push that
@@ -113,7 +117,11 @@ export default function RootNavigator() {
 
   return (
     <NavigationContainer ref={navigationRef}>
-      {!user ? (
+      {!user && isRestoringSession ? (
+        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: Colors.surface }}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+        </View>
+      ) : !user ? (
         <AuthNavigator />
       ) : user.role === "partner" ? (
         <PartnerNavigator />

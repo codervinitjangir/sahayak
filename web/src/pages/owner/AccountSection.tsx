@@ -45,10 +45,14 @@ export const AccountSection: React.FC = () => {
       const a = document.createElement('a');
       a.href = url;
       a.download = 'sahayak-my-data.json';
+      document.body.appendChild(a);
       a.click();
-      URL.revokeObjectURL(url);
-    } catch {
-      setExportError('Could not prepare your data. Try again.');
+      a.remove();
+      // Released later: revoking straight after click() can cancel the download.
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+    } catch (err) {
+      const reason = err instanceof Error && err.message ? ` (${err.message})` : '';
+      setExportError(`Could not prepare your data. Try again.${reason}`);
     }
   };
 

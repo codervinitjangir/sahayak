@@ -6,7 +6,7 @@ const STEPS = [
   {
     num: '01',
     title: 'Share your location & issue',
-    desc: 'Puncture, dead battery, need towing, or out of fuel — pick your vehicle issue and pinpoint your coordinates.',
+    desc: 'Puncture, dead battery, need towing, or a breakdown — pick your vehicle issue and pinpoint your coordinates.',
     icon: MapPin,
     color: '#111111',
     colorLight: 'rgba(15, 118, 110, 0.1)',
@@ -18,7 +18,7 @@ const STEPS = [
           { emoji: '🔧', label: 'Puncture Repair' },
           { emoji: '🔋', label: 'Battery Jumpstart' },
           { emoji: '🚛', label: 'Towing / Flatbed' },
-          { emoji: '⛽', label: 'Fuel Delivery' },
+          { emoji: '🛠️', label: 'On-Site Repair' },
         ].map((s) => (
           <div key={s.label} className="hiw-choice">
             <span className="hiw-choice__emoji">{s.emoji}</span>

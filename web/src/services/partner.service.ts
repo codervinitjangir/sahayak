@@ -63,6 +63,15 @@ export interface AssignmentRespondResponse {
   next_assignment_id?: string | null;
 }
 
+export interface PartnerReview {
+  job_id: string;
+  service_name: string;
+  rating: number;
+  comment: string | null;
+  owner_display_name: string;
+  created_at: string;
+}
+
 export const partnerService = {
   /**
    * Returns the first 'offered' assignment for this partner, or null if idle.
@@ -245,10 +254,20 @@ export const partnerService = {
     return res.data.services ?? [];
   },
 
+  /** Each owner rating behind the average, newest first. Owner = first name + initial. */
+  async getReviews(limit = 100, offset = 0): Promise<PartnerReview[]> {
+    const res = await apiClient<{ items: PartnerReview[] }>(
+      `/partners/me/reviews?limit=${limit}&offset=${offset}`,
+      { method: 'GET' }
+    );
+    return res.data.items ?? [];
+  },
+
   async getTrustStats(): Promise<PartnerTrustStats> {
     const res = await apiClient<{
       partner_id: string;
       verification_status: string;
+      is_available?: boolean;
       rating_avg: number | string;
       rating_count: number;
       acceptance_rate_pct: number;
@@ -261,6 +280,7 @@ export const partnerService = {
     return {
       partnerId: data.partner_id,
       verificationStatus: data.verification_status,
+      isAvailable: data.is_available,
       acceptanceRatePct: data.acceptance_rate_pct,
       ratingAvg: Number(data.rating_avg) || 0,
       ratingCount: data.rating_count,

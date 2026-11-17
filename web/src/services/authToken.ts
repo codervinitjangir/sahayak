@@ -8,7 +8,7 @@
  * and when site data is blocked, which would otherwise crash the app at startup.
  */
 
-const TOKEN_STORAGE_KEY = 'sahayak_token';
+export const TOKEN_STORAGE_KEY = 'sahayak_token';
 
 export function getAuthToken(): string | null {
   try {

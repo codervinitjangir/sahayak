@@ -18,7 +18,6 @@ export const SERVICE_CATALOG: PartnerService[] = [
   { id: 3, code: 'battery_jumpstart', name: 'Battery Jumpstart',       categoryCode: 'mechanical', requires_vehicle_equipment: false },
   { id: 4, code: 'flat_tyre',         name: 'Flat-Tyre Support',       categoryCode: 'mechanical', requires_vehicle_equipment: false },
   { id: 5, code: 'minor_repair',      name: 'On-Site Minor Repair',    categoryCode: 'mechanical', requires_vehicle_equipment: false },
-  { id: 6, code: 'fuel_delivery',     name: 'Emergency Fuel Delivery', categoryCode: 'fuel',       requires_vehicle_equipment: false },
 ];
 
 export function servicesForCategory(cat: PartnerCategory): PartnerService[] {
@@ -41,7 +40,6 @@ export const CATEGORIES: CategoryMeta[] = [
   { code: 'towing',        label: 'Towing',                 description: 'Flatbed & wheel-lift tow services' },
   { code: 'mechanical',    label: 'Mechanical',             description: 'Tyre, battery & on-site repairs' },
   { code: 'both',          label: 'Both (Tow & Mechanic)',  description: 'Full-service roadside workshop & rescue fleet' },
-  { code: 'fuel_delivery', label: 'Fuel Delivery',          description: 'Emergency fuel drop-off' },
 ];
 
 /* ── Equipment (towing only) ────────────────────────────────────────────── */
@@ -436,6 +434,8 @@ export interface PartnerTrustStats {
   partnerId: string;
   /** Server truth: 'pending' | 'verified' | 'rejected' | 'suspended'. */
   verificationStatus: string;
+  /** Server duty state (partners.is_available); seeds the on/off switch. */
+  isAvailable?: boolean;
   acceptanceRatePct: number;
   ratingAvg: number;
   ratingCount: number;

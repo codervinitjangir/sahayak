@@ -71,7 +71,6 @@ export const USER_ROLE = {
 export const SERVICE_TYPE = {
   TYRE_PUNCTURE: "tyre_puncture",
   BATTERY_JUMP: "battery_jump",
-  FUEL_DELIVERY: "fuel_delivery",
   TOWING: "towing",
   GENERAL: "general",
 } as const;
