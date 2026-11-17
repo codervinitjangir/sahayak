@@ -25,6 +25,8 @@ import ActiveJobScreen from "../features/partner/screens/ActiveJobScreen";
 import PartnerJobDoneScreen from "../features/partner/screens/PartnerJobDoneScreen";
 import PartnerReviewsScreen from "../features/partner/screens/PartnerReviewsScreen";
 import OwnerSettingsScreen from "../features/account/screens/OwnerSettingsScreen";
+import ReceiptScreen from "../features/shared/ReceiptScreen";
+import ReportProblemScreen from "../features/activity/screens/ReportProblemScreen";
 import BecomePartnerScreen from "../features/profile/BecomePartnerScreen";
 import PartnerServicesScreen from "../features/partner/screens/PartnerServicesScreen";
 import PartnerSettingsScreen from "../features/partner/screens/PartnerSettingsScreen";
@@ -53,6 +55,8 @@ function OwnerNavigator() {
       <OwnerStack.Screen name="OwnerFlow" component={OwnerHelpFlowScreen} />
       <OwnerStack.Screen name="BecomePartner" component={BecomePartnerScreen} />
       <OwnerStack.Screen name="OwnerSettings" component={OwnerSettingsScreen} />
+      <OwnerStack.Screen name="Receipt" component={ReceiptScreen} />
+      <OwnerStack.Screen name="ReportProblem" component={ReportProblemScreen} />
     </OwnerStack.Navigator>
   );
 }
@@ -84,6 +88,7 @@ function PartnerNavigator() {
       <PartnerStack.Screen name="PartnerServices" component={PartnerServicesScreen} />
       <PartnerStack.Screen name="PartnerVerification" component={PartnerVerificationScreen} />
       <PartnerStack.Screen name="PartnerSettings" component={PartnerSettingsScreen} />
+      <PartnerStack.Screen name="Receipt" component={ReceiptScreen} />
     </PartnerStack.Navigator>
   );
 }

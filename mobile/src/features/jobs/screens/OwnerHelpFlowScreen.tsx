@@ -277,6 +277,33 @@ export default function OwnerHelpFlowScreen() {
     };
   }, [jobId, applyJob, qc]);
 
+  // Live partner position while they are on the way or working (Redis-backed
+  // GET /jobs/{id}/partner-location). No position means no marker, never a guess.
+  const [partnerPos, setPartnerPos] = useState<{ latitude: number; longitude: number } | null>(null);
+  const tracking = job?.status === "assigned" || job?.status === "partner_en_route" || job?.status === "in_progress";
+  useEffect(() => {
+    if (!jobId || !tracking) {
+      setPartnerPos(null);
+      return;
+    }
+    let stopped = false;
+    const tick = async () => {
+      try {
+        const loc = await jobsApi.getPartnerLocation(jobId);
+        if (stopped) return;
+        setPartnerPos(loc.latitude != null && loc.longitude != null ? { latitude: loc.latitude, longitude: loc.longitude } : null);
+      } catch {
+        /* keep the last known position; the next tick retries */
+      }
+    };
+    void tick();
+    const id = setInterval(tick, 8000);
+    return () => {
+      stopped = true;
+      clearInterval(id);
+    };
+  }, [jobId, tracking]);
+
   // Rating availability once complete.
   useEffect(() => {
     if (job?.status !== "completed" || !jobId) return;
@@ -409,8 +436,8 @@ export default function OwnerHelpFlowScreen() {
 
       <RealMap
         userLocation={mapLocation}
-        partnerLocation={null}
-        showRoute={false}
+        partnerLocation={partnerPos}
+        showRoute={Boolean(partnerPos)}
         showRadar={phase === "searching"}
         radarRadius={900}
         draggable={phase === "details"}
@@ -699,6 +726,12 @@ export default function OwnerHelpFlowScreen() {
                   onPress={job.status !== "completed" ? startAnother : canRate && !rated && rating > 0 ? submitRating : goBack}
                   loading={rateBusy}
                 />
+                {job.status === "completed" && jobId ? (
+                  <View style={{ flexDirection: "row", gap: Spacing.sm }}>
+                    <View style={{ flex: 1 }}><Button label="Receipt" variant="outline" onPress={() => nav.navigate("Receipt", { jobId })} /></View>
+                    <View style={{ flex: 1 }}><Button label="Report issue" variant="ghost" onPress={() => nav.navigate("ReportProblem", { jobId, title: job.service_name ?? undefined })} /></View>
+                  </View>
+                ) : null}
                 {job.status !== "completed" ? <Button label="Back to home" variant="ghost" onPress={goBack} /> : null}
               </View>
             </ScrollView>

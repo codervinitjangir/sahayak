@@ -7,6 +7,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Typography, Spacing, Hero } from "../../constants/theme";
 import ServiceArt, { type ArtName } from "../../components/illustrations/ServiceArt";
 import type { MobileVehicle as BackendVehicle } from "../../services/api/vehicles";
+import BrandLogo, { hasBrandLogo } from "../../components/brand/BrandLogo";
 
 export function VehicleChip({ vehicle, onPress }: { vehicle?: BackendVehicle; onPress: () => void }) {
   const two = vehicle?.vehicle_type === "two_wheeler";
@@ -18,12 +19,35 @@ export function VehicleChip({ vehicle, onPress }: { vehicle?: BackendVehicle; on
       style={({ pressed }) => [styles.chip, pressed && { opacity: 0.85 }]}
     >
       <View style={styles.chipArt}>
-        <ServiceArt name={two ? "bike" : "car"} fill />
+        {vehicle && hasBrandLogo(vehicle.make) ? <BrandLogo make={vehicle.make} size={36} round /> : <ServiceArt name={two ? "bike" : "car"} fill />}
       </View>
       <Text style={styles.chipText} numberOfLines={1}>
         {vehicle ? `${vehicle.make} ${vehicle.model}` : "Add vehicle"}
       </Text>
       <Ionicons name={vehicle ? "chevron-down" : "add"} size={16} color="#fff" />
+    </Pressable>
+  );
+}
+
+/** Account hero: the owner's main vehicle as a full-width glass card. */
+export function VehicleCard({ vehicle, count, onPress }: { vehicle?: BackendVehicle; count: number; onPress: () => void }) {
+  const two = vehicle?.vehicle_type === "two_wheeler";
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={vehicle ? `Your vehicle ${vehicle.make} ${vehicle.model}, ${vehicle.vehicle_number}. Open garage` : "Add your vehicle"}
+      style={({ pressed }) => [styles.vcard, pressed && { opacity: 0.85 }]}
+    >
+      <View style={styles.vcardArt}>
+        {vehicle && hasBrandLogo(vehicle.make) ? <BrandLogo make={vehicle.make} size={48} /> : <ServiceArt name={two ? "bike" : "car"} fill />}
+      </View>
+      <View style={{ flex: 1, gap: 3 }}>
+        <Text style={styles.vcardKicker}>{vehicle ? (count > 1 ? `My garage · ${count} vehicles` : "My vehicle") : "No vehicle yet"}</Text>
+        <Text style={styles.vcardName} numberOfLines={1}>{vehicle ? `${vehicle.make} ${vehicle.model}` : "Add your vehicle"}</Text>
+        {vehicle ? <Text style={styles.vcardPlate}>{vehicle.vehicle_number}</Text> : null}
+      </View>
+      <Ionicons name={vehicle ? "chevron-forward" : "add-circle"} size={22} color="#fff" />
     </Pressable>
   );
 }
@@ -114,6 +138,11 @@ const styles = StyleSheet.create({
   },
   chipArt: { width: 36, height: 36, borderRadius: 18, backgroundColor: "#fff", alignItems: "center", justifyContent: "center", overflow: "hidden" },
   chipText: { color: "#fff", fontSize: Typography.fontSize.sm, fontFamily: Typography.fontFamily.semiBold, flexShrink: 1 },
+  vcard: { flexDirection: "row", alignItems: "center", gap: 12, padding: 12, borderRadius: 20, backgroundColor: Hero.glass, borderWidth: 1, borderColor: Hero.glassBorder },
+  vcardArt: { width: 56, height: 56, borderRadius: 14, backgroundColor: "#fff", alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  vcardKicker: { color: Hero.textSoft, fontSize: Typography.fontSize.xs, fontFamily: Typography.fontFamily.medium },
+  vcardName: { color: "#fff", fontSize: Typography.fontSize.lg, fontFamily: Typography.fontFamily.bold },
+  vcardPlate: { alignSelf: "flex-start", color: "#111827", backgroundColor: "#FDE68A", fontSize: 12, fontFamily: Typography.fontFamily.bold, letterSpacing: 1, paddingHorizontal: 8, paddingVertical: 1, borderRadius: 4, overflow: "hidden" },
   slide: { flexDirection: "row", alignItems: "center", minHeight: 128 },
   kicker: { color: "#86EFAC", fontSize: Typography.fontSize.xs, fontFamily: Typography.fontFamily.semiBold, letterSpacing: 0.6, textTransform: "uppercase" },
   title: { marginTop: 4, color: "#fff", fontSize: Typography.fontSize["2xl"], fontFamily: Typography.fontFamily.bold, lineHeight: 28 },

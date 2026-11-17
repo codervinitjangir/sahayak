@@ -16,12 +16,12 @@ export interface TabDef<T extends string> {
 }
 
 /** Height the floating bar occupies, so scroll content can pad past it. */
-export const TAB_BAR_SPACE = 104;
+export const TAB_BAR_SPACE = 96;
 
 /**
- * Floating frosted bar of round buttons; the active tab is a solid black circle.
- * Labels are not drawn (the reference is icon-only) but every tab keeps its
- * accessible name, and the active one shows its label under the circle row.
+ * Floating frosted pill. Every slot is an icon over a label; the active tab sits
+ * in a soft grey bubble. An optional `center` action (e.g. SOS) takes the middle
+ * slot with the same size as the tabs, drawn in the emergency colour.
  */
 export default function TabBar<T extends string>({
   tabs,
@@ -32,43 +32,45 @@ export default function TabBar<T extends string>({
   tabs: TabDef<T>[];
   active: T;
   onChange: (key: T) => void;
-  /** Raised middle button (the fifth slot), e.g. "Get help". */
   center?: { icon: IconName; label: string; onPress: () => void };
 }) {
   const mid = center ? Math.ceil(tabs.length / 2) : -1;
   const insets = useSafeAreaInsets();
   return (
-    <View pointerEvents="box-none" style={[styles.dock, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+    <View pointerEvents="box-none" style={[styles.dock, { paddingBottom: Math.max(insets.bottom, 10) }]}>
       <View style={styles.bar} accessibilityRole="tablist">
         {tabs.map((t, idx) => {
           const on = t.key === active;
           return (
             <React.Fragment key={t.key}>
-            {idx === mid && center ? (
-              <Pressable
-                onPress={center.onPress}
-                accessibilityRole="button"
-                accessibilityLabel={center.label}
-                style={({ pressed }) => [styles.center, pressed && { transform: [{ scale: 0.94 }] }]}
-              >
-                <Ionicons name={center.icon} size={28} color="#fff" />
-                <Text style={styles.centerText}>{center.label}</Text>
-              </Pressable>
-            ) : null}
-            <Pressable
-              onPress={() => onChange(t.key)}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: on }}
-              accessibilityLabel={t.badge ? `${t.label}, ${t.badge} new` : t.label}
-              style={({ pressed }) => [styles.tab, on ? styles.tabOn : styles.tabOff, pressed && !on && { opacity: 0.7 }]}
-            >
-              <Ionicons name={on ? t.iconActive : t.icon} size={22} color={on ? "#fff" : Colors.textPrimary} />
-              {t.badge ? (
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>{t.badge > 9 ? "9+" : t.badge}</Text>
-                </View>
+              {idx === mid && center ? (
+                <Pressable
+                  onPress={center.onPress}
+                  accessibilityRole="button"
+                  accessibilityLabel={center.label}
+                  style={({ pressed }) => [styles.slot, pressed && { opacity: 0.7 }]}
+                >
+                  <View style={styles.sosIcon}>
+                    <Ionicons name={center.icon} size={20} color="#fff" />
+                  </View>
+                  <Text style={[styles.label, { color: Colors.emergency, fontFamily: Typography.fontFamily.bold }]}>{center.label}</Text>
+                </Pressable>
               ) : null}
-            </Pressable>
+              <Pressable
+                onPress={() => onChange(t.key)}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: on }}
+                accessibilityLabel={t.badge ? `${t.label}, ${t.badge} new` : t.label}
+                style={({ pressed }) => [styles.slot, on && styles.slotOn, pressed && !on && { opacity: 0.6 }]}
+              >
+                <Ionicons name={on ? t.iconActive : t.icon} size={22} color={on ? Colors.textPrimary : "#4B5563"} />
+                <Text style={[styles.label, on && styles.labelOn]} numberOfLines={1}>{t.label}</Text>
+                {t.badge ? (
+                  <View style={styles.badge}>
+                    <Text style={styles.badgeText}>{t.badge > 9 ? "9+" : t.badge}</Text>
+                  </View>
+                ) : null}
+              </Pressable>
             </React.Fragment>
           );
         })}
@@ -78,30 +80,30 @@ export default function TabBar<T extends string>({
 }
 
 const styles = StyleSheet.create({
-  dock: { position: "absolute", left: 0, right: 0, bottom: 0, alignItems: "center" },
+  dock: { position: "absolute", left: 0, right: 0, bottom: 0, paddingHorizontal: 14 },
   bar: {
     flexDirection: "row",
-    gap: 8,
-    padding: 6,
+    alignItems: "center",
+    padding: 5,
     borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.82)",
+    backgroundColor: "rgba(255,255,255,0.94)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.9)",
+    borderColor: "rgba(17,24,39,0.06)",
     ...Platform.select({
-      ios: { shadowColor: "#000", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.16, shadowRadius: 20 },
-      android: { elevation: 10 },
-      default: { boxShadow: "0 8px 28px rgba(0,0,0,0.16)", backdropFilter: "blur(16px)" } as object,
+      ios: { shadowColor: "#000", shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.14, shadowRadius: 18 },
+      android: { elevation: 12 },
+      default: { boxShadow: "0 8px 28px rgba(0,0,0,0.14)", backdropFilter: "blur(16px)" } as object,
     }),
   },
-  tab: { width: 52, height: 52, borderRadius: 26, alignItems: "center", justifyContent: "center" },
-  tabOn: { backgroundColor: "#111111" },
-  center: { width: 72, height: 72, marginTop: -26, borderRadius: 36, backgroundColor: Colors.emergency, alignItems: "center", justifyContent: "center", borderWidth: 4, borderColor: "#fff", elevation: 8, shadowColor: Colors.emergency, shadowOpacity: 0.4, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
-  centerText: { color: "#fff", fontSize: 10, fontFamily: Typography.fontFamily.bold, marginTop: -2 },
-  tabOff: { backgroundColor: "#F1F2F4" },
+  slot: { flex: 1, height: 58, borderRadius: 29, alignItems: "center", justifyContent: "center", gap: 2 },
+  slotOn: { backgroundColor: "#EEF0F3" },
+  label: { fontSize: 11.5, fontFamily: Typography.fontFamily.medium, color: "#4B5563" },
+  labelOn: { color: Colors.textPrimary, fontFamily: Typography.fontFamily.bold },
+  sosIcon: { width: 30, height: 30, borderRadius: 15, backgroundColor: Colors.emergency, alignItems: "center", justifyContent: "center" },
   badge: {
     position: "absolute",
-    top: 6,
-    right: 6,
+    top: 4,
+    right: "22%",
     minWidth: 18,
     height: 18,
     borderRadius: 9,

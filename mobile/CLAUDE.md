@@ -5,7 +5,7 @@ Read this before any mobile task. The design rules live in
 
 ## What this app is
 React Native + Expo app for two roles:
-1. **Vehicle owners**: tabs Home, Services, Activity, Account, plus a full-screen map-and-sheet request flow.
+1. **Vehicle owners**: floating 5-slot bar (Home, Services, SOS, Activity, Profile), a full-screen map-and-sheet request flow, Receipt and Report-a-problem screens (payments receipt + disputes APIs).
 2. **Service partners**: tabs Home (shift, offers, active job), Earnings, Account, plus offer / active job / done screens.
 
 ## Stack

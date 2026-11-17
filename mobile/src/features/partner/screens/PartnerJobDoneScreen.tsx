@@ -215,7 +215,7 @@ export default function PartnerJobDoneScreen() {
             </Card>
 
             <Card style={styles.breakdownCard}>
-              <Text style={styles.sectionTitle}>Job receipt</Text>
+              <Text style={styles.sectionTitle}>Job summary</Text>
 
               <View style={styles.costRow}>
                 <Text style={styles.costLabel}>Customer</Text>
@@ -235,11 +235,6 @@ export default function PartnerJobDoneScreen() {
                   {job.vehicle_number ?? "Not provided"}
                 </Text>
               </View>
-              <View style={styles.costRow}>
-                <Text style={styles.costLabel}>Final amount</Text>
-                <Text style={styles.costValue}>{inr(job.price_final)}</Text>
-              </View>
-
               <View style={styles.divider} />
 
               <View style={styles.costRow}>
@@ -259,6 +254,9 @@ export default function PartnerJobDoneScreen() {
                 <Text style={styles.ratingThanks}>
                   Received{payment.payment_method ? ` by ${payment.payment_method.toUpperCase()}` : ""}. Thank you!
                 </Text>
+              ) : null}
+              {payment?.status === "paid" ? (
+                <Button label="View receipt" variant="outline" onPress={() => nav.navigate("Receipt", { jobId: job.id })} fullWidth />
               ) : (
                 <>
                   <Text style={styles.ratingSubtitle}>

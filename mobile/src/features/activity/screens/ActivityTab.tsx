@@ -108,6 +108,14 @@ export default function ActivityTab() {
           setSelected(null);
           nav.navigate("OwnerFlow", { jobId: id });
         }}
+        onReceipt={(id) => {
+          setSelected(null);
+          nav.navigate("Receipt", { jobId: id });
+        }}
+        onReport={(id, title) => {
+          setSelected(null);
+          nav.navigate("ReportProblem", { jobId: id, title });
+        }}
       />
     </View>
   );
@@ -117,10 +125,14 @@ function JobSheet({
   job,
   onClose,
   onTrack,
+  onReceipt,
+  onReport,
 }: {
   job: BackendJob | null;
   onClose: () => void;
   onTrack: (jobId: string) => void;
+  onReceipt: (jobId: string) => void;
+  onReport: (jobId: string, title?: string) => void;
 }) {
   const qc = useQueryClient();
   const [cancelling, setCancelling] = useState(false);
@@ -248,6 +260,19 @@ function JobSheet({
               </View>
             ) : null}
 
+            {completed ? (
+              <View style={styles.docRow}>
+                <Pressable onPress={() => onReceipt(job.id)} accessibilityRole="button" style={({ pressed }) => [styles.docBtn, pressed && { opacity: 0.8 }]}>
+                  <Ionicons name="receipt-outline" size={20} color={Colors.textPrimary} />
+                  <Text style={styles.docText}>View receipt</Text>
+                </Pressable>
+                <Pressable onPress={() => onReport(job.id, job.service_name ?? undefined)} accessibilityRole="button" style={({ pressed }) => [styles.docBtn, pressed && { opacity: 0.8 }]}>
+                  <Ionicons name="flag-outline" size={20} color={Colors.emergency} />
+                  <Text style={[styles.docText, { color: Colors.emergency }]}>Report a problem</Text>
+                </Pressable>
+              </View>
+            ) : null}
+
             {completed && canRate ? (
               <View style={{ marginTop: Spacing.lg }}>
                 <Text style={styles.sub}>How was the service?</Text>
@@ -313,6 +338,9 @@ function Fact({ icon, label, value }: { icon: keyof typeof Ionicons.glyphMap; la
 }
 
 const styles = StyleSheet.create({
+  docRow: { flexDirection: "row", gap: Spacing.sm, marginTop: Spacing.lg },
+  docBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, minHeight: 50, borderRadius: Radius.xl, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.surfaceWhite },
+  docText: { fontSize: Typography.fontSize.sm, fontFamily: Typography.fontFamily.bold, color: Colors.textPrimary },
   head: { paddingHorizontal: Spacing.screenHorizontal, paddingTop: Spacing.sm, paddingBottom: Spacing.md, gap: Spacing.md },
   title: { fontSize: Typography.fontSize["4xl"], fontFamily: Typography.fontFamily.bold, color: Colors.textPrimary, letterSpacing: Typography.letterSpacing.display },
   filters: { flexDirection: "row", gap: Spacing.sm },

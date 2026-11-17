@@ -6,10 +6,10 @@ https://unsplash.com/license
 
 | File | Unsplash photo |
 |---|---|
-| tyre.jpg | https://unsplash.com/photos/man-fixing-tire-of-vehicle (photo-1543618208-03ccf87da0ef) |
-| battery.jpg | photo-1677230017860-a8cc67785f0a |
+| tyre.jpg | photo-1647292882945-d5c839432d7e (flat tyre) |
+| battery.jpg | photo-1597766321604-9de3ff9e93e2 (jumper cables) |
 | towing.jpg | https://unsplash.com/photos/a-blue-car-being-loaded-onto-a-flatbed-truck-UanilB8ZktA |
-| mechanic.jpg | photo-1625047509248-ec889cbff17f |
+| mechanic.jpg | photo-1771340012378-3c86cb649193 |
 | lockout.jpg | photo-1710006548781-eff5670376fa |
 | car.jpg | photo-1788873481773-99d1c731857e |
 | bike.jpg | photo-1647540163322-023988fa7725 |

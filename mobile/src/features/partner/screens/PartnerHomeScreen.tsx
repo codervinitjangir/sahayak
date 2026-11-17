@@ -529,6 +529,7 @@ export default function PartnerHomeScreen() {
                       title={j.service_name ?? "Roadside job"}
                       subtitle={`${j.vehicle_number ?? ""}${j.vehicle_number ? " · " : ""}${new Date(j.requested_at ?? j.created_at ?? Date.now()).toLocaleDateString([], { day: "numeric", month: "short" })}`}
                       right={<StatusChip status={j.status} />}
+                      onPress={j.status === "completed" ? () => nav.navigate("Receipt", { jobId: j.id }) : undefined}
                       last={i === arr.length - 1}
                     />
                   ))}

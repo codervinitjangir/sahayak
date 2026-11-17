@@ -8,6 +8,8 @@ import { Colors, Typography, Radius, Spacing, ServiceConfig } from "../../../con
 import type { OwnerStackParamList, ServiceType } from "../../../types";
 import Card from "../../../components/ui/Card";
 import ServiceArt, { artForService, type ArtName } from "../../../components/illustrations/ServiceArt";
+import ComingSoonServices from "../../home/ComingSoonServices";
+import { OWNER_COMING_SOON } from "../../home/comingSoon";
 import { SectionHeader, ErrorState, Skeleton, EmptyState } from "../../../components/ui/kit";
 import { useCatalogue } from "../../shared/ownerData";
 
@@ -66,6 +68,8 @@ export default function ServicesTab() {
           ))}
         </View>
       </View>
+
+      <ComingSoonServices side="owner" items={OWNER_COMING_SOON} />
 
       <View>
         <SectionHeader title="All services" />

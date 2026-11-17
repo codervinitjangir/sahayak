@@ -18,6 +18,9 @@ import { useMyVehicles } from "../../shared/ownerData";
 import { vehiclesApi } from "../../../services/api/vehicles";
 import { usersApi, type OwnerProfile } from "../../../services/api/users";
 import EditProfileModal from "../EditProfileModal";
+import EditVehicleModal from "../EditVehicleModal";
+import BrandLogo from "../../../components/brand/BrandLogo";
+import type { MobileVehicle } from "../../../services/api/vehicles";
 
 export default function AccountTab({ onAddVehicle, editSignal = 0 }: { onAddVehicle: () => void; editSignal?: number }) {
   const nav = useNavigation<any>();
@@ -77,6 +80,7 @@ export default function AccountTab({ onAddVehicle, editSignal = 0 }: { onAddVehi
 
   // Settings & preferences state
   const [vehiclesCollapsed, setVehiclesCollapsed] = useState(false);
+  const [editing, setEditing] = useState<MobileVehicle | null>(null);
 
   const vehicleList = vehicles.data ?? [];
 
@@ -175,13 +179,7 @@ export default function AccountTab({ onAddVehicle, editSignal = 0 }: { onAddVehi
                   key={v.id}
                   style={[styles.vehicleRow, i < vehicleList.length - 1 && styles.rowDivider]}
                 >
-                  <View style={styles.vehicleIcon}>
-                    <Ionicons
-                      name={v.vehicle_type === "two_wheeler" ? "bicycle-outline" : "car-outline"}
-                      size={22}
-                      color={Colors.brand700}
-                    />
-                  </View>
+                  <BrandLogo make={v.make} size={44} color={Colors.brand700} />
                   <View style={{ flex: 1, gap: 2 }}>
                     <Text style={styles.vehicleName}>
                       {v.make} {v.model}
@@ -190,6 +188,15 @@ export default function AccountTab({ onAddVehicle, editSignal = 0 }: { onAddVehi
                       <Text style={styles.plateText}>{v.vehicle_number}</Text>
                     </View>
                   </View>
+                  <Pressable
+                    onPress={() => setEditing(v)}
+                    style={styles.deleteVehicleBtn}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Edit ${v.make} ${v.model}`}
+                  >
+                    <Ionicons name="create-outline" size={19} color={Colors.textSecondary} />
+                  </Pressable>
                   <Pressable
                     onPress={() => handleDeleteVehicle(v.id, `${v.make} ${v.model}`)}
                     style={styles.deleteVehicleBtn}
@@ -246,6 +253,7 @@ export default function AccountTab({ onAddVehicle, editSignal = 0 }: { onAddVehi
         <ListRow icon="create-outline" title="Edit profile" subtitle="Name and email" onPress={() => setEditOpen(true)} />
         <ListRow icon="settings-outline" title="Settings" subtitle="Notifications, payments, help, your data, sign out" onPress={() => nav.navigate("OwnerSettings")} last />
       </Card>
+      <EditVehicleModal vehicle={editing} onClose={() => setEditing(null)} />
       <EditProfileModal
         visible={editOpen}
         profile={me.data ?? null}

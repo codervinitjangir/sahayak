@@ -5,6 +5,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Colors, Typography, Radius, Spacing } from "../../constants/theme";
 import ServiceArt from "../../components/illustrations/ServiceArt";
+import BrandLogo, { hasBrandLogo } from "../../components/brand/BrandLogo";
 import type { MobileVehicle } from "../../services/api/vehicles";
 
 export default function GarageSheet({
@@ -29,7 +30,7 @@ export default function GarageSheet({
           {vehicles.map((v) => (
             <View key={v.id} style={styles.row}>
               <View style={[styles.art, { backgroundColor: v.vehicle_type === "two_wheeler" ? "#FEF2F2" : "#EFF6FF" }]}>
-                <ServiceArt name={v.vehicle_type === "two_wheeler" ? "bike" : "car"} fill />
+                {hasBrandLogo(v.make) ? <BrandLogo make={v.make} size={52} /> : <ServiceArt name={v.vehicle_type === "two_wheeler" ? "bike" : "car"} fill />}
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.name}>{v.make} {v.model}</Text>

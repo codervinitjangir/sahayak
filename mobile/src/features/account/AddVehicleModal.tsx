@@ -11,6 +11,7 @@ import ServiceArt from "../../components/illustrations/ServiceArt";
 import { vehiclesApi, type MobileVehicle } from "../../services/api/vehicles";
 import { QK } from "../shared/ownerData";
 import { BRANDS, type VehicleKind } from "./vehicleCatalog";
+import BrandLogo from "../../components/brand/BrandLogo";
 
 type Step = "type" | "brand" | "model" | "plate";
 const TITLES: Record<Step, string> = { type: "Add a vehicle", brand: "Select brand", model: "Select model", plate: "Add to my garage" };
@@ -167,9 +168,7 @@ export default function AddVehicleModal({
                       accessibilityLabel={b.name}
                       style={({ pressed }) => [styles.brandTile, pressed && { opacity: 0.8 }]}
                     >
-                      <View style={[styles.brandMark, { backgroundColor: b.color }]}>
-                        <Text style={styles.brandInitial}>{b.name.charAt(0)}</Text>
-                      </View>
+                      <BrandLogo make={b.name} color={b.color} size={56} />
                       <Text style={[styles.brandName, { color: b.color }]} numberOfLines={2}>{b.name}</Text>
                     </Pressable>
                   ))}
