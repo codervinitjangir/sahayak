@@ -2410,3 +2410,27 @@ cases). `tsc` and `check:rule-a` pass on both. **Not yet seen in a browser or on
 - **`GET /partners/me/reviews?limit=20&offset=0`** (partner only): `{items: [{job_id, service_name, rating, comment, owner_display_name, created_at}], limit, offset}`, newest first. `owner_display_name` is first name + last initial; no phone or ids.
 - **`GET /partners/me/stats`** already carried `is_available`; clients must seed the duty switch from it and re-read it (both clients now poll every 15 s).
 - **Fuel delivery removed** (ADR-033): five services remain; `fuel_delivery` and category `fuel` no longer exist.
+
+## 22. "Coming soon" cards and feature interest (ADR-035, 2026-11-18)
+
+Owner home (web `components/ComingSoonServices.tsx`, mobile `features/home/ComingSoonServices.tsx`) shows four not-yet-bookable services. These are new, additive endpoints, owners only (a partner gets 403 `FORBIDDEN`):
+
+| Method | Path | Body | Returns `data` |
+|---|---|---|---|
+| GET | `/api/v1/feature-interest/me` | none | `{ "features": ["business", "scheduled"] }` |
+| POST | `/api/v1/feature-interest` | `{ "feature": "scheduled" \| "doorstep" \| "pickup-drop" \| "business" }` | the same list, after saving |
+
+POST is idempotent (200 every time). Any other `feature` value, or an extra field, is a 422. The ids must match `COMING_SOON` in both clients. Built in this session as a user-directed exception to frontend ownership.
+
+**Update, same day (ADR-035 amendment):**
+- **Both roles can call it.** Owners and partners use the same endpoints, and each gets its own list. The backend picks the list from the acting profile, which is the `X-Sahayak-Profile` header (ADR-034).
+- **Owner features:** `scheduled`, `doorstep`, `pickup-drop`. `business` is removed, and B2B is not in any panel.
+- **Partner features:** `financing`, `certification`, `custody-tier`.
+- **Errors:**
+  - A valid id from the other side's list → 400 `INVALID_FEATURE`.
+  - An unknown id → 422.
+  - Admin → 403.
+- **Where the cards are:**
+  - Owner home (web and mobile).
+  - Web partner dashboard, as a full-width card under the bento grid.
+  - Mobile partner Home tab, under "Your standing".

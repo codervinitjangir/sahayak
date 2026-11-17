@@ -9,6 +9,7 @@ import { StatusBadge } from '../../components/StatusBadge';
 import { SafetyStrip } from '../../components/SafetyStrip';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { AccountSection } from './AccountSection';
+import { ComingSoonServices, OWNER_COMING_SOON } from '../../components/ComingSoonServices';
 import type { JobStatus } from '../../types/jobs';
 
 const TERMINAL: JobStatus[] = ['completed', 'cancelled', 'no_match_found'];
@@ -153,6 +154,8 @@ export const OwnerHome: React.FC = () => {
           </ul>
         )}
       </section>
+
+      <ComingSoonServices side="owner" items={OWNER_COMING_SOON} note="Not bookable yet" />
 
       <AccountSection />
     </div>

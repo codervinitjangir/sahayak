@@ -1383,3 +1383,25 @@ Consequence for callers: a partner whose offer was cancelled before they accepte
 **Consequences.** Every authenticated request still does the same three lookups. Clients must send the header on every call once the user switches; the mobile and web clients keep the choice in local storage next to the session.
 
 ---
+
+# ADR-035: "Coming soon" services record owner interest; they are not bookable
+
+**Date.** 2026-11-18. **Status.** Accepted.
+
+**Context.** `docs/FUTURE-ROADMAP.md` lists services that are planned but not built: scheduled service, doorstep repair, pick-up & drop, and business (B2B) accounts. The team wants owners to see them now and wants to know which one to build first. A "beta" label or a booking form would claim something that does not exist, and a "notify me" button that saves nothing would mislead the owner.
+
+**Decision.**
+1. The owner home on web and mobile shows the four services as "Coming soon" cards. A card has no price, slot or booking action.
+2. "Notify me" calls `POST /api/v1/feature-interest {feature}` (owners only, `require_user`). One row per (owner, feature) in `feature_interest` (`alembic/0011`), insert with `ON CONFLICT DO NOTHING`, so a second tap is a no-op and not a 500. `GET /api/v1/feature-interest/me` returns the owner's list so the card can show "We will tell you".
+3. The allowed features are a closed list, enforced three times: the request schema (`Literal`), the service constant, and a CHECK constraint. A unit test keeps the three in step.
+4. Nothing sends a notification yet. The table is demand data. Telling owners at launch is a separate piece of work.
+5. Partners and B2B clients are out of scope: there is no partner card and no B2B panel. "For business" is an owner-side card only, as a signal of interest.
+
+**Consequences.** Adding a feature means a new migration (the CHECK constraint) plus both clients' `COMING_SOON` lists. Rows go when the user row goes (`ON DELETE CASCADE`). Admin counts per feature are not exposed yet. Read them with SQL until an admin panel needs them.
+
+**Amendment (2026-11-18, same day).** `alembic/0012` changes three things:
+- **Partners can register interest too.** The table gains `partner_id`, and exactly one of `user_id`/`partner_id` is set (CHECK).
+- **Each side has its own list.** Owners: `scheduled`, `doorstep`, `pickup-drop`. Partners: `financing`, `certification`, `custody-tier`. The CHECK ties each feature to its side.
+- **The "business" card is withdrawn.** B2B stays in `docs/FUTURE-ROADMAP.md` only, until it has its own panel. That supersedes point 5 above.
+
+The endpoints now take `get_current_identity` instead of `require_user`. The side comes from the verified role. A feature from the other side's list is a 400 `INVALID_FEATURE` (a new registry code), and admins get a 403. Clients key the cached list by side, because one login can hold both profiles (ADR-034).

@@ -157,9 +157,6 @@ async def register_user(
     # two-table state resolve_identity answers with a 500 — permanently, for
     # every request that account makes afterwards. See ADR-020.
     linked_user = await auth_repository.get_user_by_auth_id(db, claims.auth_user_id)
-    linked_partner = await auth_repository.get_partner_by_auth_id(
-        db, claims.auth_user_id
-    )
     linked_admin = await auth_repository.get_admin_by_auth_id(db, claims.auth_user_id)
     # A partner may also become an owner on the same login (ADR-034).
     if linked_user is not None or linked_admin is not None:

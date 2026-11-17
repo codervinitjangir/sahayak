@@ -12,6 +12,7 @@ from app.api.disputes import admin_disputes_router, router as disputes_router
 from app.api.health import router as health_router
 from app.api.job_assignments import router as job_assignments_router
 from app.api.jobs import router as jobs_router
+from app.api.feature_interest import router as feature_interest_router
 from app.api.notifications import router as notifications_router
 from app.api.partners import router as partners_router
 from app.api.payments import router as payments_router
@@ -124,6 +125,7 @@ app.include_router(devices_router)
 # Include the notifications router (the in-app feed both sides poll). Its own
 # prefix, /api/v1/notifications, shared with nothing.
 app.include_router(notifications_router)
+app.include_router(feature_interest_router)
 
 # Include the services router (/api/v1/services). Unauthenticated: a seeded
 # reference table with no user data, which both frontends need before a token

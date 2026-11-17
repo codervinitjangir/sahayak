@@ -6,6 +6,7 @@ from app.models.admin import Admin
 from app.models.admin_audit import AdminAuditLog
 from app.models.admin_invite import AdminInvite  # noqa: F401
 from app.models.device_push_token import DevicePushToken
+from app.models.feature_interest import FeatureInterest  # noqa: F401
 from app.models.partner import (
     Partner, PartnerService, PartnerEquipment, PartnerDocument
 )

@@ -6,6 +6,8 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Colors, Typography, Radius, Spacing, ServiceConfig } from "../../constants/theme";
 import type { OwnerStackParamList, ServiceType } from "../../types";
 import Card from "../../components/ui/Card";
+import ComingSoonServices from "./ComingSoonServices";
+import { OWNER_COMING_SOON } from "./comingSoon";
 import SafetyActions from "../../components/ui/SafetyActions";
 import { SectionHeader, StatusChip, Skeleton, EmptyState } from "../../components/ui/kit";
 import { useMyJobs, useMyVehicles, isActiveStatus, formatWhen } from "../shared/ownerData";
@@ -148,6 +150,8 @@ export default function HomeTab({
           </Card>
         )}
       </View>
+
+      <ComingSoonServices side="owner" items={OWNER_COMING_SOON} />
     </ScrollView>
   );
 }

@@ -164,6 +164,8 @@ class ErrorCode:
     PARTNER_ALREADY_EXISTS = "PARTNER_ALREADY_EXISTS"
     PARTNER_NOT_FOUND = "PARTNER_NOT_FOUND"
     INVALID_CATEGORY_CODE = "INVALID_CATEGORY_CODE"
+    # ADR-035: a feature id that is not on the caller profile's coming-soon list.
+    INVALID_FEATURE = "INVALID_FEATURE"
 
     # Notifications
     #

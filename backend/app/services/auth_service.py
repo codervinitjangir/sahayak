@@ -531,7 +531,6 @@ async def link_partner_auth(
     existing_partner = await auth_repository.get_partner_by_auth_id(
         db, claims.auth_user_id
     )
-    existing_user = await auth_repository.get_user_by_auth_id(db, claims.auth_user_id)
     existing_admin = await auth_repository.get_admin_by_auth_id(db, claims.auth_user_id)
     # An owner profile on the same login is allowed (ADR-034); a second
     # partner or any admin row is not.
@@ -614,9 +613,6 @@ async def link_user_auth(
         )
 
     existing_user = await auth_repository.get_user_by_auth_id(db, claims.auth_user_id)
-    existing_partner = await auth_repository.get_partner_by_auth_id(
-        db, claims.auth_user_id
-    )
     # See the note on the same check in link_partner_auth for why admins is
     # here: no UNIQUE index spans two tables, so this is the only thing stopping
     # an admin's account from also holding a user profile.

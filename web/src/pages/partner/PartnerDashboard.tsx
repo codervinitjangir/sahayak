@@ -40,6 +40,7 @@ import {
 } from '../../types/partner';
 import type { Job } from '../../types/jobs';
 import './partner.css';
+import { ComingSoonServices, PARTNER_COMING_SOON } from '../../components/ComingSoonServices';
 
 /* ── Formatter Helpers ─────────────────────────────────────────────────────── */
 
@@ -1022,6 +1023,11 @@ export const PartnerDashboard: React.FC<{ embedded?: boolean }> = ({ embedded = 
         <div className="lg:col-span-3 w-full flex flex-col gap-4">
           <FleetAndEquipmentCard profile={profile} />
           <PartnerStandingCard profile={profile} />
+        </div>
+
+        {/* Full width under the bento grid: announced partner programmes (ADR-035) */}
+        <div className="lg:col-span-12 w-full bento-card p-5">
+          <ComingSoonServices side="partner" items={PARTNER_COMING_SOON} />
         </div>
       </div>
     </>

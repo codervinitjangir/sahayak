@@ -36,6 +36,8 @@ import { OFFER_URGENT_S, formatCountdown, offerDeadlineMs, useSecondsLeft } from
 import { WEB_URL } from "../../../constants";
 import NotificationsModal from "../../shared/NotificationsModal";
 import EditProfileModal from "../../account/EditProfileModal";
+import ComingSoonServices from "../../home/ComingSoonServices";
+import { PARTNER_COMING_SOON } from "../../home/comingSoon";
 import { useUnreadCount } from "../../shared/ownerData";
 
 type Nav = NativeStackNavigationProp<PartnerStackParamList, "PartnerHome">;
@@ -426,6 +428,9 @@ export default function PartnerHomeScreen() {
                 <Card><Text style={styles.muted}>Stats are not available right now.</Text></Card>
               )}
             </View>
+
+            {/* Announced partner programmes (ADR-035) */}
+            <ComingSoonServices side="partner" items={PARTNER_COMING_SOON} />
           </ScrollView>
         )}
 
