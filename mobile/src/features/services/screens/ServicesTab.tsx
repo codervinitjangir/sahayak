@@ -4,9 +4,10 @@ import { View, Text, ScrollView, Pressable, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { Colors, Typography, Radius, Spacing } from "../../../constants/theme";
+import { Colors, Typography, Radius, Spacing, ServiceConfig } from "../../../constants/theme";
 import type { OwnerStackParamList, ServiceType } from "../../../types";
 import Card from "../../../components/ui/Card";
+import ServiceArt, { artForService, type ArtName } from "../../../components/illustrations/ServiceArt";
 import { SectionHeader, ErrorState, Skeleton, EmptyState } from "../../../components/ui/kit";
 import { useCatalogue } from "../../shared/ownerData";
 
@@ -48,23 +49,22 @@ export default function ServicesTab() {
 
       <View>
         <SectionHeader title="What happened?" />
-        <Card noPad>
-          {SYMPTOMS.map((s, i) => (
+        <View style={styles.symGrid}>
+          {SYMPTOMS.map((s) => (
             <Pressable
               key={s.label}
               onPress={() => start(s.type)}
               accessibilityRole="button"
               accessibilityLabel={s.label}
-              style={({ pressed }) => [styles.symptom, i < SYMPTOMS.length - 1 && styles.divider, pressed && { backgroundColor: Colors.borderLight }]}
+              style={({ pressed }) => [styles.symCard, pressed && { transform: [{ scale: 0.97 }] }]}
             >
-              <View style={styles.symptomIcon}>
-                <Ionicons name={s.icon} size={22} color={Colors.brand700} />
+              <View style={[styles.symArt, { backgroundColor: ServiceConfig[s.type].bg }]}>
+                <ServiceArt name={s.type as ArtName} width={84} />
               </View>
-              <Text style={styles.symptomText}>{s.label}</Text>
-              <Ionicons name="chevron-forward" size={18} color={Colors.textMuted} />
+              <Text style={styles.symText} numberOfLines={3}>{s.label}</Text>
             </Pressable>
           ))}
-        </Card>
+        </View>
       </View>
 
       <View>
@@ -83,20 +83,39 @@ export default function ServicesTab() {
           Object.entries(grouped).map(([category, items]) => (
             <View key={category} style={{ marginBottom: Spacing.base }}>
               <Text style={styles.groupTitle}>{category}</Text>
-              <Card noPad>
-                {items.map((s, i) => (
-                  <Pressable
-                    key={s.id}
-                    onPress={() => start(CODE_TO_TYPE[s.code])}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Request ${s.name}`}
-                    style={({ pressed }) => [styles.symptom, i < items.length - 1 && styles.divider, pressed && { backgroundColor: Colors.borderLight }]}
-                  >
-                    <Text style={[styles.symptomText, { marginLeft: 0 }]}>{s.name}</Text>
-                    <Ionicons name="chevron-forward" size={18} color={Colors.textMuted} />
-                  </Pressable>
+              <View style={{ gap: Spacing.md }}>
+                {items.map((s) => (
+                  <View key={s.id} style={styles.svcCard}>
+                    <View style={styles.svcTop}>
+                      <View style={[styles.svcArt, { backgroundColor: ServiceConfig[CODE_TO_TYPE[s.code] ?? "mechanic"].bg }]}>
+                        <ServiceArt name={artForService(s.code)} width={72} />
+                      </View>
+                      <View style={{ flex: 1, gap: 6 }}>
+                        <Text style={styles.svcName}>{s.name}</Text>
+                        <View style={styles.badge}>
+                          <Ionicons name="shield-checkmark" size={13} color="#15803D" />
+                          <Text style={styles.badgeText}>Verified partners</Text>
+                        </View>
+                      </View>
+                    </View>
+                    <View style={styles.svcBottom}>
+                      <View>
+                        <Text style={styles.fromLabel}>{s.base_price != null ? "Starting from" : "Price"}</Text>
+                        <Text style={styles.fromValue}>{s.base_price != null ? `₹${Number(s.base_price).toLocaleString("en-IN")}` : "On site"}</Text>
+                      </View>
+                      <Pressable
+                        onPress={() => start(CODE_TO_TYPE[s.code])}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Request ${s.name}`}
+                        style={({ pressed }) => [styles.reqBtn, pressed && { opacity: 0.85 }]}
+                      >
+                        <Text style={styles.reqText}>Request</Text>
+                        <Ionicons name="arrow-forward" size={18} color="#fff" />
+                      </Pressable>
+                    </View>
+                  </View>
                 ))}
-              </Card>
+              </View>
             </View>
           ))
         )}
@@ -107,6 +126,21 @@ export default function ServicesTab() {
 }
 
 const styles = StyleSheet.create({
+  symGrid: { flexDirection: "row", flexWrap: "wrap", gap: Spacing.md },
+  symCard: { width: "47%", flexGrow: 1, padding: Spacing.sm, borderRadius: Radius.xl, backgroundColor: Colors.surfaceWhite, borderWidth: 1, borderColor: Colors.border, gap: 8 },
+  symArt: { height: 80, borderRadius: Radius.lg, alignItems: "center", justifyContent: "center" },
+  symText: { fontSize: Typography.fontSize.base, fontFamily: Typography.fontFamily.semiBold, color: Colors.textPrimary, paddingHorizontal: 4, paddingBottom: 4 },
+  svcCard: { padding: Spacing.base, borderRadius: Radius.xl, backgroundColor: Colors.surfaceWhite, borderWidth: 1, borderColor: Colors.border, gap: Spacing.md },
+  svcTop: { flexDirection: "row", alignItems: "center", gap: Spacing.md },
+  svcArt: { width: 84, height: 68, borderRadius: Radius.lg, alignItems: "center", justifyContent: "center" },
+  svcName: { fontSize: Typography.fontSize.lg, fontFamily: Typography.fontFamily.bold, color: Colors.textPrimary },
+  badge: { flexDirection: "row", alignItems: "center", gap: 4, alignSelf: "flex-start", backgroundColor: "#DCFCE7", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999 },
+  badgeText: { fontSize: Typography.fontSize.xs, fontFamily: Typography.fontFamily.semiBold, color: "#15803D" },
+  svcBottom: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.border, paddingTop: Spacing.md },
+  fromLabel: { fontSize: Typography.fontSize.xs, color: Colors.textMuted, fontFamily: Typography.fontFamily.medium },
+  fromValue: { fontSize: Typography.fontSize["2xl"], color: Colors.textPrimary, fontFamily: Typography.fontFamily.bold },
+  reqBtn: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: 48, paddingHorizontal: Spacing.lg, borderRadius: 999, backgroundColor: "#047857" },
+  reqText: { color: "#fff", fontSize: Typography.fontSize.base, fontFamily: Typography.fontFamily.bold },
   content: { padding: Spacing.screenHorizontal, gap: Spacing.xl, paddingBottom: Spacing["4xl"] + 40 },
   title: { fontSize: Typography.fontSize["4xl"], fontFamily: Typography.fontFamily.bold, color: Colors.textPrimary, letterSpacing: Typography.letterSpacing.display },
   symptom: { flexDirection: "row", alignItems: "center", gap: Spacing.md, paddingHorizontal: Spacing.base, minHeight: 60 },

@@ -122,6 +122,20 @@ export default function AccountTab({ onAddVehicle }: { onAddVehicle: () => void 
         </View>
       </Card>
 
+      {/* Shortcuts */}
+      <View style={styles.shortRow}>
+        {[
+          { icon: "car-sport-outline", label: "Add vehicle", bg: "#DBEAFE", fg: "#1D4ED8", go: onAddVehicle },
+          { icon: "share-social-outline", label: "Share Sahayak", bg: "#FEF3C7", fg: "#B45309", go: () => void Share.share({ message: "Stuck on the road? Sahayak finds a verified mechanic or tow truck near you." }) },
+          { icon: "call-outline", label: "Help & support", bg: "#DCFCE7", fg: "#15803D", go: () => void Linking.openURL(SUPPORT_PHONE_TEL) },
+        ].map((t) => (
+          <Pressable key={t.label} onPress={t.go} accessibilityRole="button" accessibilityLabel={t.label} style={({ pressed }) => [styles.shortTile, pressed && { opacity: 0.85 }]}>
+            <View style={[styles.shortIcon, { backgroundColor: t.bg }]}><Ionicons name={t.icon as any} size={24} color={t.fg} /></View>
+            <Text style={styles.shortLabel} numberOfLines={2}>{t.label}</Text>
+          </Pressable>
+        ))}
+      </View>
+
       {/* My Vehicles Garage Table */}
       <View>
         <View style={styles.sectionHeaderRow}>
@@ -325,6 +339,10 @@ export default function AccountTab({ onAddVehicle }: { onAddVehicle: () => void 
 }
 
 const styles = StyleSheet.create({
+  shortRow: { flexDirection: "row", gap: Spacing.sm },
+  shortTile: { flex: 1, alignItems: "center", gap: 8, paddingVertical: Spacing.base, paddingHorizontal: 6, borderRadius: Radius.xl, backgroundColor: Colors.surfaceWhite, borderWidth: 1, borderColor: Colors.border },
+  shortIcon: { width: 52, height: 52, borderRadius: 26, alignItems: "center", justifyContent: "center" },
+  shortLabel: { fontSize: Typography.fontSize.sm, fontFamily: Typography.fontFamily.semiBold, color: Colors.textPrimary, textAlign: "center" },
   content: { padding: Spacing.screenHorizontal, gap: Spacing.xl, paddingBottom: Spacing["4xl"] + 40 },
   title: { fontSize: Typography.fontSize["4xl"], fontFamily: Typography.fontFamily.bold, color: Colors.textPrimary, letterSpacing: Typography.letterSpacing.display },
   profile: { flexDirection: "row", alignItems: "center", gap: Spacing.base },

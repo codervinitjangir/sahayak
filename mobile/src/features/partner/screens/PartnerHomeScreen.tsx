@@ -17,6 +17,7 @@ import { SUPPORT_PHONE_DISPLAY, SUPPORT_PHONE_TEL } from "../../../constants/sup
 import Card from "../../../components/ui/Card";
 import Button from "../../../components/ui/Button";
 import LogoMark from "../../../components/brand/LogoMark";
+import ServiceArt from "../../../components/illustrations/ServiceArt";
 import ScreenHero from "../../../components/ui/ScreenHero";
 import { HeroShell, HeroScrollView } from "../../../components/ui/CollapsingHero";
 import TabBar, { TAB_BAR_SPACE, type TabDef } from "../../../components/ui/TabBar";
@@ -264,15 +265,59 @@ export default function PartnerHomeScreen() {
   const hero = (
   <ScreenHero
     title={tab === "home" ? "Sahayak Partner" : tab === "earnings" ? "Earnings" : "Account"}
-    greeting={user?.name && !/^service partner$/i.test(user.name) ? `Hello, ${user.name.split(" ")[0]}` : "Hello, partner"}
-    subtitle={tab === "home" ? "Stay on duty to receive nearby jobs" : tab === "earnings" ? "What you have earned on Sahayak" : "Profile, settings and help"}
+    greeting={tab === "home" ? (user?.name && !/^service partner$/i.test(user.name) ? `Hello, ${user.name.split(" ")[0]}` : "Hello, partner") : undefined}
     left={<LogoMark size={36} />}
     right={{ icon: "notifications-outline", label: unread > 0 ? `Notifications, ${unread} unread` : "Notifications", onPress: () => setNotifOpen(true), dot: unread > 0 }}
   >
-    <View style={styles.dutyPill} accessible accessibilityLabel={isOnline ? "On duty" : "Off duty"}>
-      <View style={[styles.dutyDot, { backgroundColor: isOnline ? "#4ADE80" : Colors.offline }]} />
-      <Text style={styles.dutyText}>{isOnline ? "On duty · receiving offers" : "Off duty"}</Text>
-    </View>
+    {tab === "home" ? (
+      <View style={{ gap: Spacing.md }}>
+        <View style={[styles.dutyCard, isOnline && styles.dutyCardOn]}>
+          <View style={[styles.dutyIcon, { backgroundColor: isOnline ? "#22C55E" : "rgba(255,255,255,0.18)" }]}>
+            <Ionicons name="power" size={24} color="#fff" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.dutyTitle}>{isOnline ? "You are on duty" : "You are off duty"}</Text>
+            <Text style={styles.dutySub}>{isOnline ? "Receiving nearby job offers" : "Go on duty to get jobs"}</Text>
+          </View>
+          <Switch
+            value={isOnline}
+            onValueChange={toggleDuty}
+            disabled={dutyBusy}
+            trackColor={{ false: "rgba(255,255,255,0.3)", true: "#22C55E" }}
+            thumbColor="#fff"
+            accessibilityLabel="On duty"
+          />
+        </View>
+        <View style={styles.todayRow}>
+          <HeroStat label="Today" value={earnings ? inr(earnings.today_amount) : "–"} />
+          <HeroStat label="Jobs today" value={earnings ? String(earnings.today_jobs) : "–"} />
+          <HeroStat label="Rating" value={stats ? (stats.rating_count > 0 ? `${Number(stats.rating_avg).toFixed(1)} ★` : "New") : "–"} />
+        </View>
+      </View>
+    ) : tab === "earnings" ? (
+      <View style={styles.earnHero}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.dutySub}>This week</Text>
+          <Text style={styles.earnBig}>{earnings ? inr(earnings.week_amount) : "–"}</Text>
+          <Text style={styles.dutySub}>{earnings ? `${earnings.week_jobs} ${earnings.week_jobs === 1 ? "job" : "jobs"} completed` : "Loading…"}</Text>
+        </View>
+        <ServiceArt name="wallet" width={110} />
+      </View>
+    ) : (
+      <View style={styles.earnHero}>
+        <View style={styles.heroAvatar}><Text style={styles.heroAvatarText}>{(user?.name ?? "P").trim().charAt(0).toUpperCase()}</Text></View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.dutyTitle} numberOfLines={1}>{user?.name ?? "Service partner"}</Text>
+          {user?.phone ? <Text style={styles.dutySub}>{user.phone}</Text> : null}
+          {verification ? (
+            <View style={[styles.verChip, { backgroundColor: verified ? "rgba(34,197,94,0.25)" : "rgba(245,158,11,0.25)" }]}>
+              <Ionicons name={verified ? "shield-checkmark" : "time-outline"} size={14} color="#fff" />
+              <Text style={styles.verChipText}>{verified ? "Verified partner" : verification.replace(/_/g, " ")}</Text>
+            </View>
+          ) : null}
+        </View>
+      </View>
+    )}
   </ScreenHero>
   );
 
@@ -298,23 +343,7 @@ export default function PartnerHomeScreen() {
           >
             {/* Shift card */}
             <Card>
-              <View style={styles.shiftRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.shiftTitle}>{isOnline ? "You are on duty" : "You are off duty"}</Text>
-                  <Text style={styles.muted}>
-                    {isOnline ? "Dispatch can send you jobs and sees your location." : "Go on duty to start receiving jobs near you."}
-                  </Text>
-                </View>
-                <Switch
-                  value={isOnline}
-                  onValueChange={toggleDuty}
-                  disabled={dutyBusy}
-                  trackColor={{ false: Colors.border, true: Colors.brand700 }}
-                  thumbColor="#fff"
-                  accessibilityLabel="On duty"
-                />
-              </View>
-              <Pressable onPress={refreshLocation} accessibilityRole="button" style={styles.locBtn}>
+              <Pressable onPress={refreshLocation} accessibilityRole="button" style={[styles.locBtn, { marginTop: 0, borderTopWidth: 0, paddingTop: 0 }]}>
                 <Ionicons name="locate-outline" size={18} color={Colors.brand700} />
                 <Text style={styles.locText}>{locating ? "Finding location…" : knownLocation ? "Update my location" : "Share my location"}</Text>
               </Pressable>
@@ -347,12 +376,12 @@ export default function PartnerHomeScreen() {
               <SectionHeader title="Manage" />
               <View style={styles.grid}>
                 {[
-                  { icon: "construct-outline", label: "My services", sub: `${services.length} added`, go: () => nav.navigate("PartnerServices") },
-                  { icon: "star-outline", label: "Reviews", sub: stats ? `${stats.rating_count} total` : "See all", go: () => nav.navigate("PartnerReviews") },
-                  { icon: "wallet-outline", label: "Earnings", sub: earnings ? inr(earnings.today_amount) + " today" : "Today & week", go: () => setTab("earnings") },
-                  { icon: verified ? "shield-checkmark-outline" : "shield-outline", label: "Verification", sub: verification ? verification.replace(/_/g, " ") : "Status", go: () => nav.navigate("PartnerVerification") },
-                  { icon: "person-circle-outline", label: "Profile", sub: "Name & mode", go: () => setTab("account") },
-                  { icon: "call-outline", label: "Help", sub: "Call support", go: () => void Linking.openURL(SUPPORT_PHONE_TEL) },
+                  { icon: "construct-outline", label: "My services", bg: "#DBEAFE", fg: "#1D4ED8", sub: `${services.length} added`, go: () => nav.navigate("PartnerServices") },
+                  { icon: "star-outline", label: "Reviews", bg: "#FEF3C7", fg: "#B45309", sub: stats ? `${stats.rating_count} total` : "See all", go: () => nav.navigate("PartnerReviews") },
+                  { icon: "wallet-outline", label: "Earnings", bg: "#DCFCE7", fg: "#15803D", sub: earnings ? inr(earnings.today_amount) + " today" : "Today & week", go: () => setTab("earnings") },
+                  { icon: verified ? "shield-checkmark-outline" : "shield-outline", label: "Verification", bg: "#EDE9FE", fg: "#6D28D9", sub: verification ? verification.replace(/_/g, " ") : "Status", go: () => nav.navigate("PartnerVerification") },
+                  { icon: "person-circle-outline", label: "Profile", bg: "#FCE7F3", fg: "#BE185D", sub: "Name & mode", go: () => setTab("account") },
+                  { icon: "call-outline", label: "Help", bg: "#FEE2E2", fg: "#B91C1C", sub: "Call support", go: () => void Linking.openURL(SUPPORT_PHONE_TEL) },
                 ].map((a) => (
                   <Pressable
                     key={a.label}
@@ -361,7 +390,7 @@ export default function PartnerHomeScreen() {
                     accessibilityLabel={`${a.label}, ${a.sub}`}
                     style={({ pressed }) => [styles.tile, pressed && { opacity: 0.8 }]}
                   >
-                    <View style={styles.tileIcon}><Ionicons name={a.icon as any} size={22} color={Colors.brand700} /></View>
+                    <View style={[styles.tileIcon, { backgroundColor: a.bg }]}><Ionicons name={a.icon as any} size={22} color={a.fg} /></View>
                     <Text style={styles.tileLabel} numberOfLines={1}>{a.label}</Text>
                     <Text style={styles.tileSub} numberOfLines={1}>{a.sub}</Text>
                   </Pressable>
@@ -727,6 +756,15 @@ export default function PartnerHomeScreen() {
   );
 }
 
+function HeroStat({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.heroStat} accessible accessibilityLabel={`${label}: ${value}`}>
+      <Text style={styles.heroStatValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{value}</Text>
+      <Text style={styles.heroStatLabel} numberOfLines={1}>{label}</Text>
+    </View>
+  );
+}
+
 function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <View style={styles.stat} accessible accessibilityLabel={`${label}: ${value}${sub ? `, ${sub}` : ""}`}>
@@ -778,6 +816,21 @@ const styles = StyleSheet.create({
   offerCta: { marginTop: 6, fontSize: Typography.fontSize.base, fontFamily: Typography.fontFamily.bold, color: Colors.brand700 },
 
   statRow: { flexDirection: "row", gap: Spacing.sm },
+  dutyCard: { flexDirection: "row", alignItems: "center", gap: Spacing.md, padding: Spacing.md, borderRadius: Radius.xl, backgroundColor: "rgba(255,255,255,0.10)", borderWidth: 1, borderColor: "rgba(255,255,255,0.18)" },
+  dutyCardOn: { backgroundColor: "rgba(34,197,94,0.18)", borderColor: "rgba(74,222,128,0.45)" },
+  dutyIcon: { width: 48, height: 48, borderRadius: 24, alignItems: "center", justifyContent: "center" },
+  dutyTitle: { color: "#fff", fontSize: Typography.fontSize.lg, fontFamily: Typography.fontFamily.bold },
+  dutySub: { color: "rgba(255,255,255,0.72)", fontSize: Typography.fontSize.sm, fontFamily: Typography.fontFamily.regular, marginTop: 2 },
+  todayRow: { flexDirection: "row", gap: Spacing.sm },
+  heroStat: { flex: 1, paddingVertical: Spacing.md, paddingHorizontal: Spacing.sm, borderRadius: Radius.lg, backgroundColor: "rgba(255,255,255,0.08)", alignItems: "center" },
+  heroStatValue: { color: "#fff", fontSize: Typography.fontSize.xl, fontFamily: Typography.fontFamily.bold },
+  heroStatLabel: { color: "rgba(255,255,255,0.65)", fontSize: Typography.fontSize.xs, fontFamily: Typography.fontFamily.medium, marginTop: 2 },
+  earnHero: { flexDirection: "row", alignItems: "center", gap: Spacing.md },
+  earnBig: { color: "#fff", fontSize: 38, fontFamily: Typography.fontFamily.bold, marginVertical: 2 },
+  heroAvatar: { width: 64, height: 64, borderRadius: 32, backgroundColor: "#22C55E", alignItems: "center", justifyContent: "center" },
+  heroAvatarText: { color: "#fff", fontSize: 28, fontFamily: Typography.fontFamily.bold },
+  verChip: { flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "flex-start", marginTop: 6, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
+  verChipText: { color: "#fff", fontSize: Typography.fontSize.xs, fontFamily: Typography.fontFamily.semiBold, textTransform: "capitalize" },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: Spacing.sm },
   tile: { width: "31.5%", flexGrow: 1, minHeight: 104, backgroundColor: Colors.surfaceWhite, borderRadius: Radius.lg, borderWidth: 1, borderColor: Colors.border, padding: Spacing.md, gap: 4 },
   tileIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.brand700Light, alignItems: "center", justifyContent: "center", marginBottom: 4 },

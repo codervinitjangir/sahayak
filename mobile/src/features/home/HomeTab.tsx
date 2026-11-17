@@ -7,6 +7,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Colors, Typography, Radius, Spacing, ServiceConfig } from "../../constants/theme";
 import type { OwnerStackParamList, ServiceType } from "../../types";
 import Card from "../../components/ui/Card";
+import ServiceArt, { type ArtName } from "../../components/illustrations/ServiceArt";
 import ComingSoonServices from "./ComingSoonServices";
 import { OWNER_COMING_SOON } from "./comingSoon";
 import SafetyActions from "../../components/ui/SafetyActions";
@@ -18,12 +19,15 @@ type Nav = NativeStackNavigationProp<OwnerStackParamList>;
 // Shortcuts into the request flow. Each maps to a service group the flow already
 // understands; nothing here claims a price, an ETA or an availability.
 const SHORTCUTS: ServiceType[] = ["tyre", "battery", "towing", "mechanic", "lockout"];
+const ART: Record<string, ArtName> = { tyre: "tyre", battery: "battery", towing: "towing", mechanic: "mechanic", lockout: "lockout" };
 
 export default function HomeTab({
   onOpenActivity,
+  onOpenServices,
   onAddVehicle,
 }: {
   onOpenActivity: () => void;
+  onOpenServices: () => void;
   onAddVehicle: () => void;
 }) {
   const nav = useNavigation<Nav>();
@@ -55,9 +59,9 @@ export default function HomeTab({
     >
       <SafetyActions />
 
-      {/* Shortcuts */}
+      {/* Quick services */}
       <View>
-        <SectionHeader title="What do you need?" />
+        <SectionHeader title="Quick services" />
         <View style={styles.grid}>
           {SHORTCUTS.map((t) => {
             const cfg = ServiceConfig[t];
@@ -67,53 +71,78 @@ export default function HomeTab({
                 onPress={() => startFlow(t)}
                 accessibilityRole="button"
                 accessibilityLabel={`Request ${cfg.label}`}
-                style={({ pressed }) => [styles.tile, pressed && { backgroundColor: Colors.borderLight }]}
+                style={({ pressed }) => [styles.tile, pressed && styles.pressed]}
               >
-                <View style={[styles.tileIcon, { backgroundColor: cfg.bg }]}>
-                  <Ionicons name={cfg.icon as keyof typeof Ionicons.glyphMap} size={26} color={cfg.color} />
+                <View style={[styles.tileArt, { backgroundColor: cfg.bg }]}>
+                  <ServiceArt name={ART[t]} width={78} />
                 </View>
-                <Text style={styles.tileLabel}>{cfg.label}</Text>
+                <Text style={styles.tileLabel} numberOfLines={2}>{cfg.label}</Text>
               </Pressable>
             );
           })}
+          <Pressable
+            onPress={onOpenServices}
+            accessibilityRole="button"
+            accessibilityLabel="See all services"
+            style={({ pressed }) => [styles.tile, pressed && styles.pressed]}
+          >
+            <View style={[styles.tileArt, { backgroundColor: Colors.brand700Muted }]}>
+              <ServiceArt name="all" width={60} />
+            </View>
+            <Text style={styles.tileLabel}>All services</Text>
+          </Pressable>
         </View>
       </View>
+
+      {/* Instant help strip */}
+      <Pressable
+        onPress={() => startFlow("mechanic")}
+        accessibilityRole="button"
+        accessibilityLabel="Need help now? Get a mechanic"
+        style={({ pressed }) => [styles.strip, pressed && { opacity: 0.9 }]}
+      >
+        <View style={styles.stripArt}><ServiceArt name="partner" width={58} /></View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.stripKicker}>Need help now?</Text>
+          <Text style={styles.stripTitle}>Get a mechanic</Text>
+        </View>
+        <View style={styles.stripGo}><Ionicons name="arrow-forward" size={20} color="#065F46" /></View>
+      </Pressable>
 
       {/* Vehicles */}
       <View>
         <SectionHeader title="My vehicles" action="Add" onAction={onAddVehicle} />
         {vehicles.isLoading ? (
-          <Skeleton height={72} />
+          <Skeleton height={96} />
         ) : vehicles.isError ? (
           <Card>
             <Text style={styles.muted}>Could not load your vehicles.</Text>
           </Card>
         ) : (vehicles.data ?? []).length === 0 ? (
-          <Card>
-            <EmptyState
-              icon="car-outline"
-              title="No vehicles yet"
-              message="Add your vehicle once and it is ready whenever you need help."
-              actionLabel="Add a vehicle"
-              onAction={onAddVehicle}
-            />
-          </Card>
+          <Pressable onPress={onAddVehicle} accessibilityRole="button" accessibilityLabel="Add a vehicle" style={styles.addVehicle}>
+            <ServiceArt name="car" width={96} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.vehicleName}>Add your vehicle</Text>
+              <Text style={styles.muted}>Save it once; it is ready whenever you need help.</Text>
+            </View>
+            <Ionicons name="add-circle" size={30} color={Colors.brand700} />
+          </Pressable>
         ) : (
-          <Card noPad>
-            {(vehicles.data ?? []).map((v, i, arr) => (
-              <View key={v.id} style={[styles.vehicleRow, i < arr.length - 1 && styles.divider]}>
-                <View style={styles.vehicleIcon}>
-                  <Ionicons name={v.vehicle_type === "two_wheeler" ? "bicycle-outline" : "car-outline"} size={22} color={Colors.brand700} />
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: Spacing.md, paddingRight: 4 }}>
+            {(vehicles.data ?? []).map((v) => (
+              <View key={v.id} style={styles.vehicleCard}>
+                <View style={styles.vehicleArt}>
+                  <ServiceArt name={v.vehicle_type === "two_wheeler" ? "bike" : "car"} width={110} />
                 </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.vehicleName}>
-                    {v.make} {v.model}
-                  </Text>
-                  <Text style={styles.plate}>{v.vehicle_number}</Text>
-                </View>
+                <Text style={styles.vehicleName} numberOfLines={1}>{v.make} {v.model}</Text>
+                <View style={styles.plateBox}><Text style={styles.plate}>{v.vehicle_number}</Text></View>
               </View>
             ))}
-          </Card>
+            <Pressable onPress={onAddVehicle} accessibilityRole="button" accessibilityLabel="Add another vehicle" style={[styles.vehicleCard, styles.vehicleAdd]}>
+              <Ionicons name="add" size={30} color={Colors.textSecondary} />
+              <Text style={styles.muted}>Add vehicle</Text>
+            </Pressable>
+          </ScrollView>
         )}
       </View>
 
@@ -153,6 +182,11 @@ export default function HomeTab({
       </View>
 
       <ComingSoonServices side="owner" items={OWNER_COMING_SOON} />
+
+      <View style={styles.footer} accessible accessibilityLabel="Never stranded. Made in India.">
+        <Text style={styles.footerBig}>#Never{"\n"}Stranded</Text>
+        <Text style={styles.footerSmall}>Made with ❤️ in India · Sahayak</Text>
+      </View>
     </HeroScrollView>
   );
 }
@@ -179,20 +213,23 @@ const styles = StyleSheet.create({
   activeTitle: { fontSize: Typography.fontSize.lg, fontFamily: Typography.fontFamily.bold, color: Colors.textPrimary },
 
   grid: { flexDirection: "row", flexWrap: "wrap", gap: Spacing.md },
-  tile: {
-    width: "30%",
-    flexGrow: 1,
-    minHeight: 104,
-    borderRadius: Radius.lg,
-    backgroundColor: Colors.surfaceWhite,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    padding: Spacing.md,
-  },
-  tileIcon: { width: 52, height: 52, borderRadius: 26, alignItems: "center", justifyContent: "center" },
+  tile: { width: "30%", flexGrow: 1, borderRadius: Radius.xl, backgroundColor: Colors.surfaceWhite, alignItems: "center", gap: 8, padding: Spacing.sm, paddingBottom: Spacing.md, borderWidth: 1, borderColor: Colors.border },
+  pressed: { transform: [{ scale: 0.97 }], opacity: 0.9 },
+  tileArt: { width: "100%", height: 76, borderRadius: Radius.lg, alignItems: "center", justifyContent: "center" },
   tileLabel: { fontSize: Typography.fontSize.base, fontFamily: Typography.fontFamily.semiBold, color: Colors.textPrimary, textAlign: "center" },
-
+  strip: { flexDirection: "row", alignItems: "center", gap: Spacing.md, padding: Spacing.md, borderRadius: Radius.xl, backgroundColor: "#047857" },
+  stripArt: { width: 64, height: 56, borderRadius: Radius.lg, backgroundColor: "#ECFDF5", alignItems: "center", justifyContent: "center" },
+  stripKicker: { color: "#A7F3D0", fontSize: Typography.fontSize.sm, fontFamily: Typography.fontFamily.medium },
+  stripTitle: { color: "#fff", fontSize: Typography.fontSize["2xl"], fontFamily: Typography.fontFamily.bold },
+  stripGo: { width: 44, height: 44, borderRadius: 22, backgroundColor: "#D1FAE5", alignItems: "center", justifyContent: "center" },
+  addVehicle: { flexDirection: "row", alignItems: "center", gap: Spacing.md, padding: Spacing.base, borderRadius: Radius.xl, backgroundColor: Colors.surfaceWhite, borderWidth: 1, borderColor: Colors.border },
+  vehicleCard: { width: 168, padding: Spacing.md, borderRadius: Radius.xl, backgroundColor: Colors.surfaceWhite, borderWidth: 1, borderColor: Colors.border, gap: 6 },
+  vehicleArt: { height: 84, borderRadius: Radius.lg, backgroundColor: "#EFF6FF", alignItems: "center", justifyContent: "center", marginBottom: 4 },
+  vehicleAdd: { alignItems: "center", justifyContent: "center", borderStyle: "dashed", width: 120 },
+  plateBox: { alignSelf: "flex-start", borderWidth: 1.5, borderColor: Colors.textPrimary, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2, backgroundColor: "#FEFCE8" },
+  footer: { paddingTop: Spacing.lg, paddingBottom: Spacing.base },
+  footerBig: { fontSize: 44, lineHeight: 50, fontFamily: Typography.fontFamily.bold, color: "#CBD5E1", letterSpacing: -1 },
+  footerSmall: { marginTop: Spacing.md, fontSize: Typography.fontSize.sm, color: Colors.textMuted, fontFamily: Typography.fontFamily.medium },
   vehicleRow: { flexDirection: "row", alignItems: "center", gap: Spacing.md, padding: Spacing.base, minHeight: 64 },
   vehicleIcon: { width: 40, height: 40, borderRadius: Radius.md, backgroundColor: Colors.brand700Muted, alignItems: "center", justifyContent: "center" },
   vehicleName: { fontSize: Typography.fontSize.md, fontFamily: Typography.fontFamily.semiBold, color: Colors.textPrimary },
