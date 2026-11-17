@@ -42,3 +42,16 @@ export const RequireRole: React.FC<RequireRoleProps> = ({ allowedRoles, children
 
   return children ? <>{children}</> : <Outlet />;
 };
+
+/**
+ * Emergency request page: open to anyone not signed in (a stranded visitor
+ * must reach it without an OTP), and to owners. A signed-in partner or admin
+ * is sent to their own home, because the backend refuses them job creation
+ * ("available to vehicle owners only").
+ */
+export const GuestOrOwner: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { role, status } = useAuth();
+  if (status === 'ready' && role === 'partner') return <Navigate to="/partner" replace />;
+  if (status === 'ready' && (role === 'ops' || role === 'super_admin')) return <Navigate to="/admin" replace />;
+  return <>{children}</>;
+};

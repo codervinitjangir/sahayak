@@ -200,7 +200,7 @@ export const FeatureBlocks: React.FC = () => {
           <div className="cohort-badges">
             <span className="cohort-badge">🔧 Certified Mechanics</span>
             <span className="cohort-badge">🚛 Verified Tow Operators</span>
-            <span className="cohort-badge">🔋 Battery &amp; Tyre Specialists</span>
+            <span className="cohort-badge">🛞 Tyre &amp; Puncture Specialists</span>
             <span className="cohort-badge">🔋 Battery Specialists</span>
           </div>
         </div>

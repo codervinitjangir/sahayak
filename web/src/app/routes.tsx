@@ -4,7 +4,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { OwnerHome } from '../pages/owner/OwnerHome';
 import { RequestHelpPage } from '../pages/owner/RequestHelpPage';
 import { JobTrackingPage } from '../pages/owner/JobTrackingPage';
-import { RequireRole } from './RouteGuards';
+import { GuestOrOwner, RequireRole } from './RouteGuards';
 
 import { LandingPage } from '../pages/landing/LandingPage';
 import { LoginPage } from '../pages/auth/LoginPage';
@@ -35,11 +35,11 @@ export const AppRoutes: React.FC = () => {
       <Route path="/track/:jobId" element={<PublicTrackPage />} />
       <Route path="/signup" element={<Navigate to="/owner/signup" replace />} />
       <Route path="/owner/signup" element={<OwnerSignup />} />
+      <Route path="/owner/request" element={<GuestOrOwner><RequestHelpPage /></GuestOrOwner>} />
 
       {/* Owner Role Routes */}
       <Route element={<RequireRole allowedRoles={['owner']} />}>
         <Route path="/owner" element={<OwnerHome />} />
-        <Route path="/owner/request" element={<RequestHelpPage />} />
         <Route path="/owner/jobs/:jobId" element={<JobTrackingPage />} />
       </Route>
 
