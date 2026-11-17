@@ -112,9 +112,17 @@ export default function LoginScreen() {
   };
 
   const finishSignIn = async (accessToken: string, displayName?: string) => {
+    // The role toggle picks which profile acts when this login has both (ADR-034).
+    useAuthStore.getState().setActiveProfile(role === "partner" ? "partner" : "user");
     const resolution = await identityService.resolve();
     switch (resolution.kind) {
       case "registered":
+        // Chose "partner" but this login only has an owner profile: register it.
+        if (role === "partner" && resolution.identity.role === "user" && !displayName) {
+          setStep("partner");
+          return;
+        }
+        useAuthStore.setState({ profiles: resolution.identity.profiles ?? [resolution.identity.role] });
         setUser(
           {
             id: resolution.identity.id,
@@ -209,6 +217,7 @@ export default function LoginScreen() {
     setBusy(true);
     setError(null);
     try {
+      useAuthStore.getState().setActiveProfile("partner");
       const created = await partnerApi.register(clean, e164, category);
       await partnerApi.linkAuth(created.id);
       await partnerApi.setServices(created.id, chosen).catch(() => undefined);

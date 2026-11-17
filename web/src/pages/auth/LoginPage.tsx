@@ -4,6 +4,7 @@ import { ArrowLeft, AlertCircle, Check, ShieldCheck, MapPin, Gauge } from 'lucid
 import { useAuth } from '../../app/AuthProvider';
 import { setAuthToken } from '../../services/authToken';
 import { homeRouteForRole, identityService } from '../../services/identity.service';
+import { setActiveProfile } from '../../services/authToken';
 import {
   IS_SUPABASE_CONFIGURED,
   sendPhoneOtp,
@@ -212,6 +213,8 @@ export const LoginPage: React.FC = () => {
       setAuthToken(verified.accessToken);
       setToken(verified.accessToken);
 
+      // The owner/partner toggle picks which profile acts when this login has both (ADR-034).
+      setActiveProfile(loginRole === 'partner' ? 'partner' : 'user');
       const resolution = await identityService.resolve();
       setStatus('idle');
 

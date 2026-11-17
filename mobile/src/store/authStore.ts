@@ -26,6 +26,14 @@ interface AuthState {
   setToken: (token: string | null) => void;
   logout: () => void;
   setLoading: (v: boolean) => void;
+  /** Profile that acts on each request: owner ("user") or partner (ADR-034). */
+  activeProfile: "user" | "partner";
+  /** Profiles this login owns, from GET /auth/me. */
+  profiles: BackendRole[];
+  /** Choose the acting profile for the next requests (persisted on device). */
+  setActiveProfile: (p: "user" | "partner") => void;
+  /** Switch profile and re-resolve the identity; the navigator follows user.role. */
+  switchProfile: (p: "user" | "partner") => Promise<boolean>;
   /** Subscribe to the Supabase session. Call once, from the app root. */
   initSession: () => () => void;
 }
@@ -47,6 +55,7 @@ function registerPushLater(): void {
 // opening the right screens before the backend answers, never an authority:
 // every request still carries the Supabase token and the backend re-checks it.
 const USER_CACHE_KEY = "sahayak_last_user";
+const PROFILE_KEY = "sahayak_active_profile";
 
 async function readCachedUser(): Promise<User | null> {
   try {
@@ -79,6 +88,35 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   isAuthenticated: false,
   isLoading: false,
   isRestoringSession: IS_SUPABASE_CONFIGURED,
+  activeProfile: "user",
+  profiles: [],
+
+  setActiveProfile: (p) => {
+    set({ activeProfile: p });
+    void AsyncStorage.setItem(PROFILE_KEY, p).catch(() => undefined);
+  },
+
+  switchProfile: async (p) => {
+    const prev = get().activeProfile;
+    get().setActiveProfile(p);
+    const { identityService } = await import("../services/identity");
+    const resolution = await identityService.resolve();
+    if (resolution.kind !== "registered" || appRoleFor(resolution.identity.role) !== (p === "partner" ? "partner" : "owner")) {
+      get().setActiveProfile(prev);
+      return false;
+    }
+    const role = appRoleFor(resolution.identity.role);
+    const current = get().user;
+    const user: User = {
+      id: resolution.identity.id,
+      phone: current?.phone ?? "",
+      role,
+      name: role === "partner" ? "Service partner" : "Vehicle owner",
+    };
+    set({ user, profiles: resolution.identity.profiles ?? [resolution.identity.role] });
+    void writeCachedUser(user);
+    return true;
+  },
 
   setUser: (user, token) => {
     set({ user, token, isAuthenticated: true, isLoading: false });
@@ -134,6 +172,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           return;
         }
         get().setToken(restored);
+        try {
+          const saved = await AsyncStorage.getItem(PROFILE_KEY);
+          if (saved === "user" || saved === "partner") set({ activeProfile: saved });
+        } catch {
+          // default profile stands
+        }
         // Open straight into the app with the account this phone last used, so
         // a slow or sleeping backend (Render free tier wakes in ~30-50 s) does
         // not drop a signed-in partner back on the OTP screen.
@@ -197,7 +241,10 @@ async function confirmIdentity(phone: string, isCancelled: () => boolean, hasCac
             ? prev.name
             : role === "partner" ? "Service partner" : "Vehicle owner",
       };
-      useAuthStore.setState({ user, isAuthenticated: true, isRestoringSession: false });
+      useAuthStore.setState({
+        user, isAuthenticated: true, isRestoringSession: false,
+        profiles: resolution.identity.profiles ?? [resolution.identity.role],
+      });
       void writeCachedUser(user);
       if (!hasCache) registerPushLater();
       return;

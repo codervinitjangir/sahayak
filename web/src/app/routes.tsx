@@ -48,12 +48,14 @@ export const AppRoutes: React.FC = () => {
           decides which view it opens on, and switching views after that is a
           state change, not a navigation. */}
       <Route path="/partner/signup" element={<PartnerSignup />} />
-      <Route path="/partner/dashboard" element={<PartnerConsole />} />
-      <Route path="/partner/offers" element={<OffersPage />} />
-      <Route path="/partner/jobs/:jobId" element={<ActiveJobPage />} />
-      <Route path="/partner/verification" element={<PartnerConsole />} />
-      <Route path="/partner/preferences" element={<PartnerConsole />} />
-      <Route path="/partner/settings" element={<PartnerConsole />} />
+      <Route element={<RequireRole allowedRoles={['partner']} />}>
+        <Route path="/partner/dashboard" element={<PartnerConsole />} />
+        <Route path="/partner/offers" element={<OffersPage />} />
+        <Route path="/partner/jobs/:jobId" element={<ActiveJobPage />} />
+        <Route path="/partner/verification" element={<PartnerConsole />} />
+        <Route path="/partner/preferences" element={<PartnerConsole />} />
+        <Route path="/partner/settings" element={<PartnerConsole />} />
+      </Route>
       <Route path="/partner" element={<Navigate to="/partner/dashboard" replace />} />
       <Route path="/partner/*" element={<Navigate to="/partner/dashboard" replace />} />
 

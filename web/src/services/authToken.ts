@@ -30,6 +30,25 @@ export function setAuthToken(token: string | null): void {
   }
 }
 
+const PROFILE_STORAGE_KEY = 'sahayak_active_profile';
+
+/** Which of this login's profiles acts (ADR-034): 'user' (owner) or 'partner'. */
+export function getActiveProfile(): 'user' | 'partner' {
+  try {
+    return localStorage.getItem(PROFILE_STORAGE_KEY) === 'partner' ? 'partner' : 'user';
+  } catch {
+    return 'user';
+  }
+}
+
+export function setActiveProfile(profile: 'user' | 'partner'): void {
+  try {
+    localStorage.setItem(PROFILE_STORAGE_KEY, profile);
+  } catch {
+    // Storage unavailable: the owner profile acts by default.
+  }
+}
+
 export function clearAuthToken(): void {
   setAuthToken(null);
 }

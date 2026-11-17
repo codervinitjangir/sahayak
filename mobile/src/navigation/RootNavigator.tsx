@@ -24,6 +24,8 @@ import IncomingOfferScreen from "../features/partner/screens/IncomingOfferScreen
 import ActiveJobScreen from "../features/partner/screens/ActiveJobScreen";
 import PartnerJobDoneScreen from "../features/partner/screens/PartnerJobDoneScreen";
 import PartnerReviewsScreen from "../features/partner/screens/PartnerReviewsScreen";
+import BecomePartnerScreen from "../features/profile/BecomePartnerScreen";
+import PartnerServicesScreen from "../features/partner/screens/PartnerServicesScreen";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 import type {
@@ -46,6 +48,7 @@ function OwnerNavigator() {
     <OwnerStack.Navigator screenOptions={{ headerShown: false }} initialRouteName="OwnerHome">
       <OwnerStack.Screen name="OwnerHome" component={HomeScreen} />
       <OwnerStack.Screen name="OwnerFlow" component={OwnerHelpFlowScreen} />
+      <OwnerStack.Screen name="BecomePartner" component={BecomePartnerScreen} />
     </OwnerStack.Navigator>
   );
 }
@@ -74,6 +77,7 @@ function PartnerNavigator() {
         options={{ animation: "fade", gestureEnabled: false }}
       />
       <PartnerStack.Screen name="PartnerReviews" component={PartnerReviewsScreen} />
+      <PartnerStack.Screen name="PartnerServices" component={PartnerServicesScreen} />
     </PartnerStack.Navigator>
   );
 }

@@ -17,7 +17,10 @@ export const apiClient = axios.create({
 // `getState()` rather than the `useAuthStore` hook — this is not a component, and
 // a hook call here would throw.
 apiClient.interceptors.request.use((config) => {
-  const token = useAuthStore.getState().token;
+  const { token, activeProfile } = useAuthStore.getState();
+  // Which of this login's profiles acts (ADR-034). The backend only honours it
+  // among profiles the token already owns.
+  config.headers["X-Sahayak-Profile"] = activeProfile;
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }

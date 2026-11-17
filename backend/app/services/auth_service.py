@@ -178,6 +178,9 @@ class Identity:
     # None for everyone else. Read from our own row at resolution, never from a
     # claim (ADR-020, ADR-029). require_staff() is what consults it.
     admin_role: Optional[str] = None
+    # Every profile this login owns, e.g. ("user", "partner") for an owner who
+    # is also a mechanic (ADR-034). `role` is the one acting on this request.
+    profiles: tuple = ()
 
 
 @dataclass(frozen=True)
@@ -259,7 +262,9 @@ def decode_token(token: str) -> TokenClaims:
     )
 
 
-async def resolve_identity(db: AsyncSession, claims: TokenClaims) -> Identity:
+async def resolve_identity(
+    db: AsyncSession, claims: TokenClaims, preferred_role: Optional[str] = None
+) -> Identity:
     """Map a verified token onto the local row it owns.
 
     A given auth_user_id must exist in at most one of the three tables. The
@@ -290,6 +295,15 @@ async def resolve_identity(db: AsyncSession, claims: TokenClaims) -> Identity:
         for role, row in (("user", user), ("partner", partner), ("admin", admin))
         if row is not None
     ]
+
+    # ADR-034: one login may own an owner profile AND a partner profile, and the
+    # client picks which one acts (X-Sahayak-Profile). The choice is only ever
+    # among rows this token already owns, so it cannot widen access. An admin
+    # row is never combinable with anything: that stays a server fault.
+    profiles = tuple(role for role, _ in matches)
+    if set(profiles) == {"user", "partner"}:
+        chosen = preferred_role if preferred_role in ("user", "partner") else "user"
+        matches = [m for m in matches if m[0] == chosen]
 
     if len(matches) > 1:
         log_event(
@@ -331,6 +345,7 @@ async def resolve_identity(db: AsyncSession, claims: TokenClaims) -> Identity:
         return Identity(
             auth_user_id=claims.auth_user_id, role=role, local_id=local_id,
             admin_role=getattr(admin, "role", None) if role == "admin" else None,
+            profiles=profiles,
         )
 
     # Authenticated, but no profile. Which of the two answers this is decides
@@ -518,11 +533,9 @@ async def link_partner_auth(
     )
     existing_user = await auth_repository.get_user_by_auth_id(db, claims.auth_user_id)
     existing_admin = await auth_repository.get_admin_by_auth_id(db, claims.auth_user_id)
-    if (
-        existing_partner is not None
-        or existing_user is not None
-        or existing_admin is not None
-    ):
+    # An owner profile on the same login is allowed (ADR-034); a second
+    # partner or any admin row is not.
+    if existing_partner is not None or existing_admin is not None:
         log_event(
             "auth_link_rejected",
             level=logging.WARNING,
@@ -608,11 +621,9 @@ async def link_user_auth(
     # here: no UNIQUE index spans two tables, so this is the only thing stopping
     # an admin's account from also holding a user profile.
     existing_admin = await auth_repository.get_admin_by_auth_id(db, claims.auth_user_id)
-    if (
-        existing_user is not None
-        or existing_partner is not None
-        or existing_admin is not None
-    ):
+    # A partner profile on the same login is allowed (ADR-034); a second owner
+    # profile or any admin row is not.
+    if existing_user is not None or existing_admin is not None:
         log_event(
             "auth_link_rejected",
             level=logging.WARNING,

@@ -94,11 +94,13 @@ def lookups(monkeypatch):
     return state
 
 
-def resolve(claims: Optional[TokenClaims] = None) -> Identity:
+def resolve(claims: Optional[TokenClaims] = None, preferred: Optional[str] = None) -> Identity:
     """asyncio.run() rather than pytest-asyncio, which this project does not
     depend on — see the note in test_user_service.py."""
     return asyncio.run(
-        auth_service.resolve_identity(None, claims or TokenClaims(auth_user_id=AUTH_ID))
+        auth_service.resolve_identity(
+            None, claims or TokenClaims(auth_user_id=AUTH_ID), preferred_role=preferred
+        )
     )
 
 
@@ -147,12 +149,11 @@ class TestAmbiguityIsRefused:
     @pytest.mark.parametrize(
         "present",
         [
-            ("user", "partner"),
             ("user", "admin"),
             ("partner", "admin"),
             ("user", "partner", "admin"),
         ],
-        ids=["user+partner", "user+admin", "partner+admin", "all three"],
+        ids=["user+admin", "partner+admin", "all three"],
     )
     def test_more_than_one_match_is_an_internal_error(self, lookups, present):
         ids = {"user": USER_ID, "partner": PARTNER_ID, "admin": ADMIN_ID}
@@ -316,3 +317,32 @@ class TestNoAdminLinkPath:
         )
         assert kind in ("user", "partner")
         assert kind != "admin"
+
+
+
+class TestOwnerAndPartnerOnOneLogin:
+    """ADR-034: user+partner on one login is allowed; the header picks which acts."""
+
+    def _both(self, lookups):
+        lookups["user"] = Row(USER_ID)
+        lookups["partner"] = Row(PARTNER_ID)
+
+    def test_defaults_to_the_owner_profile(self, lookups):
+        self._both(lookups)
+        who = resolve()
+        assert (who.role, who.local_id) == ("user", USER_ID)
+        assert set(who.profiles) == {"user", "partner"}
+
+    def test_header_selects_the_partner_profile(self, lookups):
+        self._both(lookups)
+        who = resolve(preferred="partner")
+        assert (who.role, who.local_id) == ("partner", PARTNER_ID)
+
+    def test_header_cannot_select_a_profile_the_login_does_not_own(self, lookups):
+        lookups["user"] = Row(USER_ID)
+        who = resolve(preferred="partner")
+        assert (who.role, who.local_id) == ("user", USER_ID)
+
+    def test_header_cannot_claim_admin(self, lookups):
+        self._both(lookups)
+        assert resolve(preferred="admin").role == "user"

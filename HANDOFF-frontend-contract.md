@@ -2401,3 +2401,12 @@ No new endpoints. Two additive fields and two behaviour changes.
 Tests: web 153 (new: `tests/services/offerCountdown.test.ts`, dashboard countdown and expired
 Accept, `expiresAt` mapping); mobile 65 (new: `tests/offer-countdown.test.ts`, request-bar window
 cases). `tsc` and `check:rule-a` pass on both. **Not yet seen in a browser or on a device.**
+
+## 2026-11-17: one login, two profiles; partner reviews; fuel removed
+
+- **`X-Sahayak-Profile: user | partner`** (request header, optional). When one login owns both an owner and a partner profile, this picks which one acts. It only selects among profiles the token already owns; without it the owner profile acts. ADR-034.
+- **`GET /auth/me`** now also returns `profiles: ("user" | "partner" | "admin")[]`. More than one entry means the client can offer a switch.
+- **Registration across profiles:** `POST /users` and `POST /users/{id}/link-auth` now accept a login that already has a partner profile; `POST /partners/{id}/link-auth` accepts a login that already has an owner profile. Admin logins are still refused with 409 `AUTH_ALREADY_LINKED`.
+- **`GET /partners/me/reviews?limit=20&offset=0`** (partner only): `{items: [{job_id, service_name, rating, comment, owner_display_name, created_at}], limit, offset}`, newest first. `owner_display_name` is first name + last initial; no phone or ids.
+- **`GET /partners/me/stats`** already carried `is_available`; clients must seed the duty switch from it and re-read it (both clients now poll every 15 s).
+- **Fuel delivery removed** (ADR-033): five services remain; `fuel_delivery` and category `fuel` no longer exist.

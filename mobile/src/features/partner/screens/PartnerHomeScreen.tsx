@@ -1,6 +1,7 @@
 // ─── Sahayak: partner shell ───────────────────────────────────────────────────
 // Home (shift, offers, active job), Earnings, Account. Every figure on screen
 // comes from the backend; a failed read shows an error, never a zero.
+import ProfileSwitchCard from "../../profile/ProfileSwitchCard";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { View, Text, ScrollView, Pressable, Switch, StyleSheet, StatusBar, RefreshControl, Linking, AppState } from "react-native";
 import { NAV_APP_LABEL, getNavApp, setNavApp as saveNavApp, type NavApp } from "../../../services/navigationPreference";
@@ -129,6 +130,9 @@ export default function PartnerHomeScreen() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Returning from the services or reviews screen re-reads the server.
+  useEffect(() => nav.addListener("focus", () => void load()), [nav, load]);
 
   // Coming back to the app (from Maps, a call, the launcher) re-reads the
   // server: duty may have changed on another device or from the admin panel.
@@ -506,6 +510,15 @@ export default function PartnerHomeScreen() {
                   </View>
                 </View>
                 <Pressable
+                  onPress={() => nav.navigate("PartnerServices")}
+                  style={styles.toggleCollapseBtn}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel="Edit the services you offer"
+                >
+                  <Text style={styles.toggleCollapseText}>Edit</Text>
+                </Pressable>
+                <Pressable
                   onPress={() => setServicesCollapsed(!servicesCollapsed)}
                   style={styles.toggleCollapseBtn}
                   hitSlop={8}
@@ -598,6 +611,9 @@ export default function PartnerHomeScreen() {
 
             {/* Operational Settings & Preferences */}
             <View>
+              <SectionHeader title="Profile" />
+              <ProfileSwitchCard />
+              <View style={{ height: 16 }} />
               <SectionHeader title="Operational Settings" />
               <Card noPad>
                 <ListRow

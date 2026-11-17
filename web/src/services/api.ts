@@ -1,5 +1,5 @@
 import { ApiResponse, ApiErrorResponse } from '../types/api';
-import { clearAuthToken, getAuthToken } from './authToken';
+import { clearAuthToken, getActiveProfile, getAuthToken } from './authToken';
 
 export function getApiBaseUrl(): string {
   if (typeof process !== 'undefined' && process.env?.VITE_API_BASE_URL) {
@@ -72,6 +72,8 @@ export async function apiClient<T>(endpoint: string, options: RequestOptions = {
   const token = getAuthToken();
   if (token) {
     requestHeaders['Authorization'] = `Bearer ${token}`;
+    // Only chooses among profiles this login already owns (ADR-034).
+    requestHeaders['X-Sahayak-Profile'] = getActiveProfile();
   }
 
   if (idempotencyKey) {

@@ -161,7 +161,8 @@ async def register_user(
         db, claims.auth_user_id
     )
     linked_admin = await auth_repository.get_admin_by_auth_id(db, claims.auth_user_id)
-    if linked_user is not None or linked_partner is not None or linked_admin is not None:
+    # A partner may also become an owner on the same login (ADR-034).
+    if linked_user is not None or linked_admin is not None:
         _reject("rejected_account_already_linked")
         raise ConflictError(
             ErrorCode.AUTH_ALREADY_LINKED,

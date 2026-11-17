@@ -1367,3 +1367,19 @@ Consequence for callers: a partner whose offer was cancelled before they accepte
 **Decision.** `alembic/0010_remove_fuel_delivery.sql` deletes the `fuel_delivery` service, the `fuel` category, every job on that service (with its ratings and payments; assignments, history, notifications and disputes cascade) and the partner links, then recomputes `rating_avg`/`rating_count` for partners who were responsible for those jobs using the ADR-018 rule. Applied to production on 2026-11-17: one job, one partner link. Every client list, seed and landing-page mention was removed.
 
 **Consequences.** This deletes data, which the project otherwise avoids (ADR-025 anonymises instead). It was the team's explicit choice; the job had no money owed. Re-adding fuel later is a new service row, not a revert.
+
+# ADR-034: One login may hold an owner and a partner profile; the client picks which acts
+
+**Date:** 2026-11-17 · **Status:** Accepted. Amends ADR-011 and ADR-020 (the "an auth id is in at most one table" rule) for the user+partner pair only.
+
+**Context.** Partners and owners are almost all on phones, and the team ships one app with two profiles. A mechanic also owns a vehicle, and an owner may sign up to earn as a partner. Under ADR-011 the second profile was refused at link/registration time, because two rows for one auth id made `resolve_identity` answer every request with a 500.
+
+**Decision.**
+1. One auth id may own one `users` row **and** one `partners` row. An `admins` row is never combinable: user+admin, partner+admin and all three remain an InternalError, and both link endpoints and owner registration still refuse when an admin row exists.
+2. The acting profile is chosen per request with the `X-Sahayak-Profile: user|partner` header. The header only chooses **among rows the verified token already owns**; it can never select a profile that does not exist or claim admin, so it cannot widen access. Without the header, the owner profile acts (old clients keep working).
+3. `GET /auth/me` adds `profiles`, the list of profiles the login owns, so a client can offer a switch.
+4. Suspension stays per profile: a suspended owner (ADR-024) can still act as a partner, whose own standing is `verification_status`. Recorded as a known consequence, not an oversight; ops suspending a person rather than a profile is a future control.
+
+**Consequences.** Every authenticated request still does the same three lookups. Clients must send the header on every call once the user switches; the mobile and web clients keep the choice in local storage next to the session.
+
+---

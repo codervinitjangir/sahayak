@@ -5,7 +5,7 @@ is the answer to "which of our three tables does this token resolve to", and a
 partner or an admin gets the same shape back as an owner does.
 """
 import uuid
-from typing import Literal
+from typing import List, Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -36,5 +36,8 @@ class IdentityResponse(BaseModel):
 
     role: Literal["user", "partner", "admin"]
     id: uuid.UUID
+    # Every profile this login owns; more than one means the client can offer a
+    # switch and send X-Sahayak-Profile to choose (ADR-034).
+    profiles: List[Literal["user", "partner", "admin"]] = []
 
     model_config = ConfigDict(from_attributes=True)

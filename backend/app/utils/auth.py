@@ -16,7 +16,7 @@ module is only the wiring: pull the header, hand it over, raise or return.
 """
 from typing import Optional
 
-from fastapi import Depends
+from fastapi import Depends, Header
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -60,6 +60,7 @@ async def get_token_claims(
 async def get_current_identity(
     claims: TokenClaims = Depends(get_token_claims),
     db: AsyncSession = Depends(get_db),
+    x_sahayak_profile: Optional[str] = Header(default=None),
 ) -> Identity:
     """The caller's verified identity, resolved to one of our own rows.
 
@@ -67,7 +68,8 @@ async def get_current_identity(
     terms the domain can use — a users.id or a partners.id — so a handler never
     has to take the client's word for it.
     """
-    return await resolve_identity(db, claims)
+    # The header only chooses among profiles this token already owns (ADR-034).
+    return await resolve_identity(db, claims, preferred_role=x_sahayak_profile)
 
 
 async def require_user(

@@ -1,3 +1,4 @@
+import ProfileSwitchCard from "../../profile/ProfileSwitchCard";
 import React, { useState } from "react";
 import { View, Text, ScrollView, StyleSheet, Linking, Switch, Pressable, Share } from "react-native";
 import { showDialog } from "../../../components/ui/AppDialog";
@@ -295,6 +296,9 @@ export default function AccountTab({ onAddVehicle }: { onAddVehicle: () => void 
 
       {/* Your data (G8 / G10) */}
       <View>
+        <SectionHeader title="Profile" />
+        <ProfileSwitchCard />
+
         <SectionHeader title="Your account" />
         <Card noPad>
           <ListRow icon="create-outline" title="Edit profile" subtitle="Name and email" onPress={() => setEditOpen(true)} />

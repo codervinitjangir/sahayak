@@ -75,7 +75,7 @@ def test_route_is_not_restricted_to_one_role():
 
 def test_response_carries_role_and_id_and_nothing_else():
     body = IdentityResponse(role="user", id=LOCAL_ID).model_dump()
-    assert set(body) == {"role", "id"}, (
+    assert set(body) == {"role", "id", "profiles"}, (
         f"IdentityResponse exposes {sorted(body)}. Every signed-in account on "
         "the platform can read this route, so a field added here is a field "
         "published to all of them — see ADR-017 on contact details."

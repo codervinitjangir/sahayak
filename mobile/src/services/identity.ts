@@ -29,6 +29,8 @@ export type BackendRole = "user" | "partner" | "admin";
 export interface IdentityPayload {
   role: BackendRole;
   id: string;
+  /** Every profile this login owns (ADR-034); more than one enables the switch. */
+  profiles?: BackendRole[];
 }
 
 export type IdentityResolution =

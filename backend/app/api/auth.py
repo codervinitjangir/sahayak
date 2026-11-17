@@ -73,4 +73,6 @@ async def read_me(
     why there is no service function behind it. A pass-through service would add
     a layer that transforms nothing.
     """
-    return envelope(IdentityResponse(role=identity.role, id=identity.local_id))
+    return envelope(
+        IdentityResponse(role=identity.role, id=identity.local_id, profiles=list(identity.profiles))
+    )

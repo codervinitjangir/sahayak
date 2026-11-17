@@ -6,11 +6,9 @@ import {
   BarChart3,
   Compass,
   Globe,
-  LifeBuoy,
   LogOut,
   RefreshCw,
   ShieldCheck,
-  Wrench,
   Zap,
   ClipboardList,
   Users,
@@ -124,31 +122,15 @@ export const AdminConsole: React.FC = () => {
             })}
           </nav>
 
-          {/* Section: Platform Shortcuts */}
-          <div className="partner-sidebar__label text-xs font-bold tracking-wider text-[#64748B] uppercase px-3 mt-6 mb-2">
-            PLATFORM SHORTCUTS
-          </div>
-          <nav className="partner-sidebar__nav space-y-1 w-full">
-            <Link
-              to="/partner/dashboard"
-              className="w-full text-left flex items-center gap-3 px-3.5 py-2.5 text-xs font-semibold text-[#475569] hover:text-[#0F172A] rounded-[10px] hover:bg-[#F6F8FA]/70 transition-all"
-            >
-              <Wrench className="w-4 h-4 text-[#475569] shrink-0" />
-              <span>Partner Console</span>
-            </Link>
-            <Link
-              to="/owner/request"
-              className="w-full text-left flex items-center gap-3 px-3.5 py-2.5 text-xs font-semibold text-[#475569] hover:text-[#0F172A] rounded-[10px] hover:bg-[#F6F8FA]/70 transition-all"
-            >
-              <LifeBuoy className="w-4 h-4 text-[#475569] shrink-0" />
-              <span>Request Help</span>
-            </Link>
+          {/* Owner and partner screens are not reachable from an admin login
+              (the backend answers them with 403), so no shortcuts to them. */}
+          <nav className="partner-sidebar__nav space-y-1 w-full mt-6">
             <Link
               to="/"
               className="w-full text-left flex items-center gap-3 px-3.5 py-2.5 text-xs font-semibold text-[#475569] hover:text-[#0F172A] rounded-[10px] hover:bg-[#F6F8FA]/70 transition-all"
             >
               <Globe className="w-4 h-4 text-[#475569] shrink-0" />
-              <span>Public Landing</span>
+              <span>Public website</span>
             </Link>
           </nav>
         </div>

@@ -241,10 +241,18 @@ class TestRegistrationGuards:
         assert exc.value.code == ErrorCode.AUTH_ALREADY_LINKED
         assert exc.value.status_code == 409
 
-    def test_account_already_owning_a_partner_profile_is_refused(self, stub_repos):
-        """Without this, a mechanic grows a second owner-shaped identity on the
-        same credential and resolve_identity then refuses them both roles."""
+    def test_a_partner_may_also_register_as_an_owner(self, stub_repos):
+        """ADR-034: a mechanic can add an owner profile to the same login."""
         stub_repos["linked_partner"] = FakeUser()
+        session = FakeSession()
+        claims = TokenClaims(auth_user_id=AUTH_ID, phone="919000000901")
+
+        register(Payload(), claims, session)
+
+        assert stub_repos["created"]["auth_user_id"] == AUTH_ID
+
+    def test_an_admin_login_cannot_add_an_owner_profile(self, stub_repos):
+        stub_repos["linked_admin"] = FakeUser()
         session = FakeSession()
         claims = TokenClaims(auth_user_id=AUTH_ID, phone="919000000901")
 
