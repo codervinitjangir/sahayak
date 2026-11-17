@@ -1,0 +1,338 @@
+<title>Sahayak System Design</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: single reading column (~72ch) with a sticky section index on wide screens; tables and diagrams scroll inside their own boxes. */
+:root{
+  --bg:#f5f6f4; --surface:#ffffff; --ink:#1c2226; --muted:#5b666d; --line:#d9ddda;
+  --accent:#c77700; --accent-soft:#fff1d9; --ok:#2f7d4f; --warn:#a86400; --bad:#b3372b;
+  --code-bg:#eef0ee;
+  --f-display:"Archivo",system-ui,sans-serif; --f-body:"IBM Plex Sans",system-ui,sans-serif; --f-mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#14181b; --surface:#1b2024; --ink:#e6e9e7; --muted:#9aa5ab; --line:#2e363b;
+  --accent:#f0a537; --accent-soft:#33270f; --ok:#5fbf86; --warn:#e9a84a; --bad:#ec7a6c; --code-bg:#222a2f; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#14181b; --surface:#1b2024; --ink:#e6e9e7; --muted:#9aa5ab; --line:#2e363b;
+  --accent:#f0a537; --accent-soft:#33270f; --ok:#5fbf86; --warn:#e9a84a; --bad:#ec7a6c; --code-bg:#222a2f; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:15px/1.6 var(--f-body);margin:0}
+.wrap{max-width:1120px;margin:0 auto;padding-block:40px 80px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;grid-template-columns:200px minmax(0,1fr);gap:48px}
+nav{position:sticky;top:calc(env(safe-area-inset-top,0px) + 24px);align-self:start;font-size:13px}
+nav ol{list-style:none;margin:0;padding:0;display:grid;gap:6px;counter-reset:s}
+nav li{counter-increment:s}
+nav a{color:var(--muted);text-decoration:none;display:flex;gap:8px}
+nav a::before{content:counter(s);font-family:var(--f-mono);color:var(--accent);min-width:1.4em}
+nav a:hover,nav a:focus-visible{color:var(--ink)}
+main{min-width:0;max-width:760px}
+@media (max-width:860px){.wrap{grid-template-columns:minmax(0,1fr)}nav{display:none}}
+h1,h2,h3{font-family:var(--f-display);text-wrap:balance;line-height:1.2;margin:0}
+h1{font-size:clamp(30px,5vw,44px);font-weight:800;letter-spacing:-.01em}
+h2{font-size:24px;font-weight:700;margin-top:56px;padding-top:16px;border-top:2px solid var(--ink);display:flex;gap:12px;align-items:baseline}
+h2 .n{font-family:var(--f-mono);font-size:14px;color:var(--accent);font-weight:500}
+h3{font-size:17px;font-weight:700;margin-top:28px}
+p,ul{margin:12px 0}
+ul{padding-left:20px}
+.eyebrow{font-family:var(--f-mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+.lede{font-size:17px;color:var(--muted);max-width:62ch;margin-top:14px}
+.meta{display:flex;flex-wrap:wrap;gap:8px 20px;font-family:var(--f-mono);font-size:12px;color:var(--muted);margin-top:18px}
+code,.mono{font-family:var(--f-mono);font-size:.88em}
+code{background:var(--code-bg);padding:1px 5px;border-radius:3px}
+.scroll{overflow-x:auto;margin:16px 0;border:1px solid var(--line);background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:14px;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-family:var(--f-mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:500;background:var(--bg)}
+tr:last-child td{border-bottom:0}
+td.num{text-align:right;font-family:var(--f-mono);white-space:nowrap}
+.diagram{overflow-x:auto;margin:16px 0;padding:16px;border:1px solid var(--line);background:var(--surface)}
+.diagram pre{margin:0}
+.callout{border-left:3px solid var(--accent);background:var(--accent-soft);padding:12px 16px;margin:18px 0}
+.callout p{margin:4px 0}
+.pill{display:inline-block;font-family:var(--f-mono);font-size:11px;padding:1px 8px;border-radius:99px;border:1px solid currentColor;white-space:nowrap}
+.pill.ok{color:var(--ok)} .pill.warn{color:var(--warn)} .pill.bad{color:var(--bad)} .pill.muted{color:var(--muted)}
+.calc{border:1px solid var(--line);background:var(--surface);padding:20px;margin:18px 0;display:grid;gap:18px}
+.inputs{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px}
+.inputs label{display:grid;gap:4px;font-size:13px;color:var(--muted)}
+.inputs input{font:15px var(--f-mono);padding:7px 9px;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:3px;width:100%}
+.inputs input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.bar{height:14px;background:var(--code-bg);position:relative;border-radius:2px;overflow:hidden}
+.bar span{position:absolute;inset:0 auto 0 0;background:var(--accent)}
+.bar i{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--ink);left:70%}
+.result{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;align-items:baseline}
+.big{font-family:var(--f-display);font-size:28px;font-weight:800}
+.small{font-size:13px;color:var(--muted)}
+.rank td:first-child{font-family:var(--f-mono);color:var(--accent)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+<nav aria-label="Sections">
+  <ol>
+    <li><a href="#requirements">Requirements</a></li>
+    <li><a href="#architecture">Architecture</a></li>
+    <li><a href="#data">Data model</a></li>
+    <li><a href="#dispatch">Dispatch</a></li>
+    <li><a href="#lifecycle">Job lifecycle</a></li>
+    <li><a href="#capacity">Capacity</a></li>
+    <li><a href="#failures">Failure modes</a></li>
+    <li><a href="#roadmap">Roadmap</a></li>
+  </ol>
+</nav>
+
+<main>
+<header>
+  <div class="eyebrow">System design · v1</div>
+  <h1>Sahayak roadside dispatch</h1>
+  <p class="lede">A stranded vehicle owner asks for help. The system offers the job to the best available mechanic, tow or fuel partner within reach, scored on more than distance, then tracks the job until it is paid.</p>
+  <div class="meta"><span>As of 2026-11-17</span><span>Decisions: ADR-001 to ADR-032 (docs/adr/ADR.md)</span><span>Measurements: docs/load-test-dispatch-concurrency.md</span></div>
+</header>
+
+<h2 id="requirements"><span class="n">1</span>Requirements and targets</h2>
+<h3>Functional</h3>
+<ul>
+  <li>Owner registers by phone OTP, adds vehicles, requests a service with a GPS pin and sees an upfront price.</li>
+  <li>The system offers the job to one partner at a time, best score first. If nobody is found, it widens the search over ten minutes.</li>
+  <li>Partner accepts or rejects, travels, enters the owner's start code, completes, and the job is settled (UPI or cash).</li>
+  <li>Both sides track status. Location is shared live, contact details only after assignment, and owners can send a public trip link to someone they trust.</li>
+  <li>Staff run a live jobs board, verify partners, reassign jobs, edit prices and handle disputes. Every staff action is audited.</li>
+</ul>
+<h3>Non-functional targets</h3>
+<p>The measured column comes from the load test. The targets are <strong>proposed</strong> and need team sign-off before anyone quotes them.</p>
+<div class="scroll"><table>
+  <thead><tr><th>Property</th><th>Measured today</th><th>Proposed target</th></tr></thead>
+  <tbody>
+    <tr><td>Time from request to first offer (p50 / p95)</td><td class="num">872 / 2035 ms</td><td class="num">≤ 500 / 1500 ms</td></tr>
+    <tr><td>Clean job-creation rate per worker</td><td class="num">2 /s</td><td class="num">≥ 8 /s</td></tr>
+    <tr><td>Deadlocks under concurrent accept/cancel/complete</td><td class="num">0</td><td class="num">0</td></tr>
+    <tr><td>Location shown to the owner, at most this old</td><td class="num">5–8 s poll</td><td class="num">≤ 5 s</td></tr>
+    <tr><td>Availability of request + accept paths</td><td>not measured</td><td class="num">99.5 % monthly</td></tr>
+    <tr><td>Recovery point / recovery time</td><td>no drill yet</td><td class="num">RPO 24 h · RTO 4 h</td></tr>
+  </tbody>
+</table></div>
+<p>Invariants that are not negotiable: every status change writes a <code>job_status_history</code> row, identity comes from the verified JWT and never from the request body, and a partner who has only been offered a job gets no owner contact (ADR-017).</p>
+
+<h2 id="architecture"><span class="n">2</span>Architecture</h2>
+<p>A single FastAPI service, layered route → service → repository. Durable state lives in Postgres with PostGIS. Volatile partner locations live only in Redis GEO. Supabase issues the JWTs and the backend only verifies them (ADR-001, 002).</p>
+<div class="diagram"><pre class="mermaid">
+flowchart LR
+  subgraph Clients
+    OM[Owner app<br/>Expo / React Native]
+    PM[Partner app<br/>Expo / React Native]
+    W[Web<br/>owner · partner · admin · public track]
+  end
+  SA[Supabase Auth<br/>phone OTP → JWT]
+  subgraph Render
+    API[FastAPI service<br/>api → services → repositories]
+  end
+  PG[(Postgres 17 + PostGIS<br/>Supabase, ap-south-1<br/>via Supavisor pooler)]
+  RD[(Redis 7<br/>GEOADD / GEOSEARCH<br/>partner locations only)]
+  EX[Expo Push API<br/>→ FCM / APNs]
+  OM & PM & W -- sign in --> SA
+  OM & PM & W -- HTTPS + JWT, polling --> API
+  API -- verify JWT --> SA
+  API -- SQL, row locks --> PG
+  API -- live location --> RD
+  API -- after commit --> EX
+  EX -. push .-> OM & PM
+</pre></div>
+<div class="scroll"><table>
+  <thead><tr><th>Component</th><th>Responsibility</th><th>Why this choice</th></tr></thead>
+  <tbody>
+    <tr><td>FastAPI (async)</td><td>All business rules, transaction boundaries, error envelope</td><td>ADR-001. One deployable unit. Docker before Kubernetes (ADR-006)</td></tr>
+    <tr><td>Postgres + PostGIS</td><td>Jobs, assignments, history, payments, ratings, audit</td><td>Row locks give exact concurrency control, ordered jobs → partners → job_assignments (ADR-015)</td></tr>
+    <tr><td>Redis GEO</td><td>Where each online partner is right now</td><td>ADR-002. Volatile data stays out of Postgres. 0.047 ms of Redis work per dispatch</td></tr>
+    <tr><td>Supabase Auth</td><td>Phone OTP, JWT issuing</td><td>The backend verifies tokens and never issues them. Admin is a row in our own table (ADR-020)</td></tr>
+    <tr><td>Expo Push</td><td>Copy of the in-app notification sent to the lock screen</td><td>ADR-026. Sent after commit and bounded. The feed row stays the source of truth</td></tr>
+  </tbody>
+</table></div>
+
+<h2 id="data"><span class="n">3</span>Data model</h2>
+<p>19 tables. The design rests on three of them: <strong>a job is a request, an assignment is one dispatch attempt, and history is append-only</strong> (ADR-004).</p>
+<div class="diagram"><pre class="mermaid">
+erDiagram
+  users ||--o{ vehicles : owns
+  users ||--o{ jobs : requests
+  vehicles ||--o{ jobs : "for"
+  services ||--o{ jobs : "priced from"
+  jobs ||--o{ job_assignments : "offered via"
+  partners ||--o{ job_assignments : receives
+  jobs ||--o{ job_status_history : "every change"
+  jobs ||--o| payments : settles
+  jobs ||--o{ ratings : "both ways"
+  jobs ||--o{ job_disputes : "reported on"
+  partners ||--o{ partner_services : offers
+  partners ||--o{ partner_equipment : "verified kit"
+</pre></div>
+<ul>
+  <li><strong>Derived data is never stored.</strong> A partner's active job count is computed from <code>job_assignments</code> joined to <code>jobs.status</code> at read time (ADR-008).</li>
+  <li><strong>A partner's rating is recomputed from source</strong> by the service and Bayesian-smoothed: an unrated partner scores 3.5 / 5 (ADR-009, 018).</li>
+  <li><strong>A job keeps the price it was created with</strong> even after staff change the catalogue price (ADR-028).</li>
+  <li><strong>Deleting an account anonymises the row</strong> so job history stays intact (ADR-025). Staff actions go to an append-only audit log in the same transaction (ADR-024).</li>
+</ul>
+
+<h2 id="dispatch"><span class="n">4</span>Dispatch</h2>
+<p>Candidates come from Redis (radius search). SQL filters them on verification, service skill, required equipment and capacity. Survivors are ranked by a weighted score:</p>
+<div class="scroll"><table>
+  <thead><tr><th>Term</th><th class="num">Weight</th><th>Signal</th></tr></thead>
+  <tbody>
+    <tr><td>Distance</td><td class="num">0.4</td><td>Normalised to the radius actually searched (ADR-023)</td></tr>
+    <tr><td>Load</td><td class="num">0.2</td><td>Active jobs right now. Full capacity is a filter, not a score (ADR-009)</td></tr>
+    <tr><td>Skill</td><td class="num">0.2</td><td>Match between the service and what the partner offers</td></tr>
+    <tr><td>Rating</td><td class="num">0.2</td><td>Bayesian-smoothed. In a controlled test it changed the chosen partner in 70 % of jobs, against 0 % when blinded (§4.2 of the load-test report)</td></tr>
+  </tbody>
+</table></div>
+<div class="diagram"><pre class="mermaid">
+sequenceDiagram
+  autonumber
+  participant O as Owner app
+  participant A as API
+  participant R as Redis GEO
+  participant P as Postgres
+  participant X as Expo
+  participant Q as Partner app
+  O->>A: POST /jobs (vehicle, service, pin)
+  A->>P: INSERT job 'requested', history row
+  A->>R: GEOSEARCH 10 km (no lock held)
+  A->>P: filter eligible, score, INSERT assignment rank 1, job → 'matching'
+  A-->>O: 201 job
+  A--)X: push offer (after commit)
+  X--)Q: lock-screen notification
+  Q->>A: POST assignment respond (accept)
+  A->>P: FOR UPDATE jobs → partners → job_assignments
+  A->>P: capacity check, job → 'assigned', history row
+  A-->>Q: 200, owner contact now released
+  Note over O,A: on reject, or no answer in 60 s (worker): offer rank n+1 in the same tier<br/>on no match: the worker re-searches every 15 s,<br/>widening 10 → 20 → 35 km by job age (2 / 5 / 10 min)
+</pre></div>
+<div class="callout">
+  <p><strong>Why a lock is never held across Redis:</strong> a row lock held during a network call turns one slow dependency into a queue of blocked writers. The search runs unlocked. The job row is then locked and re-checked before writing, so an owner's cancel during the search always wins (ADR-015, 023).</p>
+</div>
+
+<h2 id="lifecycle"><span class="n">5</span>Job lifecycle</h2>
+<p>Partner-driven moves are guarded by <code>ALLOWED_TRANSITIONS</code> in the job service. Moves made by dispatch, the owner and staff have their own routes and their own ADRs. Every arrow writes a history row.</p>
+<div class="diagram"><pre class="mermaid">
+stateDiagram-v2
+  [*] --> requested
+  requested --> matching: offer sent
+  matching --> no_match_found: nobody eligible
+  no_match_found --> matching: search widened (ADR-023)
+  matching --> assigned: partner accepts
+  assigned --> matching: staff reassign (ADR-030)
+  assigned --> partner_en_route
+  partner_en_route --> in_progress: start code entered
+  in_progress --> completed
+  matching --> cancelled: owner (ADR-013)
+  no_match_found --> cancelled: owner
+  assigned --> cancelled
+  partner_en_route --> cancelled
+  in_progress --> cancelled
+  completed --> [*]
+  cancelled --> [*]
+</pre></div>
+<p><code>no_match_found</code> is not final while the ten-minute window is open. A rescued job counts as matched in analytics, and its history still shows the miss.</p>
+
+<h2 id="capacity"><span class="n">6</span>Capacity model</h2>
+<h3>What was measured</h3>
+<div class="scroll"><table>
+  <thead><tr><th>Measurement</th><th class="num">Value</th><th>Source</th></tr></thead>
+  <tbody>
+    <tr><td>Postgres round trips per dispatch</td><td class="num">≈ 32</td><td>Profiler + <code>pg_stat_statements</code>. 16 of them are BEGIN / ROLLBACK / COMMIT that do no work</td></tr>
+    <tr><td>Connection hold time per job creation</td><td class="num">1198 ms</td><td>Re-profiled 2026-09-27</td></tr>
+    <tr><td>Postgres round-trip time (Render → ap-south-1 pooler)</td><td class="num">30–47 ms</td><td>Two sessions. The 32-round-trip model predicted both within 10 %</td></tr>
+    <tr><td>Pool per worker</td><td class="num">3 + 2 = 5</td><td>Cut from 15 so the pooler is not the first thing to run out</td></tr>
+    <tr><td>Shared Supavisor connections</td><td class="num">15</td><td>System-wide ceiling: 3 workers at pool 5</td></tr>
+    <tr><td>One worker: clean / saturated creations</td><td class="num">2 /s · 3.14 /s</td><td>At 10 /s offered, 57 % of requests 500 after a 30 s pool wait</td></tr>
+  </tbody>
+</table></div>
+
+<h3>The model</h3>
+<p>The scarce resource is <strong>connection-seconds per second</strong>. With 15 shared connections the budget is 15, and staying under 70 % of it leaves room for queueing. Every request spends some of that budget, so the model adds up what each kind of user spends:</p>
+<ul>
+  <li><strong>Job creation</strong> holds a connection for 1.198 s (measured).</li>
+  <li><strong>A polled read</strong> is estimated at 3 round trips (BEGIN, SELECT, ROLLBACK) × RTT. <span class="pill warn">estimate, not measured</span></li>
+  <li><strong>An online, idle partner</strong> polls offers every 15 s, notifications every 30 s and sends location every 60 s (mobile and web intervals in the code), ≈ 0.12 requests/s.</li>
+  <li><strong>An active job</strong>: the owner tracks every 5 s, the partner's job screen polls every 20 s, and both badges poll every 30 s, ≈ 0.32 requests/s.</li>
+</ul>
+
+<div class="calc" role="group" aria-labelledby="calc-title">
+  <div class="eyebrow" id="calc-title">Capacity calculator · change the inputs</div>
+  <div class="inputs">
+    <label for="c-partners">Online partners<input id="c-partners" type="number" min="0" value="300"></label>
+    <label for="c-jobs">Jobs in progress at once<input id="c-jobs" type="number" min="0" value="60"></label>
+    <label for="c-rate">New requests per hour<input id="c-rate" type="number" min="0" value="120"></label>
+    <label for="c-rtt">Postgres RTT (ms)<input id="c-rtt" type="number" min="1" value="30"></label>
+    <label for="c-hold">Hold per creation (ms)<input id="c-hold" type="number" min="1" value="1198"></label>
+    <label for="c-conn">Shared connections<input id="c-conn" type="number" min="1" value="15"></label>
+  </div>
+  <div>
+    <div class="result"><span><span class="big" id="c-pct">–</span> <span class="small">of the connection budget</span></span><span class="pill" id="c-state">–</span></div>
+    <div class="bar" aria-hidden="true"><span id="c-bar"></span><i title="70 % headroom line"></i></div>
+    <p class="small" id="c-split" aria-live="polite"></p>
+  </div>
+</div>
+
+<div class="callout">
+  <p><strong>What the model shows:</strong> at pilot volumes the budget goes to <strong>idle partners polling</strong>, not to dispatch. 300 partners and 60 live jobs spend about a third of the budget, and job creation is under 1 % of it. Polling grows with the number of online partners, so it hits the ceiling first.</p>
+  <p>So the 1.2 s dispatch hold time is a <em>latency</em> problem: the stranded owner waits for an offer, and a burst of requests queues behind it. Push and server-sent updates are the <em>capacity</em> fix. Both are in the roadmap.</p>
+</div>
+
+<h2 id="failures"><span class="n">7</span>Failure modes</h2>
+<div class="scroll"><table>
+  <thead><tr><th>What fails</th><th>What happens today</th><th>Status</th></tr></thead>
+  <tbody>
+    <tr><td>Redis down during a request</td><td>Dispatch can't search. The job is marked unavailable and its timeline says so, so it stays distinguishable from "nobody nearby" (ADR-016)</td><td><span class="pill ok">handled</span></td></tr>
+    <tr><td>Partner location goes stale</td><td>Logged as <code>dispatch_stale_partner_location</code>, not filtered out (ADR-010)</td><td><span class="pill warn">observed only</span></td></tr>
+    <tr><td>Partner never answers an offer</td><td>The dispatch worker times it out after 60 s and offers the job to the next partner (ADR-032)</td><td><span class="pill ok">handled</span></td></tr>
+    <tr><td>Owner app closes while searching</td><td>The worker keeps widening the search every 15 s until the ten-minute window closes (ADR-032)</td><td><span class="pill ok">handled</span></td></tr>
+    <tr><td>Process crashes between creating a job and dispatching it</td><td>The job stays in <code>requested</code>. The worker does not sweep that status yet</td><td><span class="pill warn">gap, rare</span></td></tr>
+    <tr><td>API restarts with pushes queued</td><td>A graceful shutdown drains them. A crash loses them, and the in-app row still exists (ADR-026)</td><td><span class="pill warn">partial</span></td></tr>
+    <tr><td>Push backlog over 500</td><td>Logged as <code>push_dropped</code></td><td><span class="pill warn">bounded</span></td></tr>
+    <tr><td>Supabase project paused</td><td>Everything fails. It happened once (2026-11-12)</td><td><span class="pill bad">no staging, no backups yet</span></td></tr>
+    <tr><td>Client retries a POST on a bad network</td><td>Job creation de-duplicates on an idempotency key (migration 0002). Other writes do not</td><td><span class="pill warn">partial</span></td></tr>
+    <tr><td>Concurrent accept, cancel and complete</td><td>Row locks in a fixed order. 0 deadlocks under load (ADR-015)</td><td><span class="pill ok">handled</span></td></tr>
+  </tbody>
+</table></div>
+
+<h2 id="roadmap"><span class="n">8</span>Roadmap</h2>
+<p>Ranked by what the capacity model and the failure table say matters most. Items marked full regression touch dispatch or concurrency, so the whole unit suite and all live harnesses must pass.</p>
+<div class="scroll"><table class="rank">
+  <thead><tr><th>#</th><th>Change</th><th>Fixes</th><th>Cost</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td><strong>Dispatch worker</strong>: expires unanswered offers (re-offering to rank n+1) and widens the search for every <code>no_match_found</code> job in its window <span class="pill ok">built 2026-11-17 · ADR-032</span></td><td>Both former red gaps in §7</td><td>Done · full regression</td></tr>
+    <tr><td>2</td><td><strong>Collapse dispatch round trips</strong>: drop the no-op BEGIN/ROLLBACK and fold filtering, scoring input and the assignment insert into fewer statements</td><td>Time to first offer. The ≈ 32 round trips should shrink to under 10, and the 1.2 s hold time with them</td><td>Medium · full regression, before/after load test</td></tr>
+    <tr><td>3</td><td><strong>Server-sent events over Redis pub/sub</strong> for job status and partner location; polling stays as the fallback</td><td>The main capacity cost in §6, and location freshness</td><td>Large · touches both clients</td></tr>
+    <tr><td>4</td><td><strong>Transactional outbox for push</strong>: an outbox row written in the same transaction, drained by the worker from item 1</td><td>Pushes lost on a crash or dropped over the 500 cap</td><td>Small, given item 1</td></tr>
+    <tr><td>5</td><td><strong>Idempotency keys on every write</strong>, plus <code>/ready</code> and <code>/metrics</code></td><td>Payments, the offline queue (G11), alerting (E7)</td><td>Small each</td></tr>
+    <tr><td>6</td><td><strong>Staging, backups and a restore drill</strong> (docs/DEPLOYMENT.md)</td><td>The paused-project failure</td><td>Mostly account work</td></tr>
+    <tr><td>7</td><td><strong>Scale-out</strong>: transaction-mode pooling or a larger pooler limit, more workers, a Redis-backed rate limiter, then partitioning dispatch by city</td><td>Growth past one city</td><td>After 1–3, and only once a measurement shows the need</td></tr>
+  </tbody>
+</table></div>
+<p class="small">Each item gets its own ADR when it is built, following the one-decision-one-ADR rule.</p>
+</main>
+</div>
+
+<script>
+(function(){
+  var ids=["partners","jobs","rate","rtt","hold","conn"];
+  function v(id){var n=parseFloat(document.getElementById("c-"+id).value);return isFinite(n)&&n>=0?n:0}
+  function fmt(n){return n<10?n.toFixed(2):n.toFixed(1)}
+  function calc(){
+    var read=3*v("rtt")/1000;
+    var partners=v("partners")*(1/15+1/30+1/60)*read;
+    var jobs=v("jobs")*(1/5+1/20+2/30)*read;
+    var create=v("rate")/3600*v("hold")/1000;
+    var total=partners+jobs+create, budget=Math.max(v("conn"),1);
+    var pct=total/budget*100;
+    document.getElementById("c-pct").textContent=pct.toFixed(0)+" %";
+    document.getElementById("c-bar").style.width=Math.min(pct,100)+"%";
+    var s=document.getElementById("c-state");
+    s.className="pill "+(pct<50?"ok":pct<70?"warn":"bad");
+    s.textContent=pct<50?"comfortable":pct<70?"watch":"over the 70 % line";
+    document.getElementById("c-split").textContent=
+      "Connection-seconds per second: idle partners "+fmt(partners)+", live jobs "+fmt(jobs)+
+      ", job creation "+fmt(create)+", total "+fmt(total)+" of "+budget+".";
+  }
+  ids.forEach(function(id){document.getElementById("c-"+id).addEventListener("input",calc)});
+  calc();
+})();
+</script>
