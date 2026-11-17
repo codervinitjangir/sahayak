@@ -544,8 +544,10 @@ check("…with the partner's own id", r.status_code == 200 and r.json()["data"][
 # platform can call this, so a field that creeps in here is published to all of
 # them. Name and phone belong to the resource endpoints and ADR-017's gate.
 if r.status_code == 200:
-    check("payload is exactly {role, id} — no name, phone or auth_user_id",
-          set(r.json()["data"]) == {"role", "id"}, str(sorted(r.json()["data"])))
+    # ADR-034 added `profiles` (which of the caller's own profiles exist);
+    # still no name, phone or auth_user_id.
+    check("payload is exactly {role, id, profiles} — no name, phone or auth_user_id",
+          set(r.json()["data"]) == {"role", "id", "profiles"}, str(sorted(r.json()["data"])))
 
 r = c.get("/api/v1/auth/me")
 check("no token -> 401", r.status_code == 401, f"{r.status_code} {code_of(r)}")
