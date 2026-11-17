@@ -14,6 +14,7 @@ import { useJobStore } from "../../../store/jobStore";
 import { NAV_APP_LABEL, getNavApp, setNavApp as saveNavApp, type NavApp } from "../../../services/navigationPreference";
 import { SUPPORT_PHONE_DISPLAY, SUPPORT_PHONE_TEL } from "../../../constants/support";
 import { WEB_URL } from "../../../constants";
+import ProfileSwitchCard from "../../profile/ProfileSwitchCard";
 
 export default function PartnerSettingsScreen() {
   const navigation = useNavigation();
@@ -40,6 +41,11 @@ export default function PartnerSettingsScreen() {
     <View style={styles.root}>
       <ScreenHero title="Settings" left={{ icon: "chevron-back", onPress: () => navigation.goBack(), label: "Back" }} />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <View>
+          <SectionHeader title="Profile mode" />
+          <ProfileSwitchCard />
+        </View>
+
         <View>
           <SectionHeader title="Job alerts" />
           <Card noPad>

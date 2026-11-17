@@ -8,6 +8,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Colors, Typography, Radius, Spacing, Hero } from "../../constants/theme";
 import Button from "../../components/ui/Button";
 import ServiceArt from "../../components/illustrations/ServiceArt";
+import VehiclePhoto from "../../components/illustrations/VehiclePhoto";
 import { vehiclesApi, type MobileVehicle } from "../../services/api/vehicles";
 import { QK } from "../shared/ownerData";
 import { BRANDS, type VehicleKind } from "./vehicleCatalog";
@@ -196,7 +197,7 @@ export default function AddVehicleModal({
                       style={({ pressed }) => [styles.modelTile, pressed && { opacity: 0.8 }]}
                     >
                       <View style={[styles.modelArt, { backgroundColor: kind === "two_wheeler" ? "#FEF2F2" : "#EFF6FF" }]}>
-                        <ServiceArt name={kind === "two_wheeler" ? "bike" : "car"} fill />
+                        <VehiclePhoto make={make} model={m} type={kind} />
                       </View>
                       <Text style={styles.modelName} numberOfLines={2}>{m}</Text>
                     </Pressable>
@@ -209,7 +210,7 @@ export default function AddVehicleModal({
             <>
               <View style={styles.selected}>
                 <View style={[styles.modelArt, { width: 96, backgroundColor: kind === "two_wheeler" ? "#FEF2F2" : "#EFF6FF" }]}>
-                  <ServiceArt name={kind === "two_wheeler" ? "bike" : "car"} fill />
+                  <VehiclePhoto make={make} model={model} type={kind} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <View style={styles.selChip}>

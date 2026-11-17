@@ -1,7 +1,7 @@
 // ─── Sahayak: partner shell ───────────────────────────────────────────────────
 // Home (shift, offers, active job), Earnings, Account. Every figure on screen
 // comes from the backend; a failed read shows an error, never a zero.
-import ProfileSwitchCard from "../../profile/ProfileSwitchCard";
+import { ProfileSwitchRow } from "../../profile/ProfileSwitchCard";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { View, Text, ScrollView, Pressable, Switch, StyleSheet, StatusBar, RefreshControl, Linking, AppState } from "react-native";
 import { NAV_APP_LABEL, getNavApp, setNavApp as saveNavApp, type NavApp } from "../../../services/navigationPreference";
@@ -293,6 +293,11 @@ export default function PartnerHomeScreen() {
           <HeroStat label="Jobs today" value={earnings ? String(earnings.today_jobs) : "–"} />
           <HeroStat label="Rating" value={stats ? (stats.rating_count > 0 ? `${Number(stats.rating_avg).toFixed(1)} ★` : "New") : "–"} />
         </View>
+        <Pressable onPress={refreshLocation} accessibilityRole="button" style={({ pressed }) => [styles.locPill, pressed && { opacity: 0.8 }]}>
+          <Ionicons name={knownLocation ? "location" : "locate-outline"} size={18} color={knownLocation ? "#86EFAC" : "#fff"} />
+          <Text style={styles.locPillText}>{locating ? "Finding your location…" : knownLocation ? "Location shared with dispatch" : "Share your location to get nearby jobs"}</Text>
+          <Text style={styles.locPillCta}>{knownLocation ? "Update" : "Share"}</Text>
+        </Pressable>
       </View>
     ) : tab === "earnings" ? (
       <View style={styles.earnHero}>
@@ -341,63 +346,28 @@ export default function PartnerHomeScreen() {
             showsVerticalScrollIndicator={false}
             refreshControl={<RefreshControl refreshing={false} onRefresh={() => { void load(); void fetchOffers(); }} tintColor={Colors.brand700} />}
           >
-            {/* Shift card */}
-            <Card>
-              <Pressable onPress={refreshLocation} accessibilityRole="button" style={[styles.locBtn, { marginTop: 0, borderTopWidth: 0, paddingTop: 0 }]}>
-                <Ionicons name="locate-outline" size={18} color={Colors.brand700} />
-                <Text style={styles.locText}>{locating ? "Finding location…" : knownLocation ? "Update my location" : "Share my location"}</Text>
-              </Pressable>
-              {!verified && verification ? (
-                <View style={styles.verifyBanner} accessibilityRole="alert">
-                  <Ionicons name="shield-outline" size={18} color={Colors.warning} />
-                  <Text style={styles.verifyText}>
-                    Your account is {verification.replace(/_/g, " ")}. You receive jobs only once the Sahayak team has verified you.
-                  </Text>
-                </View>
-              ) : null}
-              {verified && pausedServices.length > 0 ? (
-                <Pressable
-                  onPress={() => setTab("account")}
-                  accessibilityRole="button"
-                  accessibilityLabel="See why some services are not receiving jobs"
-                  style={styles.verifyBanner}
-                >
-                  <Ionicons name="alert-circle-outline" size={18} color={Colors.warning} />
-                  <Text style={styles.verifyText}>
-                    {pausedServices.map((p) => p.name).join(" and ")}{" "}
-                    jobs are not sent to you yet: they need a tow vehicle verified by Sahayak.
-                  </Text>
-                </Pressable>
-              ) : null}
-            </Card>
-
-            {/* Quick actions: everything the web partner console offers, one tap away */}
-            <View>
-              <SectionHeader title="Manage" />
-              <View style={styles.grid}>
-                {[
-                  { icon: "construct-outline", label: "My services", bg: "#DBEAFE", fg: "#1D4ED8", sub: `${services.length} added`, go: () => nav.navigate("PartnerServices") },
-                  { icon: "star-outline", label: "Reviews", bg: "#FEF3C7", fg: "#B45309", sub: stats ? `${stats.rating_count} total` : "See all", go: () => nav.navigate("PartnerReviews") },
-                  { icon: "wallet-outline", label: "Earnings", bg: "#DCFCE7", fg: "#15803D", sub: earnings ? inr(earnings.today_amount) + " today" : "Today & week", go: () => setTab("earnings") },
-                  { icon: verified ? "shield-checkmark-outline" : "shield-outline", label: "Verification", bg: "#EDE9FE", fg: "#6D28D9", sub: verification ? verification.replace(/_/g, " ") : "Status", go: () => nav.navigate("PartnerVerification") },
-                  { icon: "person-circle-outline", label: "Profile", bg: "#FCE7F3", fg: "#BE185D", sub: "Name & mode", go: () => setTab("account") },
-                  { icon: "call-outline", label: "Help", bg: "#FEE2E2", fg: "#B91C1C", sub: "Call support", go: () => void Linking.openURL(SUPPORT_PHONE_TEL) },
-                ].map((a) => (
-                  <Pressable
-                    key={a.label}
-                    onPress={a.go}
-                    accessibilityRole="button"
-                    accessibilityLabel={`${a.label}, ${a.sub}`}
-                    style={({ pressed }) => [styles.tile, pressed && { opacity: 0.8 }]}
-                  >
-                    <View style={[styles.tileIcon, { backgroundColor: a.bg }]}><Ionicons name={a.icon as any} size={22} color={a.fg} /></View>
-                    <Text style={styles.tileLabel} numberOfLines={1}>{a.label}</Text>
-                    <Text style={styles.tileSub} numberOfLines={1}>{a.sub}</Text>
-                  </Pressable>
-                ))}
+            {!verified && verification ? (
+              <View style={styles.verifyBanner} accessibilityRole="alert">
+                <Ionicons name="shield-outline" size={18} color={Colors.warning} />
+                <Text style={styles.verifyText}>
+                  Your account is {verification.replace(/_/g, " ")}. You receive jobs only once the Sahayak team has verified you.
+                </Text>
               </View>
-            </View>
-
+            ) : null}
+            {verified && pausedServices.length > 0 ? (
+              <Pressable
+                onPress={() => setTab("account")}
+                accessibilityRole="button"
+                accessibilityLabel="See why some services are not receiving jobs"
+                style={styles.verifyBanner}
+              >
+                <Ionicons name="alert-circle-outline" size={18} color={Colors.warning} />
+                <Text style={styles.verifyText}>
+                  {pausedServices.map((p) => p.name).join(" and ")}{" "}
+                  jobs are not sent to you yet: they need a tow vehicle verified by Sahayak.
+                </Text>
+              </Pressable>
+            ) : null}
             {failed.length > 0 ? (
               <Pressable onPress={() => void load()} accessibilityRole="button" style={styles.errBanner}>
                 <Ionicons name="cloud-offline-outline" size={18} color={Colors.error} />
@@ -469,29 +439,6 @@ export default function PartnerHomeScreen() {
               )}
             </View>
 
-            {/* Stats */}
-            <View>
-              <SectionHeader title="Your standing" />
-              {loading ? (
-                <Skeleton height={88} />
-              ) : stats ? (
-                <View style={styles.statRow}>
-                  <Pressable
-                    style={{ flex: 1 }}
-                    onPress={() => nav.navigate("PartnerReviews")}
-                    accessibilityRole="button"
-                    accessibilityLabel="See all your reviews"
-                  >
-                    <Stat label="Rating" value={stats.rating_count > 0 ? Number(stats.rating_avg).toFixed(1) : "New"} sub={`${stats.rating_count} ${stats.rating_count === 1 ? "review" : "reviews"} ›`} />
-                  </Pressable>
-                  <Stat label="Acceptance" value={`${Math.round(Number(stats.acceptance_rate_pct))}%`} sub="of offers" />
-                  <Stat label="Jobs" value={String(stats.lifetime_jobs)} sub="lifetime" />
-                </View>
-              ) : (
-                <Card><Text style={styles.muted}>Stats are not available right now.</Text></Card>
-              )}
-            </View>
-
             {/* Announced partner programmes (ADR-035) */}
             <ComingSoonServices side="partner" items={PARTNER_COMING_SOON} />
           </HeroScrollView>
@@ -516,6 +463,29 @@ export default function PartnerHomeScreen() {
             ) : (
               <ErrorState message="Earnings could not be loaded." onRetry={() => void load()} />
             )}
+
+            {/* Performance */}
+            <View>
+              <SectionHeader title="Performance" />
+              {loading ? (
+                <Skeleton height={88} />
+              ) : stats ? (
+                <View style={styles.statRow}>
+                  <Pressable
+                    style={{ flex: 1 }}
+                    onPress={() => nav.navigate("PartnerReviews")}
+                    accessibilityRole="button"
+                    accessibilityLabel="See all your reviews"
+                  >
+                    <Stat label="Rating" value={stats.rating_count > 0 ? Number(stats.rating_avg).toFixed(1) : "New"} sub={`${stats.rating_count} ${stats.rating_count === 1 ? "review" : "reviews"} ›`} />
+                  </Pressable>
+                  <Stat label="Acceptance" value={`${Math.round(Number(stats.acceptance_rate_pct))}%`} sub="of offers" />
+                  <Stat label="Jobs" value={String(stats.lifetime_jobs)} sub="lifetime" />
+                </View>
+              ) : (
+                <Card><Text style={styles.muted}>Stats are not available right now.</Text></Card>
+              )}
+            </View>
 
             <View>
               <SectionHeader title="Recent jobs" />
@@ -555,15 +525,11 @@ export default function PartnerHomeScreen() {
               ))}
             </View>
 
-            <View>
-              <SectionHeader title="Profile mode" />
-              <ProfileSwitchCard />
-            </View>
-
             <Card noPad>
               <ListRow icon="create-outline" title="Edit name" subtitle={user?.name ?? "Your display name"} onPress={() => setEditNameOpen(true)} />
               <ListRow icon="construct-outline" title="Services & capabilities" subtitle="What you offer, base rates, what is live" onPress={() => nav.navigate("PartnerServices")} />
-              <ListRow icon="settings-outline" title="Settings" subtitle="Job alerts, navigation app, helpline, sign out" onPress={() => nav.navigate("PartnerSettings")} last />
+              <ProfileSwitchRow />
+              <ListRow icon="settings-outline" title="Settings" subtitle="Profile mode, job alerts, navigation app, sign out" onPress={() => nav.navigate("PartnerSettings")} last />
             </Card>
           </HeroScrollView>
         )}
@@ -614,6 +580,9 @@ const styles = StyleSheet.create({
 
   shiftRow: { flexDirection: "row", alignItems: "center", gap: Spacing.base },
   shiftTitle: { fontSize: Typography.fontSize.xl, fontFamily: Typography.fontFamily.bold, color: Colors.textPrimary, marginBottom: 4 },
+  locPill: { flexDirection: "row", alignItems: "center", gap: 8, minHeight: 48, paddingHorizontal: 14, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.10)", borderWidth: 1, borderColor: "rgba(255,255,255,0.16)" },
+  locPillText: { flex: 1, color: "#fff", fontSize: Typography.fontSize.sm, fontFamily: Typography.fontFamily.medium },
+  locPillCta: { color: "#86EFAC", fontSize: Typography.fontSize.sm, fontFamily: Typography.fontFamily.bold },
   locBtn: { marginTop: Spacing.base, minHeight: 48, flexDirection: "row", alignItems: "center", gap: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.border, paddingTop: Spacing.md },
   locText: { fontSize: Typography.fontSize.base, fontFamily: Typography.fontFamily.semiBold, color: Colors.brand700 },
   verifyBanner: { marginTop: Spacing.md, flexDirection: "row", gap: 8, padding: Spacing.md, borderRadius: Radius.md, backgroundColor: Colors.warningLight },

@@ -9,6 +9,7 @@ import type { OwnerStackParamList, ServiceType } from "../../types";
 import Card from "../../components/ui/Card";
 import ServiceArt, { type ArtName } from "../../components/illustrations/ServiceArt";
 import BrandLogo, { hasBrandLogo } from "../../components/brand/BrandLogo";
+import VehiclePhoto from "../../components/illustrations/VehiclePhoto";
 import SafetyActions from "../../components/ui/SafetyActions";
 import { SectionHeader, StatusChip, Skeleton, EmptyState } from "../../components/ui/kit";
 import { useMyJobs, useMyVehicles, isActiveStatus, formatWhen } from "../shared/ownerData";
@@ -132,7 +133,7 @@ export default function HomeTab({
             {(vehicles.data ?? []).map((v) => (
               <View key={v.id} style={styles.vehicleCard}>
                 <View style={styles.vehicleArt}>
-                  <ServiceArt name={v.vehicle_type === "two_wheeler" ? "bike" : "car"} fill />
+                  <VehiclePhoto make={v.make} model={v.model} type={v.vehicle_type} />
                   {hasBrandLogo(v.make) ? <View style={{ position: "absolute", top: 6, left: 6, borderRadius: 999, elevation: 3 }}><BrandLogo make={v.make} size={30} round /></View> : null}
                 </View>
                 <Text style={styles.vehicleName} numberOfLines={1}>{v.make} {v.model}</Text>

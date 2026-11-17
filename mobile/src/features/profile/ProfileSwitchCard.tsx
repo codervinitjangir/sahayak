@@ -1,14 +1,40 @@
-// One login, two profiles (ADR-034). Shown on the owner Account tab and the
-// partner home: switch between owner and partner mode, or add the missing one.
+// One login, two profiles (ADR-034). The card (switch, or add the missing
+// profile) lives in Settings; ProfileSwitchRow is the one-tap switch shown on the
+// Profile tab only when this number already has both profiles.
 import React, { useState } from "react";
 import { View, Text, StyleSheet } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { Colors, Spacing } from "../../constants/theme";
 import Button from "../../components/ui/Button";
 import Card from "../../components/ui/Card";
+import { ListRow } from "../../components/ui/kit";
 import { showDialog } from "../../components/ui/AppDialog";
 import { useAuthStore } from "../../store/authStore";
 import { usersApi } from "../../services/api/users";
+
+export function ProfileSwitchRow({ last }: { last?: boolean }) {
+  const user = useAuthStore((s) => s.user);
+  const profiles = useAuthStore((s) => s.profiles);
+  const switchProfile = useAuthStore((s) => s.switchProfile);
+  const [busy, setBusy] = useState(false);
+  if (!user) return null;
+  const isPartner = user.role === "partner";
+  if (!(isPartner ? profiles.includes("user") : profiles.includes("partner"))) return null;
+  return (
+    <ListRow
+      icon="swap-horizontal-outline"
+      title={busy ? "Switching…" : isPartner ? "Switch to owner mode" : "Switch to partner mode"}
+      subtitle="Same number, nothing is lost"
+      onPress={busy ? undefined : async () => {
+        setBusy(true);
+        const ok = await switchProfile(isPartner ? "user" : "partner");
+        setBusy(false);
+        if (!ok) showDialog("Could not switch", "Check your connection and try again.");
+      }}
+      last={last}
+    />
+  );
+}
 
 const e164 = (phone: string) => (phone ? `+${phone.replace(/^\+/, "")}` : "");
 

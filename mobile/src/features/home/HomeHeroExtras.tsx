@@ -8,6 +8,7 @@ import { Typography, Spacing, Hero } from "../../constants/theme";
 import ServiceArt, { type ArtName } from "../../components/illustrations/ServiceArt";
 import type { MobileVehicle as BackendVehicle } from "../../services/api/vehicles";
 import BrandLogo, { hasBrandLogo } from "../../components/brand/BrandLogo";
+import VehiclePhoto, { vehiclePhotoFor } from "../../components/illustrations/VehiclePhoto";
 
 export function VehicleChip({ vehicle, onPress }: { vehicle?: BackendVehicle; onPress: () => void }) {
   const two = vehicle?.vehicle_type === "two_wheeler";
@@ -19,7 +20,7 @@ export function VehicleChip({ vehicle, onPress }: { vehicle?: BackendVehicle; on
       style={({ pressed }) => [styles.chip, pressed && { opacity: 0.85 }]}
     >
       <View style={styles.chipArt}>
-        {vehicle && hasBrandLogo(vehicle.make) ? <BrandLogo make={vehicle.make} size={36} round /> : <ServiceArt name={two ? "bike" : "car"} fill />}
+        {vehicle && vehiclePhotoFor(vehicle.make, vehicle.model) ? <VehiclePhoto make={vehicle.make} model={vehicle.model} type={vehicle.vehicle_type} /> : vehicle && hasBrandLogo(vehicle.make) ? <BrandLogo make={vehicle.make} size={36} round /> : <ServiceArt name={two ? "bike" : "car"} fill />}
       </View>
       <Text style={styles.chipText} numberOfLines={1}>
         {vehicle ? `${vehicle.make} ${vehicle.model}` : "Add vehicle"}
@@ -40,7 +41,8 @@ export function VehicleCard({ vehicle, count, onPress }: { vehicle?: BackendVehi
       style={({ pressed }) => [styles.vcard, pressed && { opacity: 0.85 }]}
     >
       <View style={styles.vcardArt}>
-        {vehicle && hasBrandLogo(vehicle.make) ? <BrandLogo make={vehicle.make} size={48} /> : <ServiceArt name={two ? "bike" : "car"} fill />}
+        <VehiclePhoto make={vehicle?.make} model={vehicle?.model} type={vehicle?.vehicle_type} />
+        {vehicle && hasBrandLogo(vehicle.make) ? <View style={{ position: "absolute", left: 3, bottom: 3 }}><BrandLogo make={vehicle.make} size={22} round /></View> : null}
       </View>
       <View style={{ flex: 1, gap: 3 }}>
         <Text style={styles.vcardKicker}>{vehicle ? (count > 1 ? `My garage · ${count} vehicles` : "My vehicle") : "No vehicle yet"}</Text>
@@ -139,7 +141,7 @@ const styles = StyleSheet.create({
   chipArt: { width: 36, height: 36, borderRadius: 18, backgroundColor: "#fff", alignItems: "center", justifyContent: "center", overflow: "hidden" },
   chipText: { color: "#fff", fontSize: Typography.fontSize.sm, fontFamily: Typography.fontFamily.semiBold, flexShrink: 1 },
   vcard: { flexDirection: "row", alignItems: "center", gap: 12, padding: 12, borderRadius: 20, backgroundColor: Hero.glass, borderWidth: 1, borderColor: Hero.glassBorder },
-  vcardArt: { width: 56, height: 56, borderRadius: 14, backgroundColor: "#fff", alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  vcardArt: { width: 84, height: 60, borderRadius: 14, backgroundColor: "#fff", alignItems: "center", justifyContent: "center", overflow: "hidden" },
   vcardKicker: { color: Hero.textSoft, fontSize: Typography.fontSize.xs, fontFamily: Typography.fontFamily.medium },
   vcardName: { color: "#fff", fontSize: Typography.fontSize.lg, fontFamily: Typography.fontFamily.bold },
   vcardPlate: { alignSelf: "flex-start", color: "#111827", backgroundColor: "#FDE68A", fontSize: 12, fontFamily: Typography.fontFamily.bold, letterSpacing: 1, paddingHorizontal: 8, paddingVertical: 1, borderRadius: 4, overflow: "hidden" },

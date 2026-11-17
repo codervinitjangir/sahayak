@@ -14,6 +14,7 @@ import { useAuthStore } from "../../../store/authStore";
 import { usersApi } from "../../../services/api/users";
 import { WEB_URL } from "../../../constants";
 import { SUPPORT_PHONE_DISPLAY, SUPPORT_PHONE_TEL } from "../../../constants/support";
+import ProfileSwitchCard from "../../profile/ProfileSwitchCard";
 
 export default function OwnerSettingsScreen() {
   const navigation = useNavigation();
@@ -64,6 +65,11 @@ export default function OwnerSettingsScreen() {
     <View style={styles.root}>
       <ScreenHero title="Settings" left={{ icon: "chevron-back", onPress: () => navigation.goBack(), label: "Back" }} />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <View>
+          <SectionHeader title="Earn with Sahayak" />
+          <ProfileSwitchCard />
+        </View>
+
         <View>
           <SectionHeader title="Notifications" />
           <Card noPad>

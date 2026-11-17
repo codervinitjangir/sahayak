@@ -1,4 +1,4 @@
-import ProfileSwitchCard from "../../profile/ProfileSwitchCard";
+import { ProfileSwitchRow } from "../../profile/ProfileSwitchCard";
 import { HeroScrollView } from "../../../components/ui/CollapsingHero";
 import React, { useEffect, useState } from "react";
 import { useNavigation } from "@react-navigation/native";
@@ -20,6 +20,7 @@ import { usersApi, type OwnerProfile } from "../../../services/api/users";
 import EditProfileModal from "../EditProfileModal";
 import EditVehicleModal from "../EditVehicleModal";
 import BrandLogo from "../../../components/brand/BrandLogo";
+import VehiclePhoto from "../../../components/illustrations/VehiclePhoto";
 import type { MobileVehicle } from "../../../services/api/vehicles";
 
 export default function AccountTab({ onAddVehicle, editSignal = 0 }: { onAddVehicle: () => void; editSignal?: number }) {
@@ -130,37 +131,17 @@ export default function AccountTab({ onAddVehicle, editSignal = 0 }: { onAddVehi
 
       {/* My Vehicles Garage Table */}
       <View>
-        <View style={styles.sectionHeaderRow}>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            <Text style={styles.sectionTitle} accessibilityRole="header">
-              My Garage
+        <View style={styles.garageHead}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.sectionTitle} accessibilityRole="header">My garage</Text>
+            <Text style={styles.garageSub}>
+              {vehicleList.length === 0 ? "No vehicles saved" : `${vehicleList.length} ${vehicleList.length === 1 ? "vehicle" : "vehicles"} saved`}
             </Text>
-            <View style={styles.countBadge}>
-              <Text style={styles.countBadgeText}>{vehicleList.length} registered</Text>
-            </View>
           </View>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-            {vehicleList.length > 0 ? (
-              <Pressable
-                onPress={() => setVehiclesCollapsed(!vehiclesCollapsed)}
-                style={styles.collapseToggle}
-                hitSlop={8}
-              >
-                <Text style={styles.collapseToggleText}>
-                  {vehiclesCollapsed ? "Expand" : "Collapse"}
-                </Text>
-                <Ionicons
-                  name={vehiclesCollapsed ? "chevron-down" : "chevron-up"}
-                  size={14}
-                  color={Colors.brand700}
-                />
-              </Pressable>
-            ) : null}
-            <Pressable onPress={onAddVehicle} style={styles.addBtn} hitSlop={8}>
-              <Ionicons name="add" size={16} color={Colors.brand700} />
-              <Text style={styles.addBtnText}>Add</Text>
-            </Pressable>
-          </View>
+          <Pressable onPress={onAddVehicle} accessibilityRole="button" accessibilityLabel="Add a vehicle" style={({ pressed }) => [styles.garageAdd, pressed && { opacity: 0.85 }]}>
+            <Ionicons name="add" size={18} color="#fff" />
+            <Text style={styles.garageAddText}>Add</Text>
+          </Pressable>
         </View>
 
         {!vehiclesCollapsed ? (
@@ -179,7 +160,10 @@ export default function AccountTab({ onAddVehicle, editSignal = 0 }: { onAddVehi
                   key={v.id}
                   style={[styles.vehicleRow, i < vehicleList.length - 1 && styles.rowDivider]}
                 >
-                  <BrandLogo make={v.make} size={44} color={Colors.brand700} />
+                  <View style={styles.garageThumb}>
+                    <VehiclePhoto make={v.make} model={v.model} type={v.vehicle_type} />
+                    <View style={{ position: "absolute", left: 3, bottom: 3 }}><BrandLogo make={v.make} size={22} round color={Colors.brand700} /></View>
+                  </View>
                   <View style={{ flex: 1, gap: 2 }}>
                     <Text style={styles.vehicleName}>
                       {v.make} {v.model}
@@ -244,14 +228,10 @@ export default function AccountTab({ onAddVehicle, editSignal = 0 }: { onAddVehi
         </Card>
       </View>
 
-      <View>
-        <SectionHeader title="Profile mode" />
-        <ProfileSwitchCard />
-      </View>
-
       <Card noPad>
         <ListRow icon="create-outline" title="Edit profile" subtitle="Name and email" onPress={() => setEditOpen(true)} />
-        <ListRow icon="settings-outline" title="Settings" subtitle="Notifications, payments, help, your data, sign out" onPress={() => nav.navigate("OwnerSettings")} last />
+        <ProfileSwitchRow />
+        <ListRow icon="settings-outline" title="Settings" subtitle="Become a partner, notifications, help, your data, sign out" onPress={() => nav.navigate("OwnerSettings")} last />
       </Card>
       <EditVehicleModal vehicle={editing} onClose={() => setEditing(null)} />
       <EditProfileModal
@@ -281,6 +261,11 @@ const styles = StyleSheet.create({
 
   sectionHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: Spacing.sm },
   sectionTitle: { fontSize: Typography.fontSize.xl, fontFamily: Typography.fontFamily.bold, color: Colors.textPrimary },
+  garageThumb: { width: 76, height: 54, borderRadius: Radius.lg, overflow: "hidden", backgroundColor: Colors.surface },
+  garageHead: { flexDirection: "row", alignItems: "center", gap: Spacing.md, marginBottom: Spacing.md },
+  garageSub: { marginTop: 2, fontSize: Typography.fontSize.sm, fontFamily: Typography.fontFamily.regular, color: Colors.textMuted },
+  garageAdd: { flexDirection: "row", alignItems: "center", gap: 4, height: 40, paddingHorizontal: 16, borderRadius: 999, backgroundColor: Colors.textPrimary },
+  garageAddText: { color: "#fff", fontSize: Typography.fontSize.sm, fontFamily: Typography.fontFamily.bold },
   countBadge: { backgroundColor: Colors.brand700Light, paddingHorizontal: 8, paddingVertical: 2, borderRadius: Radius.full },
   countBadgeText: { fontSize: Typography.fontSize.xs, fontFamily: Typography.fontFamily.bold, color: Colors.brand700Dark },
   collapseToggle: { flexDirection: "row", alignItems: "center", gap: 2, paddingVertical: 4 },
