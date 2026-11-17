@@ -1,4 +1,5 @@
 import React, { useMemo } from "react";
+import { HeroScrollView } from "../../../components/ui/CollapsingHero";
 import { View, Text, ScrollView, Pressable, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
@@ -43,7 +44,7 @@ export default function ServicesTab() {
   }, [data]);
 
   return (
-    <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+    <HeroScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
 
       <View>
         <SectionHeader title="What happened?" />
@@ -101,7 +102,7 @@ export default function ServicesTab() {
         )}
         <Text style={styles.note}>Final price is confirmed when the job is completed.</Text>
       </View>
-    </ScrollView>
+    </HeroScrollView>
   );
 }
 

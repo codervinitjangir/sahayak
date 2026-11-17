@@ -1,4 +1,5 @@
 import ProfileSwitchCard from "../../profile/ProfileSwitchCard";
+import { HeroScrollView } from "../../../components/ui/CollapsingHero";
 import React, { useState } from "react";
 import { View, Text, ScrollView, StyleSheet, Linking, Switch, Pressable, Share } from "react-native";
 import { showDialog } from "../../../components/ui/AppDialog";
@@ -101,7 +102,7 @@ export default function AccountTab({ onAddVehicle }: { onAddVehicle: () => void 
     ]);
 
   return (
-    <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+    <HeroScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
 
       {/* Profile Card */}
       <Card>
@@ -319,7 +320,7 @@ export default function AccountTab({ onAddVehicle }: { onAddVehicle: () => void 
         onClose={() => setEditOpen(false)}
         onSaved={(p) => qc.setQueryData(["owner", "me"], p as OwnerProfile)}
       />
-    </ScrollView>
+    </HeroScrollView>
   );
 }
 

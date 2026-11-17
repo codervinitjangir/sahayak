@@ -18,6 +18,7 @@ import Card from "../../../components/ui/Card";
 import Button from "../../../components/ui/Button";
 import LogoMark from "../../../components/brand/LogoMark";
 import ScreenHero from "../../../components/ui/ScreenHero";
+import { HeroShell, HeroScrollView } from "../../../components/ui/CollapsingHero";
 import TabBar, { TAB_BAR_SPACE, type TabDef } from "../../../components/ui/TabBar";
 import { EmptyState, ErrorState, ListRow, SectionHeader, Skeleton, StatusChip } from "../../../components/ui/kit";
 import { useAuthStore } from "../../../store/authStore";
@@ -259,20 +260,25 @@ export default function PartnerHomeScreen() {
   const verification = stats?.verification_status;
   const verified = verification === "verified";
 
+  const bell = { icon: "notifications-outline" as const, label: unread > 0 ? `Notifications, ${unread} unread` : "Notifications", onPress: () => setNotifOpen(true), dot: unread > 0 };
+  const hero = (
+  <ScreenHero
+    title={tab === "home" ? "Sahayak Partner" : tab === "earnings" ? "Earnings" : "Account"}
+    greeting={user?.name && !/^service partner$/i.test(user.name) ? `Hello, ${user.name.split(" ")[0]}` : "Hello, partner"}
+    subtitle={tab === "home" ? "Stay on duty to receive nearby jobs" : tab === "earnings" ? "What you have earned on Sahayak" : "Profile, settings and help"}
+    left={<LogoMark size={36} />}
+    right={{ icon: "notifications-outline", label: unread > 0 ? `Notifications, ${unread} unread` : "Notifications", onPress: () => setNotifOpen(true), dot: unread > 0 }}
+  >
+    <View style={styles.dutyPill} accessible accessibilityLabel={isOnline ? "On duty" : "Off duty"}>
+      <View style={[styles.dutyDot, { backgroundColor: isOnline ? "#4ADE80" : Colors.offline }]} />
+      <Text style={styles.dutyText}>{isOnline ? "On duty · receiving offers" : "Off duty"}</Text>
+    </View>
+  </ScreenHero>
+  );
+
   return (
     <View style={styles.root}>
-      <ScreenHero
-        title={tab === "home" ? "Sahayak Partner" : tab === "earnings" ? "Earnings" : "Account"}
-        greeting={user?.name && !/^service partner$/i.test(user.name) ? `Hello, ${user.name.split(" ")[0]}` : "Hello, partner"}
-        subtitle={tab === "home" ? "Stay on duty to receive nearby jobs" : tab === "earnings" ? "What you have earned on Sahayak" : "Profile, settings and help"}
-        left={<LogoMark size={36} />}
-        right={{ icon: "notifications-outline", label: unread > 0 ? `Notifications, ${unread} unread` : "Notifications", onPress: () => setNotifOpen(true), dot: unread > 0 }}
-      >
-        <View style={styles.dutyPill} accessible accessibilityLabel={isOnline ? "On duty" : "Off duty"}>
-          <View style={[styles.dutyDot, { backgroundColor: isOnline ? "#4ADE80" : Colors.offline }]} />
-          <Text style={styles.dutyText}>{isOnline ? "On duty · receiving offers" : "Off duty"}</Text>
-        </View>
-      </ScreenHero>
+
       <NotificationsModal visible={notifOpen} onClose={() => setNotifOpen(false)} />
       <EditProfileModal
         visible={editNameOpen}
@@ -282,9 +288,10 @@ export default function PartnerHomeScreen() {
         onSaved={(p) => { if (user && token) setUser({ ...user, name: p.name }, token); }}
       />
 
+      <HeroShell hero={hero} title="Sahayak Partner" left={<LogoMark size={28} />} right={bell} resetKey={tab}>
       <View style={styles.body}>
         {tab === "home" && (
-          <ScrollView
+          <HeroScrollView
             contentContainerStyle={styles.content}
             showsVerticalScrollIndicator={false}
             refreshControl={<RefreshControl refreshing={false} onRefresh={() => { void load(); void fetchOffers(); }} tintColor={Colors.brand700} />}
@@ -334,6 +341,33 @@ export default function PartnerHomeScreen() {
                 </Pressable>
               ) : null}
             </Card>
+
+            {/* Quick actions: everything the web partner console offers, one tap away */}
+            <View>
+              <SectionHeader title="Manage" />
+              <View style={styles.grid}>
+                {[
+                  { icon: "construct-outline", label: "My services", sub: `${services.length} added`, go: () => nav.navigate("PartnerServices") },
+                  { icon: "star-outline", label: "Reviews", sub: stats ? `${stats.rating_count} total` : "See all", go: () => nav.navigate("PartnerReviews") },
+                  { icon: "wallet-outline", label: "Earnings", sub: earnings ? inr(earnings.today_amount) + " today" : "Today & week", go: () => setTab("earnings") },
+                  { icon: verified ? "shield-checkmark-outline" : "shield-outline", label: "Verification", sub: verification ? verification.replace(/_/g, " ") : "Status", go: () => nav.navigate("PartnerVerification") },
+                  { icon: "person-circle-outline", label: "Profile", sub: "Name & mode", go: () => setTab("account") },
+                  { icon: "call-outline", label: "Help", sub: "Call support", go: () => void Linking.openURL(SUPPORT_PHONE_TEL) },
+                ].map((a) => (
+                  <Pressable
+                    key={a.label}
+                    onPress={a.go}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${a.label}, ${a.sub}`}
+                    style={({ pressed }) => [styles.tile, pressed && { opacity: 0.8 }]}
+                  >
+                    <View style={styles.tileIcon}><Ionicons name={a.icon as any} size={22} color={Colors.brand700} /></View>
+                    <Text style={styles.tileLabel} numberOfLines={1}>{a.label}</Text>
+                    <Text style={styles.tileSub} numberOfLines={1}>{a.sub}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
 
             {failed.length > 0 ? (
               <Pressable onPress={() => void load()} accessibilityRole="button" style={styles.errBanner}>
@@ -431,12 +465,11 @@ export default function PartnerHomeScreen() {
 
             {/* Announced partner programmes (ADR-035) */}
             <ComingSoonServices side="partner" items={PARTNER_COMING_SOON} />
-          </ScrollView>
+          </HeroScrollView>
         )}
 
         {tab === "earnings" && (
-          <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-            <Text style={styles.title} accessibilityRole="header">Earnings</Text>
+          <HeroScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
             {loading ? (
               <Skeleton height={120} />
             ) : earnings ? (
@@ -473,12 +506,11 @@ export default function PartnerHomeScreen() {
                 </Card>
               )}
             </View>
-          </ScrollView>
+          </HeroScrollView>
         )}
 
         {tab === "account" && (
-          <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-            <Text style={styles.title} accessibilityRole="header">Account</Text>
+          <HeroScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
             <Card>
               <View style={styles.profile}>
                 <View style={styles.avatar}><Text style={styles.avatarText}>{(user?.name ?? "P").trim().charAt(0).toUpperCase()}</Text></View>
@@ -622,6 +654,12 @@ export default function PartnerHomeScreen() {
               <SectionHeader title="Operational Settings" />
               <Card noPad>
                 <ListRow
+                  icon="shield-checkmark-outline"
+                  title="Verification status"
+                  subtitle={verification ? verification.replace(/_/g, " ") : "See where your account stands"}
+                  onPress={() => nav.navigate("PartnerVerification")}
+                />
+                <ListRow
                   icon="notifications-outline"
                   title="Sound and vibration"
                   subtitle="New offers ring and vibrate. Change it in your phone's notification settings."
@@ -679,9 +717,10 @@ export default function PartnerHomeScreen() {
             </View>
 
             <Button label="Sign out" variant="outline" onPress={confirmSignOut} />
-          </ScrollView>
+          </HeroScrollView>
         )}
       </View>
+      </HeroShell>
 
       <TabBar tabs={TABS} active={tab} onChange={setTab} />
     </View>
@@ -739,6 +778,11 @@ const styles = StyleSheet.create({
   offerCta: { marginTop: 6, fontSize: Typography.fontSize.base, fontFamily: Typography.fontFamily.bold, color: Colors.brand700 },
 
   statRow: { flexDirection: "row", gap: Spacing.sm },
+  grid: { flexDirection: "row", flexWrap: "wrap", gap: Spacing.sm },
+  tile: { width: "31.5%", flexGrow: 1, minHeight: 104, backgroundColor: Colors.surfaceWhite, borderRadius: Radius.lg, borderWidth: 1, borderColor: Colors.border, padding: Spacing.md, gap: 4 },
+  tileIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.brand700Light, alignItems: "center", justifyContent: "center", marginBottom: 4 },
+  tileLabel: { fontSize: Typography.fontSize.base, fontFamily: Typography.fontFamily.bold, color: Colors.textPrimary },
+  tileSub: { fontSize: Typography.fontSize.xs, fontFamily: Typography.fontFamily.regular, color: Colors.textSecondary, textTransform: "capitalize" },
   stat: { flex: 1, minWidth: 0, backgroundColor: Colors.surfaceWhite, borderRadius: Radius.lg, borderWidth: 1, borderColor: Colors.border, paddingVertical: Spacing.base, paddingHorizontal: Spacing.md },
   pausedChip: { flexDirection: "row", alignItems: "center", gap: 4, alignSelf: "flex-start", backgroundColor: Colors.warningLight, paddingHorizontal: 8, paddingVertical: 3, borderRadius: Radius.full },
   pausedChipText: { fontSize: Typography.fontSize.xs, fontFamily: Typography.fontFamily.semiBold, color: Colors.warning },

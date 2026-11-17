@@ -26,6 +26,7 @@ import PartnerJobDoneScreen from "../features/partner/screens/PartnerJobDoneScre
 import PartnerReviewsScreen from "../features/partner/screens/PartnerReviewsScreen";
 import BecomePartnerScreen from "../features/profile/BecomePartnerScreen";
 import PartnerServicesScreen from "../features/partner/screens/PartnerServicesScreen";
+import PartnerVerificationScreen from "../features/partner/screens/PartnerVerificationScreen";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 import type {
@@ -78,6 +79,7 @@ function PartnerNavigator() {
       />
       <PartnerStack.Screen name="PartnerReviews" component={PartnerReviewsScreen} />
       <PartnerStack.Screen name="PartnerServices" component={PartnerServicesScreen} />
+      <PartnerStack.Screen name="PartnerVerification" component={PartnerVerificationScreen} />
     </PartnerStack.Navigator>
   );
 }

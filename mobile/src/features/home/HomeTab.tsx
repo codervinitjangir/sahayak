@@ -1,4 +1,5 @@
 import React from "react";
+import { HeroScrollView } from "../../components/ui/CollapsingHero";
 import { View, Text, ScrollView, Pressable, StyleSheet, RefreshControl } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
@@ -38,7 +39,7 @@ export default function HomeTab({
     nav.navigate("OwnerFlow", { initialStep: "service_select", serviceType });
 
   return (
-    <ScrollView
+    <HeroScrollView
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
       refreshControl={
@@ -152,7 +153,7 @@ export default function HomeTab({
       </View>
 
       <ComingSoonServices side="owner" items={OWNER_COMING_SOON} />
-    </ScrollView>
+    </HeroScrollView>
   );
 }
 

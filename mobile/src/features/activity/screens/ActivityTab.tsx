@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { HeroFlatList, HeroScrollView } from "../../../components/ui/CollapsingHero";
 import { View, Text, FlatList, Pressable, Modal, TextInput, StyleSheet, ScrollView, RefreshControl } from "react-native";
 import { showDialog } from "../../../components/ui/AppDialog";
 import { Ionicons } from "@expo/vector-icons";
@@ -30,6 +31,8 @@ export default function ActivityTab() {
 
   return (
     <View style={{ flex: 1 }}>
+      {jobs.isLoading || jobs.isError ? (
+        <HeroScrollView>
       <View style={styles.head}>
         <View style={styles.filters}>
           {(["all", "active", "past"] as const).map((f) => (
@@ -37,19 +40,31 @@ export default function ActivityTab() {
           ))}
         </View>
       </View>
-
-      {jobs.isLoading ? (
+          {jobs.isError ? (
+            <ErrorState message="We could not load your requests." onRetry={() => void jobs.refetch()} />
+          ) : (
         <View style={styles.pad}>
           <Skeleton height={96} />
           <Skeleton height={96} style={{ marginTop: Spacing.md }} />
         </View>
-      ) : jobs.isError ? (
-        <ErrorState message="We could not load your requests." onRetry={() => void jobs.refetch()} />
+          )}
+        </HeroScrollView>
       ) : (
-        <FlatList
+        <HeroFlatList
+          ListHeaderComponent={
+            <>
+      <View style={styles.head}>
+        <View style={styles.filters}>
+          {(["all", "active", "past"] as const).map((f) => (
+            <Chip key={f} label={f === "all" ? "All" : f === "active" ? "Active" : "Past"} selected={filter === f} onPress={() => setFilter(f)} />
+          ))}
+        </View>
+      </View>
+            </>
+          }
           data={items}
           keyExtractor={(j) => j.id}
-          contentContainerStyle={[styles.pad, { paddingBottom: Spacing["4xl"] + 40, gap: Spacing.md }]}
+          contentContainerStyle={[{ paddingBottom: Spacing["4xl"] + 40, gap: Spacing.md }]}
           refreshControl={<RefreshControl refreshing={jobs.isRefetching} onRefresh={() => void jobs.refetch()} tintColor={Colors.brand700} />}
           ListEmptyComponent={
             <EmptyState
@@ -60,6 +75,7 @@ export default function ActivityTab() {
           }
           renderItem={({ item: j }) => (
             <Pressable
+              style={styles.pad}
               onPress={() => setSelected(j)}
               accessibilityRole="button"
               accessibilityLabel={`${j.service_name ?? "Request"}, ${j.status}. Open details.`}

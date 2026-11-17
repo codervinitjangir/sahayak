@@ -6,6 +6,7 @@ import { View, StyleSheet } from "react-native";
 import { Colors } from "../../../constants/theme";
 import LogoMark from "../../../components/brand/LogoMark";
 import ScreenHero, { HeroPill } from "../../../components/ui/ScreenHero";
+import { HeroShell } from "../../../components/ui/CollapsingHero";
 import { useAuthStore } from "../../../store/authStore";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -61,25 +62,29 @@ export default function HomeScreen() {
   const h = heroCopy[tab];
   const bell = { icon: "notifications-outline" as const, label: unread > 0 ? `Notifications, ${unread} unread` : "Notifications", onPress: () => setNotifOpen(true), dot: unread > 0 };
 
+  const hero = (
+  <ScreenHero
+    title={h.title}
+    greeting={h.greeting}
+    subtitle={h.subtitle}
+    center={tab !== "home"}
+    left={<LogoMark size={36} />}
+    right={bell}
+  >
+    {tab === "home" ? (
+      <HeroPill
+        title="Request roadside help"
+        subtitle="Where you are · What happened"
+        actionIcon="arrow-forward"
+        onPress={() => nav.navigate("OwnerFlow", { initialStep: "service_select" })}
+      />
+    ) : null}
+  </ScreenHero>
+  );
+
   return (
     <View style={styles.root}>
-      <ScreenHero
-        title={h.title}
-        greeting={h.greeting}
-        subtitle={h.subtitle}
-        center={tab !== "home"}
-        left={<LogoMark size={36} />}
-        right={bell}
-      >
-        {tab === "home" ? (
-          <HeroPill
-            title="Request roadside help"
-            subtitle="Where you are · What happened"
-            actionIcon="arrow-forward"
-            onPress={() => nav.navigate("OwnerFlow", { initialStep: "service_select" })}
-          />
-        ) : null}
-      </ScreenHero>
+      <HeroShell hero={hero} left={<LogoMark size={28} />} right={bell} resetKey={tab}>
 
       <View style={styles.body}>
         {tab === "home" && (
@@ -93,6 +98,7 @@ export default function HomeScreen() {
       <View style={styles.barDock} pointerEvents="box-none">
         <ActiveRequestBar jobs={jobs.data} />
       </View>
+      </HeroShell>
       <TabBar tabs={tabs} active={tab} onChange={setTab} />
 
       <AddVehicleModal visible={addVehicleOpen} onClose={() => setAddVehicleOpen(false)} />
