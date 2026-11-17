@@ -1,6 +1,7 @@
 import ProfileSwitchCard from "../../profile/ProfileSwitchCard";
 import { HeroScrollView } from "../../../components/ui/CollapsingHero";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import { useNavigation } from "@react-navigation/native";
 import { View, Text, ScrollView, StyleSheet, Linking, Switch, Pressable, Share } from "react-native";
 import { showDialog } from "../../../components/ui/AppDialog";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -18,7 +19,8 @@ import { vehiclesApi } from "../../../services/api/vehicles";
 import { usersApi, type OwnerProfile } from "../../../services/api/users";
 import EditProfileModal from "../EditProfileModal";
 
-export default function AccountTab({ onAddVehicle }: { onAddVehicle: () => void }) {
+export default function AccountTab({ onAddVehicle, editSignal = 0 }: { onAddVehicle: () => void; editSignal?: number }) {
+  const nav = useNavigation<any>();
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const vehicles = useMyVehicles();
@@ -27,6 +29,10 @@ export default function AccountTab({ onAddVehicle }: { onAddVehicle: () => void 
   // name after a session restore.
   const me = useQuery({ queryKey: ["owner", "me"], queryFn: usersApi.getMe });
   const [editOpen, setEditOpen] = useState(false);
+  // The hero's "Edit profile" button bumps editSignal.
+  useEffect(() => {
+    if (editSignal > 0) setEditOpen(true);
+  }, [editSignal]);
   const [exporting, setExporting] = useState(false);
   const displayName = me.data?.name ?? user?.name ?? "Vehicle Owner";
 
@@ -103,24 +109,6 @@ export default function AccountTab({ onAddVehicle }: { onAddVehicle: () => void 
 
   return (
     <HeroScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-
-      {/* Profile Card */}
-      <Card>
-        <View style={styles.profile}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{displayName.trim().charAt(0).toUpperCase()}</Text>
-          </View>
-          <View style={{ flex: 1, gap: 2 }}>
-            <Text style={styles.name}>{displayName}</Text>
-            {(me.data?.phone ?? user?.phone) ? <Text style={styles.phone}>{me.data?.phone ?? user?.phone}</Text> : null}
-            {me.data?.email ? <Text style={styles.phone}>{me.data.email}</Text> : null}
-            <View style={styles.membershipPill}>
-              <Ionicons name="shield-checkmark" size={14} color={Colors.brand700} />
-              <Text style={styles.membershipText}>Verified Sahayak Member</Text>
-            </View>
-          </View>
-        </View>
-      </Card>
 
       {/* Shortcuts */}
       <View style={styles.shortRow}>
@@ -249,85 +237,15 @@ export default function AccountTab({ onAddVehicle }: { onAddVehicle: () => void 
         </Card>
       </View>
 
-      {/* Notification Preferences */}
       <View>
-        <SectionHeader title="Notifications" />
-        <Card noPad>
-          <ListRow
-            icon="notifications-outline"
-            title="Notification settings"
-            subtitle="Partner updates, arrival and completion alerts. Manage sound and banners in your phone's settings."
-            onPress={() => void Linking.openSettings()}
-            last
-          />
-        </Card>
-      </View>
-
-      {/* Payment & Billing */}
-      <View>
-        <SectionHeader title="Payment & Settlements" />
-        <Card noPad>
-          <ListRow
-            icon="card-outline"
-            title="Supported Payment Methods"
-            subtitle="UPI (Google Pay, PhonePe, Paytm, QR) & Cash"
-            last
-          />
-        </Card>
-      </View>
-
-      {/* Help, Support & Legal */}
-      <View>
-        <SectionHeader title="Help & Transparency" />
-        <Card noPad>
-          <ListRow
-            icon="mail-outline"
-            title="Email Support"
-            subtitle="support@sahayak.app"
-            onPress={() => void Linking.openURL("mailto:support@sahayak.app")}
-          />
-          {WEB_URL ? (
-            <>
-              <ListRow
-                icon="document-text-outline"
-                title="Terms of service"
-                onPress={() => void Linking.openURL(`${WEB_URL}/terms`)}
-              />
-              <ListRow
-                icon="lock-closed-outline"
-                title="Privacy policy"
-                onPress={() => void Linking.openURL(`${WEB_URL}/privacy`)}
-              />
-            </>
-          ) : null}
-          <ListRow
-            icon="information-circle-outline"
-            title="Sahayak Roadside Safety"
-            subtitle="Version 1.2.0 (Build 44)"
-            last
-          />
-        </Card>
-      </View>
-
-      {/* Your data (G8 / G10) */}
-      <View>
-        <SectionHeader title="Profile" />
+        <SectionHeader title="Profile mode" />
         <ProfileSwitchCard />
-
-        <SectionHeader title="Your account" />
-        <Card noPad>
-          <ListRow icon="create-outline" title="Edit profile" subtitle="Name and email" onPress={() => setEditOpen(true)} />
-          <ListRow
-            icon="download-outline"
-            title={exporting ? "Preparing your data…" : "Download my data"}
-            subtitle="Everything Sahayak stores about you"
-            onPress={exporting ? undefined : () => void exportData()}
-          />
-          <ListRow icon="trash-outline" title="Delete account" subtitle="Erase your details and sign out" onPress={confirmDeleteAccount} last />
-        </Card>
       </View>
 
-      <Button label="Sign out" variant="outline" onPress={confirmSignOut} />
+      <Card noPad>
+        <ListRow icon="create-outline" title="Edit profile" subtitle="Name and email" onPress={() => setEditOpen(true)} />
+        <ListRow icon="settings-outline" title="Settings" subtitle="Notifications, payments, help, your data, sign out" onPress={() => nav.navigate("OwnerSettings")} last />
+      </Card>
       <EditProfileModal
         visible={editOpen}
         profile={me.data ?? null}

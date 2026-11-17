@@ -2,7 +2,7 @@
 // Hand-drawn flat SVG scenes, original to Sahayak. One per service plus a few
 // for banners. viewBox 120×90 so they sit in tiles, banners and empty states.
 import React from "react";
-import Svg, { Circle, Rect, Path, G, Ellipse, Line } from "react-native-svg";
+import Svg, { Circle, Rect, Path, G, Ellipse, Line, Defs, LinearGradient, Stop } from "react-native-svg";
 
 export type ArtName =
   | "tyre"
@@ -140,17 +140,64 @@ function All() {
   );
 }
 
+function Wheel({ cx, cy, r }: { cx: number; cy: number; r: number }) {
+  return (
+    <G>
+      <Circle cx={cx} cy={cy} r={r} fill="#0B0F17" />
+      <Circle cx={cx} cy={cy} r={r * 0.68} fill="url(#rim)" />
+      {[0, 72, 144, 216, 288].map((a) => (
+        <Rect key={a} x={cx - r * 0.07} y={cy - r * 0.62} width={r * 0.14} height={r * 0.55} rx={r * 0.05} fill="#6B7280" transform={`rotate(${a} ${cx} ${cy})`} />
+      ))}
+      <Circle cx={cx} cy={cy} r={r * 0.18} fill="#374151" />
+    </G>
+  );
+}
+
+function VehicleDefs() {
+  return (
+    <Defs>
+      <LinearGradient id="carBody" x1="0" y1="0" x2="0" y2="1">
+        <Stop offset="0" stopColor="#3B82F6" />
+        <Stop offset="0.55" stopColor="#1D4ED8" />
+        <Stop offset="1" stopColor="#1E3A8A" />
+      </LinearGradient>
+      <LinearGradient id="glass" x1="0" y1="0" x2="1" y2="1">
+        <Stop offset="0" stopColor="#E0F2FE" />
+        <Stop offset="1" stopColor="#7DD3FC" />
+      </LinearGradient>
+      <LinearGradient id="rim" x1="0" y1="0" x2="1" y2="1">
+        <Stop offset="0" stopColor="#F3F4F6" />
+        <Stop offset="1" stopColor="#9CA3AF" />
+      </LinearGradient>
+      <LinearGradient id="tank" x1="0" y1="0" x2="0" y2="1">
+        <Stop offset="0" stopColor="#F87171" />
+        <Stop offset="1" stopColor="#B91C1C" />
+      </LinearGradient>
+    </Defs>
+  );
+}
+
 function Car() {
   return (
     <G>
-      <Ground />
-      <Path d="M10 66 v-14 q0 -6 6 -8 l14 -4 l14 -14 q4 -4 10 -4 h26 q6 0 10 4 l12 14 l6 2 q6 2 6 8 v16z" fill="#2563EB" />
-      <Path d="M36 40 l12 -12 h12 v12z M64 28 h14 l10 12 h-24z" fill="#DBEAFE" />
-      <Rect x={98} y={50} width={8} height={5} rx={2} fill="#FDE68A" />
-      <Circle cx={34} cy={68} r={10} fill={INK} />
-      <Circle cx={34} cy={68} r={4} fill="#D1D5DB" />
-      <Circle cx={88} cy={68} r={10} fill={INK} />
-      <Circle cx={88} cy={68} r={4} fill="#D1D5DB" />
+      <VehicleDefs />
+      <Ellipse cx={60} cy={78} rx={52} ry={4.5} fill={SHADOW} />
+      {/* body */}
+      <Path d="M6 64 q0 -12 10 -14 l20 -4 q8 -14 20 -18 q10 -3 26 -1 q10 2 18 15 l10 3 q8 3 8 11 v8 q0 3 -3 3 h-106 q-3 0 -3 -3z" fill="url(#carBody)" />
+      {/* windows */}
+      <Path d="M40 46 q7 -11 16 -14 q4 -1 11 -1 v15z" fill="url(#glass)" />
+      <Path d="M71 31 q12 0 18 4 q6 4 10 11 h-28z" fill="url(#glass)" />
+      <Path d="M68 31 v15" stroke="#1E3A8A" strokeWidth={2.5} />
+      {/* shine + lines */}
+      <Path d="M14 54 q40 -6 92 -2" stroke="rgba(255,255,255,0.35)" strokeWidth={2} fill="none" />
+      <Path d="M44 50 v16 M70 50 v16" stroke="rgba(15,23,42,0.35)" strokeWidth={1} />
+      <Rect x={52} y={55} width={7} height={2} rx={1} fill="#CBD5E1" />
+      <Rect x={78} y={55} width={7} height={2} rx={1} fill="#CBD5E1" />
+      {/* lights */}
+      <Path d="M108 54 h7 q2 0 2 2 v3 h-9z" fill="#FDE68A" />
+      <Rect x={5} y={56} width={5} height={5} rx={1.5} fill="#EF4444" />
+      <Wheel cx={30} cy={68} r={11} />
+      <Wheel cx={92} cy={68} r={11} />
     </G>
   );
 }
@@ -158,14 +205,26 @@ function Car() {
 function Bike() {
   return (
     <G>
-      <Ground />
-      <Circle cx={28} cy={62} r={16} fill="none" stroke={INK} strokeWidth={6} />
-      <Circle cx={92} cy={62} r={16} fill="none" stroke={INK} strokeWidth={6} />
-      <Path d="M28 62 l22 -22 h26 l16 22" stroke="#4B5563" strokeWidth={4} fill="none" />
-      <Path d="M44 42 q8 -14 30 -12 l8 12 h-38z" fill="#EF4444" />
-      <Rect x={50} y={28} width={22} height={6} rx={3} fill={INK} />
-      <Path d="M84 30 l8 -8 h8" stroke={INK} strokeWidth={4} strokeLinecap="round" fill="none" />
-      <Circle cx={100} cy={34} r={4} fill="#FDE68A" />
+      <VehicleDefs />
+      <Ellipse cx={60} cy={80} rx={50} ry={4} fill={SHADOW} />
+      <Wheel cx={26} cy={62} r={15} />
+      <Wheel cx={94} cy={62} r={15} />
+      {/* frame + fork */}
+      <Path d="M26 62 l18 -16 h28 l22 16" stroke="#374151" strokeWidth={4} fill="none" strokeLinejoin="round" />
+      <Path d="M94 62 l-10 -32" stroke="#9CA3AF" strokeWidth={4} strokeLinecap="round" />
+      {/* engine */}
+      <Rect x={48} y={46} width={22} height={16} rx={4} fill="#4B5563" />
+      <Path d="M52 50 h14 M52 54 h14 M52 58 h14" stroke="#9CA3AF" strokeWidth={1.2} />
+      {/* exhaust */}
+      <Path d="M58 62 q10 6 30 4" stroke="#D1D5DB" strokeWidth={4} fill="none" strokeLinecap="round" />
+      {/* tank + seat + tail */}
+      <Path d="M46 44 q4 -14 22 -14 q12 0 16 10 l-4 6 h-34z" fill="url(#tank)" />
+      <Path d="M52 34 q8 -4 16 -2" stroke="rgba(255,255,255,0.55)" strokeWidth={2} fill="none" />
+      <Path d="M22 42 q10 -6 26 -2 v4 h-26z" fill="#111827" />
+      <Path d="M14 42 l10 -4 l2 6z" fill="#B91C1C" />
+      {/* handlebar + headlight */}
+      <Path d="M80 26 l8 -2 l6 -6" stroke="#111827" strokeWidth={3.5} strokeLinecap="round" fill="none" />
+      <Circle cx={92} cy={34} r={5} fill="#FDE68A" stroke="#6B7280" strokeWidth={1.5} />
     </G>
   );
 }

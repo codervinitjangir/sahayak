@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { Modal, View, Text, SectionList, Pressable, StyleSheet, RefreshControl } from "react-native";
+import { Animated, Modal, View, Text, SectionList, Pressable, StyleSheet, RefreshControl } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQueryClient } from "@tanstack/react-query";
@@ -39,7 +39,32 @@ function timeLabel(iso: string): string {
   return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
-export default function NotificationsModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+export default function NotificationsModal({ visible, onClose: onCloseProp }: { visible: boolean; onClose: () => void }) {
+  // Opens from the bell: the panel grows out of the top-right corner.
+  const anim = React.useRef(new Animated.Value(0)).current;
+  const [shown, setShown] = React.useState(visible);
+  React.useEffect(() => {
+    if (visible) {
+      setShown(true);
+      anim.setValue(0);
+      Animated.spring(anim, { toValue: 1, useNativeDriver: true, friction: 9, tension: 70 }).start();
+    } else {
+      setShown(false);
+    }
+  }, [visible, anim]);
+  const onClose = () =>
+    Animated.timing(anim, { toValue: 0, duration: 170, useNativeDriver: true }).start(() => {
+      setShown(false);
+      onCloseProp();
+    });
+  const panelStyle = {
+    opacity: anim,
+    transform: [
+      { translateX: anim.interpolate({ inputRange: [0, 1], outputRange: [140, 0] }) },
+      { translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [-220, 0] }) },
+      { scale: anim.interpolate({ inputRange: [0, 1], outputRange: [0.3, 1] }) },
+    ],
+  };
   const insets = useSafeAreaInsets();
   const qc = useQueryClient();
   const list = useNotifications(visible);
@@ -91,8 +116,9 @@ export default function NotificationsModal({ visible, onClose }: { visible: bool
   const unreadCount = list.data?.unread_count ?? 0;
 
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <View style={[styles.root, { paddingTop: insets.top }]}>
+    <Modal visible={shown} transparent animationType="none" statusBarTranslucent onRequestClose={onClose}>
+      <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(15,23,42,0.4)", opacity: anim }]} />
+      <Animated.View style={[styles.root, { paddingTop: insets.top }, panelStyle]}>
         <View style={styles.header}>
           <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel="Close notifications" style={styles.close}>
             <Ionicons name="close" size={26} color={Colors.textPrimary} />
@@ -166,13 +192,13 @@ export default function NotificationsModal({ visible, onClose }: { visible: bool
             }}
           />
         )}
-      </View>
+      </Animated.View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.surface },
+  root: { flex: 1, backgroundColor: Colors.surface, borderTopLeftRadius: 0, overflow: "hidden" },
   header: {
     flexDirection: "row",
     alignItems: "center",

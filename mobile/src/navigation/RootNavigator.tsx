@@ -24,8 +24,10 @@ import IncomingOfferScreen from "../features/partner/screens/IncomingOfferScreen
 import ActiveJobScreen from "../features/partner/screens/ActiveJobScreen";
 import PartnerJobDoneScreen from "../features/partner/screens/PartnerJobDoneScreen";
 import PartnerReviewsScreen from "../features/partner/screens/PartnerReviewsScreen";
+import OwnerSettingsScreen from "../features/account/screens/OwnerSettingsScreen";
 import BecomePartnerScreen from "../features/profile/BecomePartnerScreen";
 import PartnerServicesScreen from "../features/partner/screens/PartnerServicesScreen";
+import PartnerSettingsScreen from "../features/partner/screens/PartnerSettingsScreen";
 import PartnerVerificationScreen from "../features/partner/screens/PartnerVerificationScreen";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -50,6 +52,7 @@ function OwnerNavigator() {
       <OwnerStack.Screen name="OwnerHome" component={HomeScreen} />
       <OwnerStack.Screen name="OwnerFlow" component={OwnerHelpFlowScreen} />
       <OwnerStack.Screen name="BecomePartner" component={BecomePartnerScreen} />
+      <OwnerStack.Screen name="OwnerSettings" component={OwnerSettingsScreen} />
     </OwnerStack.Navigator>
   );
 }
@@ -80,6 +83,7 @@ function PartnerNavigator() {
       <PartnerStack.Screen name="PartnerReviews" component={PartnerReviewsScreen} />
       <PartnerStack.Screen name="PartnerServices" component={PartnerServicesScreen} />
       <PartnerStack.Screen name="PartnerVerification" component={PartnerVerificationScreen} />
+      <PartnerStack.Screen name="PartnerSettings" component={PartnerSettingsScreen} />
     </PartnerStack.Navigator>
   );
 }

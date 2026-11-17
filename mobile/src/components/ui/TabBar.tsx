@@ -27,20 +27,35 @@ export default function TabBar<T extends string>({
   tabs,
   active,
   onChange,
+  center,
 }: {
   tabs: TabDef<T>[];
   active: T;
   onChange: (key: T) => void;
+  /** Raised middle button (the fifth slot), e.g. "Get help". */
+  center?: { icon: IconName; label: string; onPress: () => void };
 }) {
+  const mid = center ? Math.ceil(tabs.length / 2) : -1;
   const insets = useSafeAreaInsets();
   return (
     <View pointerEvents="box-none" style={[styles.dock, { paddingBottom: Math.max(insets.bottom, 12) }]}>
       <View style={styles.bar} accessibilityRole="tablist">
-        {tabs.map((t) => {
+        {tabs.map((t, idx) => {
           const on = t.key === active;
           return (
+            <React.Fragment key={t.key}>
+            {idx === mid && center ? (
+              <Pressable
+                onPress={center.onPress}
+                accessibilityRole="button"
+                accessibilityLabel={center.label}
+                style={({ pressed }) => [styles.center, pressed && { transform: [{ scale: 0.94 }] }]}
+              >
+                <Ionicons name={center.icon} size={28} color="#fff" />
+                <Text style={styles.centerText}>{center.label}</Text>
+              </Pressable>
+            ) : null}
             <Pressable
-              key={t.key}
               onPress={() => onChange(t.key)}
               accessibilityRole="tab"
               accessibilityState={{ selected: on }}
@@ -54,6 +69,7 @@ export default function TabBar<T extends string>({
                 </View>
               ) : null}
             </Pressable>
+            </React.Fragment>
           );
         })}
       </View>
@@ -77,8 +93,10 @@ const styles = StyleSheet.create({
       default: { boxShadow: "0 8px 28px rgba(0,0,0,0.16)", backdropFilter: "blur(16px)" } as object,
     }),
   },
-  tab: { width: 56, height: 56, borderRadius: 28, alignItems: "center", justifyContent: "center" },
+  tab: { width: 52, height: 52, borderRadius: 26, alignItems: "center", justifyContent: "center" },
   tabOn: { backgroundColor: "#111111" },
+  center: { width: 72, height: 72, marginTop: -26, borderRadius: 36, backgroundColor: Colors.emergency, alignItems: "center", justifyContent: "center", borderWidth: 4, borderColor: "#fff", elevation: 8, shadowColor: Colors.emergency, shadowOpacity: 0.4, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
+  centerText: { color: "#fff", fontSize: 10, fontFamily: Typography.fontFamily.bold, marginTop: -2 },
   tabOff: { backgroundColor: "#F1F2F4" },
   badge: {
     position: "absolute",

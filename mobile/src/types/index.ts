@@ -152,6 +152,7 @@ export type FlowStep =
 
 export type OwnerStackParamList = {
   OwnerHome?: undefined;
+  OwnerSettings: undefined;
   BecomePartner?: undefined;
   OwnerFlow?: {
     initialStep?: FlowStep;
@@ -170,4 +171,5 @@ export type PartnerStackParamList = {
   PartnerReviews: undefined;
   PartnerServices: undefined;
   PartnerVerification: undefined;
+  PartnerSettings: undefined;
 };

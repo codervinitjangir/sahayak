@@ -94,6 +94,8 @@ export default function HomeTab({
         </View>
       </View>
 
+      <ComingSoonServices side="owner" items={OWNER_COMING_SOON} />
+
       {/* Instant help strip */}
       <Pressable
         onPress={() => startFlow("mechanic")}
@@ -181,7 +183,6 @@ export default function HomeTab({
         )}
       </View>
 
-      <ComingSoonServices side="owner" items={OWNER_COMING_SOON} />
 
       <View style={styles.footer} accessible accessibilityLabel="Never stranded. Made in India.">
         <Text style={styles.footerBig}>#Never{"\n"}Stranded</Text>

@@ -540,212 +540,30 @@ export default function PartnerHomeScreen() {
 
         {tab === "account" && (
           <HeroScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-            <Card>
-              <View style={styles.profile}>
-                <View style={styles.avatar}><Text style={styles.avatarText}>{(user?.name ?? "P").trim().charAt(0).toUpperCase()}</Text></View>
-                <View style={{ flex: 1 }}>
-                  <Pressable onPress={() => setEditNameOpen(true)} accessibilityRole="button" accessibilityLabel="Edit your name"
-                    style={{ flexDirection: "row", alignItems: "center", gap: 6, minHeight: 32 }}>
-                    <Text style={styles.name}>{user?.name ?? "Service partner"}</Text>
-                    <Ionicons name="create-outline" size={18} color={Colors.brand700} />
-                  </Pressable>
-                  {user?.phone ? <Text style={styles.muted}>{user.phone}</Text> : null}
-                  {verification ? (
-                    <View style={{ marginTop: 6, flexDirection: "row", alignItems: "center", gap: 6 }}>
-                      <Ionicons name={verified ? "shield-checkmark" : "shield-outline"} size={16} color={verified ? Colors.success : Colors.warning} />
-                      <Text style={[styles.verText, { color: verified ? Colors.success : Colors.warning }]}>
-                        {verified ? "Verified by Sahayak" : `Verification: ${verification.replace(/_/g, " ")}`}
-                      </Text>
-                    </View>
-                  ) : null}
-                </View>
-              </View>
-            </Card>
-
-            {/* Collapsible Services Table */}
-            <View>
-              <View style={styles.sectionHeaderRow}>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                  <Text style={styles.sectionTitle} accessibilityRole="header">
-                    Services & Capabilities
-                  </Text>
-                  <View style={styles.countBadge}>
-                    <Text style={styles.countBadgeText}>
-                      {services.length - pausedServices.length} of {services.length} live
-                    </Text>
-                  </View>
-                </View>
-                <Pressable
-                  onPress={() => nav.navigate("PartnerServices")}
-                  style={styles.toggleCollapseBtn}
-                  hitSlop={8}
-                  accessibilityRole="button"
-                  accessibilityLabel="Edit the services you offer"
-                >
-                  <Text style={styles.toggleCollapseText}>Edit</Text>
+            <View style={styles.grid}>
+              {[
+                { icon: "construct-outline", label: "Services", sub: `${services.length - pausedServices.length} of ${services.length} live`, bg: "#DBEAFE", fg: "#1D4ED8", go: () => nav.navigate("PartnerServices") },
+                { icon: "shield-checkmark-outline", label: "Verification", sub: verification ? verification.replace(/_/g, " ") : "Status", bg: "#EDE9FE", fg: "#6D28D9", go: () => nav.navigate("PartnerVerification") },
+                { icon: "star-outline", label: "Reviews", sub: stats ? `${stats.rating_count} total` : "See all", bg: "#FEF3C7", fg: "#B45309", go: () => nav.navigate("PartnerReviews") },
+              ].map((a) => (
+                <Pressable key={a.label} onPress={a.go} accessibilityRole="button" accessibilityLabel={`${a.label}, ${a.sub}`} style={({ pressed }) => [styles.tile, pressed && { opacity: 0.8 }]}>
+                  <View style={[styles.tileIcon, { backgroundColor: a.bg }]}><Ionicons name={a.icon as any} size={22} color={a.fg} /></View>
+                  <Text style={styles.tileLabel} numberOfLines={1}>{a.label}</Text>
+                  <Text style={styles.tileSub} numberOfLines={1}>{a.sub}</Text>
                 </Pressable>
-                <Pressable
-                  onPress={() => setServicesCollapsed(!servicesCollapsed)}
-                  style={styles.toggleCollapseBtn}
-                  hitSlop={8}
-                >
-                  <Text style={styles.toggleCollapseText}>
-                    {servicesCollapsed ? "Expand" : "Collapse"}
-                  </Text>
-                  <Ionicons
-                    name={servicesCollapsed ? "chevron-down" : "chevron-up"}
-                    size={16}
-                    color={Colors.brand700}
-                  />
-                </Pressable>
-              </View>
-
-              {!servicesCollapsed ? (
-                <Card noPad>
-                  {/* Table Header */}
-                  <View style={styles.tableHeaderRow}>
-                    <Text style={[styles.tableHeaderCell, { flex: 2 }]}>SERVICE & SCOPE</Text>
-                    <Text style={[styles.tableHeaderCell, { flex: 1, textAlign: "right" }]}>
-                      BASE RATE
-                    </Text>
-                  </View>
-
-                  {services.length === 0 ? (
-                    <View style={{ padding: Spacing.base }}>
-                      <Text style={styles.muted}>
-                        {loading ? "Loading service matrix…" : "No services linked yet."}
-                      </Text>
-                    </View>
-                  ) : (
-                    services.map((s, i) => (
-                      <View
-                        key={s.service_id}
-                        style={[
-                          styles.tableRow,
-                          i < services.length - 1 && styles.tableRowBorder,
-                        ]}
-                      >
-                        <View style={{ flex: 2, gap: 4 }}>
-                          <Text style={styles.serviceNameText}>{s.name}</Text>
-                          {s.dispatchable === false ? (
-                            <View style={styles.pausedChip}>
-                              <Ionicons name="alert-circle" size={13} color={Colors.warning} />
-                              <Text style={styles.pausedChipText}>Needs a verified tow vehicle</Text>
-                            </View>
-                          ) : (
-                            <View style={styles.liveChip}>
-                              <View style={styles.liveChipDot} />
-                              <Text style={styles.liveChipText}>Receiving jobs</Text>
-                            </View>
-                          )}
-                        </View>
-                        <View style={{ flex: 1, alignItems: "flex-end", justifyContent: "center" }}>
-                          <Text style={styles.servicePriceText}>
-                            {s.base_price != null ? `From ₹${s.base_price}` : "Standard"}
-                          </Text>
-                        </View>
-                      </View>
-                    ))
-                  )}
-
-                  <View style={styles.tableFooterNote}>
-                    <Ionicons name="information-circle-outline" size={15} color={Colors.textMuted} />
-                    <Text style={styles.tableFooterText}>
-                      {pausedServices.length > 0
-                        ? "Towing needs a tow vehicle verified by Sahayak. Contact the Sahayak team to add one."
-                        : "Base rates are the starting quote owners see."}
-                    </Text>
-                  </View>
-                </Card>
-              ) : (
-                <Card>
-                  <Pressable
-                    onPress={() => setServicesCollapsed(false)}
-                    style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}
-                  >
-                    <View style={{ gap: 2 }}>
-                      <Text style={styles.serviceNameText}>
-                        {services.length - pausedServices.length} of {services.length} services receiving jobs
-                      </Text>
-                      <Text style={styles.serviceMetaText}>Tap to see rates and status</Text>
-                    </View>
-                    <Ionicons name="chevron-forward" size={18} color={Colors.brand700} />
-                  </Pressable>
-                </Card>
-              )}
+              ))}
             </View>
 
-            {/* Operational Settings & Preferences */}
             <View>
-              <SectionHeader title="Profile" />
+              <SectionHeader title="Profile mode" />
               <ProfileSwitchCard />
-              <View style={{ height: 16 }} />
-              <SectionHeader title="Operational Settings" />
-              <Card noPad>
-                <ListRow
-                  icon="shield-checkmark-outline"
-                  title="Verification status"
-                  subtitle={verification ? verification.replace(/_/g, " ") : "See where your account stands"}
-                  onPress={() => nav.navigate("PartnerVerification")}
-                />
-                <ListRow
-                  icon="notifications-outline"
-                  title="Sound and vibration"
-                  subtitle="New offers ring and vibrate. Change it in your phone's notification settings."
-                  onPress={() => void Linking.openSettings()}
-                />
-                <ListRow
-                  icon="navigate-outline"
-                  title="Navigation app"
-                  subtitle={NAV_APP_LABEL[navApp]}
-                  onPress={() => {
-                    showDialog("Navigation app", "Which app should open when you tap Navigate on a job?", [
-                      { text: NAV_APP_LABEL.google, onPress: () => chooseNavApp("google") },
-                      { text: NAV_APP_LABEL.system, onPress: () => chooseNavApp("system") },
-                      { text: "Cancel", style: "cancel" },
-                    ]);
-                  }}
-                  last
-                />
-              </Card>
             </View>
 
-            {/* Partner Dispatch & Support */}
-            <View>
-              <SectionHeader title="Partner Helpline & Legal" />
-              <Card noPad>
-                <ListRow
-                  icon="call-outline"
-                  title="24/7 Dispatch Control Room"
-                  subtitle={SUPPORT_PHONE_DISPLAY}
-                  onPress={() => void Linking.openURL(SUPPORT_PHONE_TEL)}
-                />
-                {WEB_URL ? (
-                  <>
-                    <ListRow
-                      icon="document-text-outline"
-                      title="Partner terms of service"
-                      onPress={() => void Linking.openURL(`${WEB_URL}/terms`)}
-                    />
-                    <ListRow
-                      icon="lock-closed-outline"
-                      title="Partner privacy policy"
-                      onPress={() => void Linking.openURL(`${WEB_URL}/privacy`)}
-                      last
-                    />
-                  </>
-                ) : (
-                  <ListRow
-                    icon="shield-checkmark-outline"
-                    title="Sahayak Partner Network"
-                    subtitle="Version 1.2.0 (Build 44)"
-                    last
-                  />
-                )}
-              </Card>
-            </View>
-
-            <Button label="Sign out" variant="outline" onPress={confirmSignOut} />
+            <Card noPad>
+              <ListRow icon="create-outline" title="Edit name" subtitle={user?.name ?? "Your display name"} onPress={() => setEditNameOpen(true)} />
+              <ListRow icon="construct-outline" title="Services & capabilities" subtitle="What you offer, base rates, what is live" onPress={() => nav.navigate("PartnerServices")} />
+              <ListRow icon="settings-outline" title="Settings" subtitle="Job alerts, navigation app, helpline, sign out" onPress={() => nav.navigate("PartnerSettings")} last />
+            </Card>
           </HeroScrollView>
         )}
       </View>
