@@ -95,6 +95,7 @@ def offers_row(**over):
         "partners_offered": 0,
         "accepted": 0,
         "declined": 0,
+        "timed_out": 0,
         "unanswered": 0,
         "with_eta_estimate": 0,
     }
@@ -654,7 +655,7 @@ class TestDispatch:
     def test_two_acceptance_rates_differ_on_unanswered_offers(self, repo):
         """The reason there are two rates at all.
 
-        With no offer expiry in the system an unanswered offer is still open, not
+        An unanswered offer is still open (or was closed by a cancellation), not
         refused. 6/8 is the rate at which partners who looked said yes; 6/20 is
         what it becomes if every unopened offer is scored as a decline. Reporting
         only the second would read as "partners decline 70% of offers" when the
@@ -667,7 +668,7 @@ class TestDispatch:
         result = asyncio.run(admin_analytics_service.get_dispatch(None, ADMIN))
         assert result.offers.acceptance_rate_of_answered == 0.75
         assert result.offers.acceptance_rate_of_all == 0.3
-        assert "UNANSWERED_OFFERS_HAVE_NO_EXPIRY" in codes(result)
+        assert "UNANSWERED_OFFERS_ARE_NOT_REFUSALS" in codes(result)
 
     def test_outcomes_sum_to_total(self, repo):
         repo["offer_outcomes"] = offers_row(
@@ -679,12 +680,29 @@ class TestDispatch:
             == result.offers.total
         )
 
+    def test_timed_out_offers_are_not_counted_as_declines(self, repo):
+        """ADR-032: a timeout is the partner not answering, not saying no.
+
+        4 accepted, 1 declined, 5 timed out: partners who answered said yes 4
+        times in 5. Folding the timeouts into declines would report 4/10.
+        """
+        repo["offer_outcomes"] = offers_row(
+            offers_total=10, accepted=4, declined=1, timed_out=5, unanswered=0
+        )
+        result = asyncio.run(admin_analytics_service.get_dispatch(None, ADMIN))
+        assert result.offers.timed_out == 5
+        assert result.offers.acceptance_rate_of_answered == 0.8
+        assert result.offers.acceptance_rate_of_all == 0.4
+        assert "UNANSWERED_OFFERS_ARE_NOT_REFUSALS" in codes(result)
+        o = result.offers
+        assert o.accepted + o.declined + o.timed_out + o.unanswered == o.total
+
     def test_unanswered_note_absent_when_every_offer_was_answered(self, repo):
         repo["offer_outcomes"] = offers_row(
             offers_total=10, accepted=7, declined=3, unanswered=0
         )
         result = asyncio.run(admin_analytics_service.get_dispatch(None, ADMIN))
-        assert "UNANSWERED_OFFERS_HAVE_NO_EXPIRY" not in codes(result)
+        assert "UNANSWERED_OFFERS_ARE_NOT_REFUSALS" not in codes(result)
         assert result.offers.acceptance_rate_of_answered == 0.7
         assert result.offers.acceptance_rate_of_all == 0.7
 

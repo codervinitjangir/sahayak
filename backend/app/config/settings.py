@@ -96,6 +96,13 @@ class Settings(BaseSettings):
     PUSH_ENABLED: bool = True
     EXPO_ACCESS_TOKEN: str = ""
 
+    # Dispatch worker (ADR-032): times out unanswered offers and keeps widening
+    # the search for jobs that found nobody, whether or not the owner's app is
+    # open. Runs inside each API process; row locks make overlapping sweeps from
+    # several processes safe. DISPATCH_WORKER_ENABLED=false turns it off.
+    DISPATCH_WORKER_ENABLED: bool = True
+    DISPATCH_WORKER_INTERVAL_S: int = 15
+
     @property
     def SUPABASE_JWT_ISSUER(self) -> str:
         """Expected `iss` claim, derived from SUPABASE_URL.

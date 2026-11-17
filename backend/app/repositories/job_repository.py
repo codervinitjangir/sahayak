@@ -85,13 +85,23 @@ async def create_status_history_row(
 ) -> JobStatusHistory:
     """Stage a job_status_history row for a job that just changed state.
 
-    changed_at is stamped by the database (now()) rather than by the API
-    process, so every entry in the audit trail is on one clock.
+    changed_at is stamped by the database rather than by the API process, so
+    every entry in the audit trail is on one clock.
+
+    clock_timestamp(), not now(). In Postgres now() is the time the
+    *transaction* started, and a transaction that waited on a job's row lock
+    started before the one it queued behind. An owner cancel that began, then
+    blocked while a partner's accept committed, stamped its 'cancelled' row
+    earlier than the 'assigned' row it followed: the timeline read
+    matching → cancelled → assigned for a job that ended cancelled, and
+    check_dispatch_race failed on that order in some runs. clock_timestamp()
+    is the time of this statement, which under the lock is after the winner's
+    commit, so the timeline sorts in the order things happened.
     """
     entry = JobStatusHistory(
         job_id=job_id,
         status=status,
-        changed_at=func.now(),
+        changed_at=func.clock_timestamp(),
         note=note,
     )
     db.add(entry)

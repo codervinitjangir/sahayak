@@ -58,6 +58,7 @@ from app.schemas.analytics import (
     WindowInfo,
 )
 from app.services.auth_service import Identity
+from app.utils.scoring import OFFER_TTL_S
 from app.utils.errors import BadRequestError, ErrorCode
 from app.utils.logging import log_event
 
@@ -351,6 +352,7 @@ async def get_dispatch(
         total=outcomes["offers_total"],
         accepted=outcomes["accepted"],
         declined=outcomes["declined"],
+        timed_out=outcomes["timed_out"],
         unanswered=outcomes["unanswered"],
         jobs_offered=outcomes["jobs_offered"],
         partners_offered=outcomes["partners_offered"],
@@ -364,17 +366,17 @@ async def get_dispatch(
 
     notes: list[AnalyticsNote] = []
 
-    if offers.unanswered:
+    if offers.unanswered or offers.timed_out:
         notes.append(
             AnalyticsNote(
-                code="UNANSWERED_OFFERS_HAVE_NO_EXPIRY",
+                code="UNANSWERED_OFFERS_ARE_NOT_REFUSALS",
                 detail=(
-                    f"{offers.unanswered} of {offers.total} offers have never "
-                    "been answered. There is no offer timeout or expiry in the "
-                    "system, so these are still open and will remain open "
-                    "indefinitely — they are not refusals. Quote "
+                    f"{offers.unanswered + offers.timed_out} of {offers.total} "
+                    f"offers were never answered ({offers.timed_out} timed out "
+                    f"after {OFFER_TTL_S} s, {offers.unanswered} still open or "
+                    "closed by a cancellation). They are not refusals. Quote "
                     "acceptance_rate_of_answered; acceptance_rate_of_all treats "
-                    "every unopened offer as a decline."
+                    "every unanswered offer as a decline."
                 ),
             )
         )

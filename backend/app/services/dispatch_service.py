@@ -8,12 +8,13 @@ Four functions, in the order a job moves through them:
   dispatch_job         make the offer                 (jobs → matching, rank 1)
   respond_to_assignment  accept, or fall through to the next partner
 
-Deliberately synchronous and API-triggered. There is no background worker, no
-expiry sweep for offers nobody answers, and no notification — those are separate
-tasks, and building half of one here would leave a timeout that fires from
-nowhere with no way to observe it. Today an unanswered offer simply sits, and
-that is visible in the data rather than hidden behind a scheduler that does not
-exist.
+Offers and first dispatch are synchronous and API-triggered. Two things are
+not, since ADR-032: an offer nobody answers is timed out after OFFER_TTL_S and
+passed to the next partner (expire_offer), and a job that found nobody keeps
+being searched for, wider, until its window closes (widen_search_for_job).
+Both are driven by app/services/dispatch_worker.py on a timer, both log every
+action, and both re-check everything under the job's row lock, so a sweep that
+overlaps a partner's answer, an owner's cancel or another sweep loses cleanly.
 
 Two rules this module holds to, because both are load-bearing elsewhere:
 
@@ -67,10 +68,11 @@ from app.utils.errors import (
     NotFoundError,
 )
 from app.utils.logging import log_event
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from app.utils.scoring import (
     MAX_RADIUS_M,
+    OFFER_TTL_S,
     SEARCH_WINDOW_S,
     Candidate,
     baseline_pick,
@@ -627,6 +629,33 @@ async def respond_to_assignment(
             f"This job is no longer being matched (status: {job.status})",
         )
 
+    # Re-read the offer now that the job lock is held (ADR-032). The status
+    # check at the top ran before the lock, and since the dispatch worker exists
+    # there is a writer that closes an offer *without* moving the job off
+    # 'matching': expire_offer() times it out and offers the job to the next
+    # partner. A partner tapping accept in that instant would pass every check
+    # above (job still 'matching') and accept an offer that has already been
+    # passed on, leaving two partners holding the same job. expire_offer takes
+    # this same job lock before writing, so after the lock this read sees its
+    # committed 'timed_out' and the answer is the same 409 a late tap gets.
+    await db.refresh(assignment)
+    if assignment.status != "offered":
+        log_event(
+            "offer_answer_raced",
+            level=logging.WARNING,
+            assignment_id=str(assignment.id),
+            job_id=str(job.id),
+            partner_id=str(partner_id),
+            assignment_status=assignment.status,
+            attempted_action=action,
+            outcome="failure",
+            duration_ms=round((time.perf_counter() - started) * 1000, 2),
+        )
+        raise ConflictError(
+            ErrorCode.ASSIGNMENT_ALREADY_ANSWERED,
+            f"This offer has already been answered (status: {assignment.status})",
+        )
+
     if action == "accept":
         return await _accept(db, assignment, job, started)
     return await _reject(db, assignment, job, rejection_reason, started)
@@ -827,6 +856,93 @@ async def _reject(
     next_assignment = await _offer_next(db, job)
     await db.refresh(job)
     return assignment, job, next_assignment
+
+
+async def expire_offer(
+    db: AsyncSession, assignment_id: uuid.UUID, now: Optional[datetime] = None
+) -> Optional[JobAssignment]:
+    """Time out an offer nobody answered and offer the job to the next partner.
+
+    Called by the dispatch worker (ADR-032) for each id from
+    dispatch_repository.get_expired_offer_ids. That list was read without a
+    lock, so nothing it says is trusted: the job is locked first (the
+    jobs → partners → job_assignments order every mutation here keeps), then
+    the offer is re-read, and the timeout is written only if the offer is
+    still 'offered', its job is still 'matching' and it really is older than
+    OFFER_TTL_S. Anything else means somebody got there first: the partner
+    answered, the owner cancelled, another sweep took it. That is reported as
+    "nothing to do" (None), never as an error.
+
+    Same two-step shape as _reject: the timeout is committed before the next
+    candidate is searched for, so a failing search cannot lose the fact that
+    this partner had their chance. Then _offer_next takes over, which skips
+    every partner already asked (a timed-out partner included), re-checks the
+    job under its own lock and, if nobody is left, moves the job to
+    'no_match_found', where widen_search_for_job can still rescue it.
+
+    Returns the new offer, or None when nothing was timed out or nobody was
+    left to ask. The job's status does not change on a timeout, so no history
+    row is written for it; the assignment row (status, responded_at) is the
+    record, exactly as for a rejection.
+    """
+    now = now or datetime.now(timezone.utc)
+    assignment = await dispatch_repository.get_assignment_by_id(db, assignment_id)
+    if assignment is None:
+        return None
+
+    job = await job_repository.get_job_by_id_for_update(db, assignment.job_id)
+    await db.refresh(assignment)
+    offered_at = assignment.offered_at
+    still_open = (
+        job is not None
+        and job.status == STATUS_MATCHING
+        and assignment.status == "offered"
+        and offered_at is not None
+        and (now - offered_at).total_seconds() >= OFFER_TTL_S
+    )
+    if not still_open:
+        # Read before the rollback: a rollback expires every loaded object, and
+        # touching an attribute afterwards is a lazy load that raises
+        # MissingGreenlet on an AsyncSession.
+        job_status = job.status if job is not None else "missing"
+        assignment_status = assignment.status
+        await db.rollback()
+        log_event(
+            "offer_timeout_skipped",
+            assignment_id=str(assignment_id),
+            job_status=job_status,
+            assignment_status=assignment_status,
+            outcome="skipped",
+        )
+        return None
+
+    job_id, partner_id, rank = job.id, assignment.partner_id, assignment.assignment_rank
+    try:
+        await dispatch_repository.mark_assignment_timed_out(db, assignment)
+        await db.commit()
+    except SQLAlchemyError as exc:
+        await db.rollback()
+        log_event(
+            "offer_timed_out",
+            level=logging.ERROR,
+            assignment_id=str(assignment_id),
+            job_id=str(job_id),
+            outcome="failure",
+            error_type=type(exc).__name__,
+        )
+        raise InternalError("Could not time out this offer") from exc
+
+    log_event(
+        "offer_timed_out",
+        assignment_id=str(assignment_id),
+        job_id=str(job_id),
+        partner_id=str(partner_id),
+        assignment_rank=rank,
+        offer_ttl_s=OFFER_TTL_S,
+        actor_role="system",
+        outcome="success",
+    )
+    return await _offer_next(db, job)
 
 
 async def _offer_next(db: AsyncSession, job: Job) -> Optional[JobAssignment]:
@@ -1062,6 +1178,10 @@ async def list_open_offers(
             assignment_id=row.assignment_id,
             job_id=row.job_id,
             offered_at=row.offered_at,
+            expires_at=(
+                row.offered_at + timedelta(seconds=OFFER_TTL_S)
+                if row.offered_at is not None else None
+            ),
             distance_at_offer_m=row.distance_at_offer_m,
             estimated_arrival_min=row.estimated_arrival_min,
             assignment_rank=row.assignment_rank,
@@ -1115,20 +1235,11 @@ class SearchStatus:
 async def retry_search(db: AsyncSession, job_id: uuid.UUID, owner_id: uuid.UUID) -> SearchStatus:
     """Widen the search for a job that found nobody, if its window is still open.
 
-    ADR-023. There is no background worker (see the module docstring), so the
-    escalation is driven by the owner's app: while the job sits in
-    'no_match_found' and is under SEARCH_WINDOW_S old, the searching screen
-    calls this every ~15 s. Each call searches at the radius for the job's age,
-    skipping every partner already asked, and on a hit moves the job back to
-    'matching' with a fresh offer, exactly as dispatch_job would.
-
-    Safe to call at any time: a job that is not 'no_match_found' (it was
-    matched, or the owner cancelled) is reported as it stands and nothing is
-    searched, so a late poll from the client is harmless.
-
-    Same locking shape as _offer_next: search first with no lock (Redis is a
-    network call), then lock the job row and re-check it is still
-    'no_match_found' before writing, so a concurrent cancel always wins.
+    ADR-023, owner side. The owner's searching screen calls this every ~15 s
+    while the job is 'no_match_found'; since ADR-032 the dispatch worker does
+    the same thing on its own timer through widen_search_for_job, so the search
+    no longer stops when the owner's app is closed or backgrounded. Both paths
+    run the same code and are safe to overlap.
 
     Raises:
         NotFoundError (404): no such job, or it is not the caller's.
@@ -1138,7 +1249,37 @@ async def retry_search(db: AsyncSession, job_id: uuid.UUID, owner_id: uuid.UUID)
     job = await job_repository.get_job_by_id(db, job_id)
     if job is None or job.user_id != owner_id:
         raise NotFoundError(ErrorCode.JOB_NOT_FOUND, "Job not found")
+    return await _widen_search(db, job)
 
+
+async def widen_search_for_job(db: AsyncSession, job_id: uuid.UUID) -> Optional[SearchStatus]:
+    """The dispatch worker's entry to the search escalation (ADR-032).
+
+    No ownership check, because there is no caller identity: the worker acts
+    for the platform. Returns None for a job that no longer exists.
+    """
+    job = await job_repository.get_job_by_id(db, job_id)
+    if job is None:
+        return None
+    return await _widen_search(db, job)
+
+
+async def _widen_search(db: AsyncSession, job: Job) -> SearchStatus:
+    """Search again, wider, for a 'no_match_found' job whose window is open.
+
+    Each call searches at the radius for the job's age, skipping every partner
+    already asked, and on a hit moves the job back to 'matching' with a fresh
+    offer, exactly as dispatch_job would.
+
+    Safe to call at any time: a job that is not 'no_match_found' (it was
+    matched, or the owner cancelled) is reported as it stands and nothing is
+    searched, so a late poll or an overlapping sweep is harmless.
+
+    Same locking shape as _offer_next: search first with no lock (Redis is a
+    network call), then lock the job row and re-check it is still
+    'no_match_found' before writing, so a concurrent cancel always wins.
+    """
+    job_id = job.id
     elapsed = job_age_s(job)
     radius = search_radius_m(elapsed)
     window_open = search_window_open(elapsed)

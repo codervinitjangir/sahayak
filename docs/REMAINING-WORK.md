@@ -121,6 +121,9 @@ Recorded 2026-11-14 at the end of the second pass. None of these has any code ye
 - [x] **Push deliveries bounded** (third pass): one at a time, backlog capped at 500, overflow logged as `push_dropped` (ADR-026 amendment 2).
 - **Committed in the third pass** along with E3: the `@expo/ngrok` dev dependency (it shared `mobile/package.json`). Still not committed: `mobile/expo-qr.png`, `.claude/`. Nothing is pushed.
 
+- **Timeline order under lock waits (found 2026-11-17).** `job_status_history.changed_at` defaults to `now()`, the transaction start, so a cancel that waited on the job lock behind an accept sorts before it (`matching → cancelled → assigned`, final state correct). `check_dispatch_race` fails its two timeline checks in some runs on old and new code alike. **Fixed 2026-11-17:** `create_status_history_row` now writes `changed_at = clock_timestamp()` (time of the write), no migration; unit test `test_history_rows_are_stamped_at_write_time_not_transaction_start` failed on the old code.
+- [x] **Dispatch worker (ADR-032, 2026-11-17):** offers time out after 60 s and searches keep widening without the owner's app. Regression 619 unit, 18 of 18 harnesses (933 checks).
+
 ## G. Next steps, in order
 
 1. Tell Adarsh about HANDOFF section 19 to 19.4.

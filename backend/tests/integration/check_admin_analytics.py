@@ -779,8 +779,10 @@ async def main() -> None:                          # noqa: C901 - one linear scr
               f"{ {r['status']: r['n'] for r in overwritten} }")
         check("eight offers were extended", of["total"] == 8, f"{of['total']}")
         check("the three outcomes are mutually exclusive and exhaust the table",
-              of["accepted"] + of["declined"] + of["unanswered"] == of["total"],
-              f"{of['accepted']}+{of['declined']}+{of['unanswered']} vs {of['total']}")
+              of["accepted"] + of["declined"] + of["timed_out"] + of["unanswered"] == of["total"],
+              f"{of['accepted']}+{of['declined']}+{of['timed_out']}+{of['unanswered']} vs {of['total']}")
+        check("no offer timed out in this scenario (ADR-032 bucket present and zero)",
+              of.get("timed_out") == 0, f"{of.get('timed_out')}")
         check("five accepted, including the two whose rows now read 'completed'",
               of["accepted"] == 5, f"{of['accepted']}")
         check("one declined", of["declined"] == 1, f"{of['declined']}")
@@ -803,8 +805,8 @@ async def main() -> None:                          # noqa: C901 - one linear scr
         check("the two rates differ, which is the point of reporting both",
               of["acceptance_rate_of_answered"] != of["acceptance_rate_of_all"],
               f"{of['acceptance_rate_of_answered']} vs {of['acceptance_rate_of_all']}")
-        check("the no-expiry caveat is attached to the response",
-              "UNANSWERED_OFFERS_HAVE_NO_EXPIRY" in note_codes(dp),
+        check("the not-a-refusal caveat is attached to the response",
+              "UNANSWERED_OFFERS_ARE_NOT_REFUSALS" in note_codes(dp),
               f"{note_codes(dp)}")
 
         ob = dp["offers_before_acceptance"]

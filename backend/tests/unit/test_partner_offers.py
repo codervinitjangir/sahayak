@@ -38,6 +38,8 @@ PARTNER_ID = uuid.UUID("44444444-4444-4444-4444-444444444444")
 JOB_ID = uuid.UUID("55555555-5555-5555-5555-555555555555")
 ASSIGNMENT_ID = uuid.UUID("66666666-6666-6666-6666-666666666666")
 
+from app.utils.scoring import OFFER_TTL_S  # noqa: E402
+
 NOW = datetime(2026, 9, 25, 10, 0, 0, tzinfo=timezone.utc)
 
 
@@ -127,6 +129,8 @@ def test_maps_row_to_offer_item(stub_rows):
     assert offer.assignment_id == ASSIGNMENT_ID
     assert offer.job_id == JOB_ID
     assert offer.offered_at == NOW
+    # ADR-032: the countdown deadline is offered_at + OFFER_TTL_S, from the server.
+    assert offer.expires_at == NOW + timedelta(seconds=OFFER_TTL_S)
     assert offer.distance_at_offer_m == Decimal("1234.50")
     assert offer.estimated_arrival_min == 7
     assert offer.assignment_rank == 1

@@ -166,12 +166,12 @@ class AnalyticsOverview(BaseModel):
 class OfferOutcomes(BaseModel):
     """Every offer in the window by what the partner did, and two rates.
 
-    The three outcome counts are read from timestamps, not from
-    `job_assignments.status`, which is overwritten when the job ends. They are
+    The outcome counts are read from timestamps, not from
+    `job_assignments.status`, which is overwritten when the job ends; the one
+    exception is `timed_out`, a status nothing overwrites (ADR-032). They are
     mutually exclusive and sum to `total`.
 
-    Two rates, because with no offer-expiry mechanism an unanswered offer is
-    still open rather than refused:
+    Two rates, because neither a timed-out nor a still-open offer is a refusal:
 
       * `acceptance_rate_of_answered` = accepted / (accepted + declined). The
         rate at which partners who responded said yes. This is the one to quote.
@@ -183,6 +183,7 @@ class OfferOutcomes(BaseModel):
     total: int
     accepted: int
     declined: int
+    timed_out: int = 0
     unanswered: int
     jobs_offered: int
     partners_offered: int

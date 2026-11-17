@@ -1168,6 +1168,8 @@ The second bug was blunter: `partner_supply` filtered on `p.is_verified`, a bool
 4. **On a hit**, `no_match_found → matching` with history note `Search widened to N km` and a new offer at the next rank, in one transaction. Partners already asked (any state) are skipped. A rejection inside the window re-offers within the current tier, not back inside 10 km.
 5. **Scoring** normalises distance to the circle actually searched, so a 30 km candidate from a 35 km search does not tie every other escalated candidate at a distance score of 0.
 
+**Amended 2026-11-17 by ADR-032:** point 2 is reversed. The dispatch worker widens the search on its own timer, so the search no longer stops when nobody is watching.
+
 **Consequences.** `no_match_found` is no longer always final within the window; analytics read current status, so a rescued job counts as matched, and its history still shows the miss. The endpoint is limited to 12 calls/min per job. When a worker is eventually added, it calls `retry_search` on a timer and this ADR's rules stay as they are.
 
 
@@ -1327,3 +1329,31 @@ Consequence for callers: a partner whose offer was cancelled before they accepte
 **Consequences.** OpenFreeMap is a donation-funded service with no SLA. If it becomes unreliable, the fallback is MapTiler's free tier (an account, no card) by changing `MAP_STYLE_URL` and adding its key. Routing is unchanged: `useRoute` still draws a straight connector unless `EXPO_PUBLIC_ROUTING_URL` is set.
 
 **Not done.** Not yet seen on a physical device: dragging the pin, the icon rendering inside `ViewAnnotation`, and camera padding against the bottom sheet need one device session (R5). The web preview (`RealMap.web.tsx`) still loads `tile.openstreetmap.org`; acceptable for local development only.
+
+
+# ADR-032: A dispatch worker times out unanswered offers and keeps searching for jobs that found nobody
+
+**Date:** 2026-11-17 · **Status:** Accepted · **Amends:** ADR-023 point 2
+
+**Context.** Two dispatch steps depended on someone's app being open. An offer nobody answered sat forever: dispatch offers one partner at a time, so the owner waited until they gave up and cancelled. And the ADR-023 search widening ran only while the owner's searching screen called `retry-search`. Closing or backgrounding the app (to phone someone, or because the battery died) stopped the search. iOS suspends JavaScript timers in the background, so this was the normal case, not an edge case. The system design page (`docs/system-design.html` §7) lists both as the only two red failure modes.
+
+**Decision.**
+1. **Offer TTL of 60 s** (`OFFER_TTL_S` in `app/utils/scoring.py`). Long enough to reach the phone after a push, short enough that the ten-minute window still gets through several partners one at a time.
+2. **The existing `timed_out` assignment status**, already in the CHECK constraint and already counted as a decided offer in the acceptance statistics. No migration. `responded_at` is set to when the offer closed.
+3. **`dispatch_service.expire_offer`**: lock the job, re-read the offer, and time it out only if it is still `offered`, its job is still `matching` and it is older than the TTL. Commit that, then `_offer_next` (the rejection path): skip everyone already asked, and if nobody is left, move the job to `no_match_found`, from where point 4 can still rescue it. The job's status does not change on a timeout, so no history row is written; the assignment row is the record, as for a rejection.
+4. **`dispatch_service.widen_search_for_job`**: the ADR-023 widening with no owner check. `retry_search` (owner route) and the worker share `_widen_search`, so the rules in ADR-023 points 1, 3, 4 and 5 are unchanged.
+5. **`app/services/dispatch_worker.py`** runs `sweep_once` every `DISPATCH_WORKER_INTERVAL_S` (15 s) as an asyncio task in the FastAPI lifespan of each API process: offers first, then searches, so a timeout that ends in `no_match_found` is widened in the same sweep. One session per item: a failure is logged as `dispatch_worker_item_failed` and the sweep moves on. `DISPATCH_WORKER_ENABLED=false` turns it off.
+6. **No leader election.** Every item is re-checked under the job's row lock before any write, so overlapping sweeps from several processes, an owner's poll and a partner's answer all queue on the lock, and the loser does nothing. Overlap costs a repeated read and search. With more than about three processes, a Postgres advisory lock around `sweep_once` is the upgrade; it changes nothing about correctness.
+7. **`respond_to_assignment` re-reads the offer after taking the job lock.** Before this ADR, nothing closed an offer while leaving its job in `matching`, so checking the offer's status before the lock was enough. The worker's timeout is exactly such a write. Without the re-read, a partner who taps accept while the worker is timing out their offer passes every check and accepts an offer already passed to someone else. After the lock, the refreshed row says `timed_out`, and the answer is the same 409 ASSIGNMENT_ALREADY_ANSWERED a late tap gets.
+
+**Amendment to ADR-023 point 2.** "If nobody is watching, nobody is searched for" is reversed. The argument for it was that the owner may already have arranged other help. That is still possible, but the owner can cancel at any time, the window is capped at ten minutes, and push (ADR-026) now reaches a closed app. A stranded owner whose phone was in their pocket losing the search was the worse failure. The `retry-search` route stays, with the same rate limit, for the searching screen's live status.
+
+**Expiry is a write, not a clock check.** An offer is answerable until the worker writes `timed_out`, so an accept can land up to one interval (15 s) after the TTL. Nothing compares clocks on the read or answer paths; the partner offer list and `respond` stay consistent with each other.
+
+**Rejected.** A separate worker service or a queue (Celery, RQ): a second deployable unit and a broker, for two indexed reads every 15 s (ADR-006). `pg_cron`: puts dispatch logic in the database, out of reach of the service layer and its tests. Per-offer timers in memory: lost on restart, and they duplicate across processes.
+
+**Tests.** `tests/unit/test_dispatch_worker.py` (18). `tests/integration/check_dispatch_worker.py` (28 checks, range 81x): a sweep times out a stale offer and re-offers; a young offer is left alone; the last timeout leads to `no_match_found`; a sweep widens to 20 km and reaches a partner 15 km out with no owner call; accept against timeout over 6 staggered trials ends with exactly one winner each time (both orderings seen); and a deterministic run where the timeout commits while the accept waits on the job lock. Control: with the re-read in point 7 removed, that last section fails (HTTP 200 on a timed-out offer, job `assigned`).
+
+**Not done.** Jobs left in `requested` by a crash between creation and dispatch are not swept: `dispatch_job` relies on being the only writer of `requested`, and making it sweep-safe is its own change. The partner is not told that an offer timed out (it leaves their list). (`expires_at` is now on the offer payload and both clients count down from it; HANDOFF §21.)
+
+**Related fix (2026-11-17).** `job_status_history.changed_at` was written as `now()`, the transaction start, so a transition that waited on the job lock (for example a cancel behind an accept) sorted before the one it waited for. `create_status_history_row` now writes `clock_timestamp()`, the time of the write. No migration: the column default is untouched and every history row goes through that function. This makes principle 4's timeline trustworthy under the lock waits this ADR adds.

@@ -207,3 +207,31 @@ def test_total_counts_the_whole_history_not_the_page(repo):
     )
     assert result.total == 73
     assert len(result.items) == 1
+
+
+def test_history_rows_are_stamped_at_write_time_not_transaction_start():
+    """changed_at must be clock_timestamp(): now() is the transaction's start.
+
+    A cancel that started first but waited on the job lock behind an accept
+    would otherwise sort before the 'assigned' row it followed (found by
+    check_dispatch_race, 2026-11-17).
+    """
+    import asyncio as _asyncio
+    import uuid as _uuid
+
+    from app.repositories import job_repository as _repo
+
+    class _Session:
+        def __init__(self):
+            self.added = []
+
+        def add(self, obj):
+            self.added.append(obj)
+
+        async def flush(self):
+            pass
+
+    session = _Session()
+    entry = _asyncio.run(_repo.create_status_history_row(
+        session, job_id=_uuid.uuid4(), status="cancelled", note="x"))
+    assert getattr(entry.changed_at, "name", None) == "clock_timestamp"

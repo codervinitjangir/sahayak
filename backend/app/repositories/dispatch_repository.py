@@ -13,6 +13,7 @@ on shift, actually trained for this service, actually holding the equipment the
 service needs — and none of it is negotiable by a good score.
 """
 import uuid
+from datetime import datetime
 from typing import Iterable, Optional, Sequence
 
 from sqlalchemy import Row, and_, exists, func, select, text
@@ -429,6 +430,65 @@ async def mark_assignment_accepted(
     return assignment
 
 
+async def mark_assignment_timed_out(
+    db: AsyncSession, assignment: JobAssignment
+) -> JobAssignment:
+    """Stage an offer's expiry: nobody answered it in time (ADR-032).
+
+    responded_at is set even though the partner never responded. It records
+    when the offer stopped being open, which is what the column is read for
+    (time-to-answer, and the end of the window the partner had). A timed-out
+    row is told apart from a rejection by its status, and it counts as a
+    decided offer in the acceptance statistics, as 'rejected' does.
+    """
+    assignment.status = "timed_out"
+    assignment.responded_at = func.now()
+    await db.flush()
+    return assignment
+
+
+async def get_expired_offer_ids(
+    db: AsyncSession, *, offered_before: datetime, limit: int = 50
+) -> list[uuid.UUID]:
+    """Ids of open offers made before `offered_before` on jobs still matching.
+
+    The dispatch worker's work list. Lock-free and unordered beyond oldest
+    first: it is a candidate list, and every id is re-checked under the job's
+    row lock before anything is written (dispatch_service.expire_offer). The
+    bound keeps one sweep's work small; anything left is picked up next tick.
+    """
+    result = await db.execute(
+        select(JobAssignment.id)
+        .join(Job, Job.id == JobAssignment.job_id)
+        .where(
+            JobAssignment.status == "offered",
+            JobAssignment.offered_at < offered_before,
+            Job.status == OFFER_ANSWERABLE_JOB_STATUS,
+        )
+        .order_by(JobAssignment.offered_at)
+        .limit(limit)
+    )
+    return [row[0] for row in result.all()]
+
+
+async def get_searchable_job_ids(
+    db: AsyncSession, *, requested_after: datetime, limit: int = 50
+) -> list[uuid.UUID]:
+    """Ids of 'no_match_found' jobs whose search window is still open.
+
+    The worker's second work list (ADR-023 escalation, driven server-side by
+    ADR-032). Same rules as get_expired_offer_ids: a candidate list, re-checked
+    under the row lock before any write.
+    """
+    result = await db.execute(
+        select(Job.id)
+        .where(Job.status == "no_match_found", Job.requested_at > requested_after)
+        .order_by(Job.requested_at)
+        .limit(limit)
+    )
+    return [row[0] for row in result.all()]
+
+
 async def mark_assignment_rejected(
     db: AsyncSession, assignment: JobAssignment, rejection_reason: Optional[str]
 ) -> JobAssignment:
@@ -478,8 +538,9 @@ async def get_open_offers_for_partner(
     *assigned* partner, and an offered partner is not one yet.
 
     Ordered newest-offer-first so a partner app can render the list as it
-    arrives. Offers do not currently expire, so this is not "recent" in any
-    bounded sense — see the offer-timeout item in TASKS.md.
+    arrives. Offers expire: the dispatch worker marks an offer 'timed_out'
+    after OFFER_TTL_S (ADR-032), and from then on it is not listed here. Until
+    that write happens it is still listed and still answerable.
     """
     stmt = (
         select(

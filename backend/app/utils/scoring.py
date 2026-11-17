@@ -47,6 +47,14 @@ SEARCH_TIERS: tuple[tuple[int, float], ...] = (
 SEARCH_WINDOW_S: int = 600
 MAX_SEARCH_RADIUS_M: float = SEARCH_TIERS[-1][1]
 
+# How long one partner may hold an offer before the dispatch worker times it out
+# and asks the next (ADR-032). Long enough for a mechanic with their hands in an
+# engine to reach the phone after the push lands; short enough that a ten-minute
+# search window still gets through several partners one at a time. The offer is
+# answerable until the worker actually writes 'timed_out', so an accept can land
+# up to one worker interval after this; expiry is a write, not a clock check.
+OFFER_TTL_S: int = 60
+
 
 def search_radius_m(elapsed_s: float) -> float:
     """The radius a search should use for a job this old.
@@ -63,7 +71,7 @@ def search_radius_m(elapsed_s: float) -> float:
 
 
 def search_window_open(elapsed_s: float) -> bool:
-    """Whether an owner-triggered re-search may still run for a job this old."""
+    """Whether a re-search (owner-triggered or the worker's) may still run for a job this old."""
     return elapsed_s < SEARCH_WINDOW_S
 
 # Weights.

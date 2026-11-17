@@ -34,6 +34,7 @@ Backend (see `backend/.env.example` for the full list):
 | `CORS_ALLOWED_ORIGINS` | the web origin(s), comma-separated. **Not `*`** |
 | `SHARE_LINK_SECRET` | 32+ random bytes. Rotating it revokes every share link already sent |
 | `PUSH_ENABLED`, `EXPO_ACCESS_TOKEN` | `true`; token only with Expo enhanced push security |
+| `DISPATCH_WORKER_ENABLED`, `DISPATCH_WORKER_INTERVAL_S` | `true`, `15` (ADR-032). The worker runs in every API process; overlap is safe |
 
 Web build: `VITE_API_BASE_URL`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`,
 optional `VITE_ERROR_REPORT_URL`. `VITE_DEMO_MODE` and `VITE_PARTNER_API_MOCK` must be unset.

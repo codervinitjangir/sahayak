@@ -1,3 +1,5 @@
+import asyncio
+import contextlib
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -22,7 +24,7 @@ from app.config.redis_client import close_redis
 from app.config.settings import get_settings
 from app.middlewares.error_handlers import register_error_handlers
 from app.middlewares.request_id import RequestIdMiddleware
-from app.services import push_service
+from app.services import dispatch_worker, push_service
 from app.utils.logging import configure_logging, log_event
 
 configure_logging()
@@ -31,7 +33,20 @@ configure_logging()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     log_event("app_started", outcome="success")
+    settings = get_settings()
+    worker = None
+    if settings.DISPATCH_WORKER_ENABLED:
+        # ADR-032: offer timeouts and server-side search escalation.
+        worker = asyncio.create_task(
+            dispatch_worker.run_forever(settings.DISPATCH_WORKER_INTERVAL_S)
+        )
     yield
+    # Stop the worker first, so it cannot start a sweep (and stage pushes)
+    # after the push drain below has run.
+    if worker is not None:
+        worker.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await worker
     # Close the Redis pool on the way out. Not strictly required — the process
     # is ending — but an un-awaited connection produces a noisy "Task was
     # destroyed but it is pending" on shutdown, and a clean exit is worth more

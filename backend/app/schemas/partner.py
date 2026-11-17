@@ -271,6 +271,11 @@ class PartnerOfferItem(BaseModel):
     assignment_id: uuid.UUID
     job_id: uuid.UUID
     offered_at: datetime
+    # offered_at + OFFER_TTL_S (ADR-032): when the dispatch worker may time this
+    # offer out. For a countdown. The offer stays answerable until the worker
+    # writes 'timed_out', which can be up to one worker interval later, so a
+    # client should treat zero as "about to go", not as a refusal it can enforce.
+    expires_at: Optional[datetime] = None
     distance_at_offer_m: Optional[Decimal] = None
     estimated_arrival_min: Optional[int] = None
     assignment_rank: Optional[int] = None

@@ -30,8 +30,15 @@ at zero (ADR-018) — a query matching on a status that something downstream had
 already moved past.
 
   * accepted   -> accepted_at IS NOT NULL
-  * declined   -> responded_at IS NOT NULL AND accepted_at IS NULL
+  * timed_out  -> status = 'timed_out'
+  * declined   -> responded_at IS NOT NULL AND accepted_at IS NULL, not timed out
   * unanswered -> responded_at IS NULL
+
+`timed_out` is the one outcome read from the status column, and that is safe:
+the dispatch worker (ADR-032) writes it with responded_at set, and nothing
+afterwards moves a timed-out row (owner cancellation closes only 'offered'
+rows, job completion only 'accepted' ones). Without that bucket every timeout
+would read as a partner saying no, because its responded_at is set.
 
 **The window is applied to `jobs.requested_at`, never to the assignment.** An
 offer belongs to the window its job was requested in, so a job requested just
@@ -233,17 +240,17 @@ async def offer_outcomes(
 ) -> dict[str, Any]:
     """Every offer in the window, classified by what the partner did.
 
-    The three outcomes are mutually exclusive and exhaust the table, which is
+    The four outcomes are mutually exclusive and exhaust the table, which is
     asserted in the live harness rather than assumed here: accepted + declined +
-    unanswered must equal offers_total.
+    timed_out + unanswered must equal offers_total.
 
-    `unanswered` is reported separately rather than folded into the denominator
-    of one acceptance rate, because there is no offer-expiry mechanism in the
-    system (deliberately deferred). An unanswered offer is therefore not a
-    refusal — it is an offer that is still open, and will be open forever. A
-    single rate over all offers would read as "partners decline this often" when
-    the truth is "nobody has answered yet", so the service reports two rates and
-    names the difference.
+    `timed_out` and `unanswered` are reported separately rather than folded
+    into the denominator of one acceptance rate. Neither is a refusal: a
+    timed-out offer was never looked at in time (ADR-032), and an unanswered one
+    is still open or was closed by the owner cancelling first. A single rate
+    over all offers would read as "partners decline this often" when the truth
+    is "nobody answered", so the service reports two rates and names the
+    difference.
     """
     sql = f"""
         SELECT
@@ -251,8 +258,10 @@ async def offer_outcomes(
             count(DISTINCT a.job_id)                                AS jobs_offered,
             count(DISTINCT a.partner_id)                            AS partners_offered,
             count(*) FILTER (WHERE a.accepted_at IS NOT NULL)       AS accepted,
+            count(*) FILTER (WHERE a.status = 'timed_out')          AS timed_out,
             count(*) FILTER (
                 WHERE a.responded_at IS NOT NULL AND a.accepted_at IS NULL
+                  AND a.status <> 'timed_out'
             )                                                       AS declined,
             count(*) FILTER (WHERE a.responded_at IS NULL)          AS unanswered,
             count(*) FILTER (
