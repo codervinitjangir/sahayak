@@ -278,5 +278,348 @@
   "url": "https://commons.wikimedia.org/wiki/File:Honda_Unicorn_150.jpg",
   "license": "CC BY 2.0",
   "artist": "Vivek Patankar"
+ },
+ "tata-nexon": {
+  "article": "Tata Nexon",
+  "file": "File:Tata_Nexon_Blue_Dual_Tone.jpg",
+  "url": "https://commons.wikimedia.org/wiki/File:Tata_Nexon_Blue_Dual_Tone.jpg",
+  "license": "Public domain",
+  "artist": "Keithkberger"
+ },
+ "hero-xpulse-200": {
+  "article": "Hero XPulse 200",
+  "file": "File:Modified_Xpulse_200V.jpg",
+  "url": "https://commons.wikimedia.org/wiki/File:Modified_Xpulse_200V.jpg",
+  "license": "CC0",
+  "artist": "RUSTroot"
+ },
+ "hero-pleasure": {
+  "article": "Hero Honda Pleasure",
+  "file": "File:Hero_Honda_Pleasure_(side_view).jpg",
+  "url": "https://commons.wikimedia.org/wiki/File:Hero_Honda_Pleasure_(side_view).jpg",
+  "license": "CC BY-SA 2.0",
+  "artist": "David Brossard; cropped by Physikusin"
+ },
+ "honda-hornet-2-0": {
+  "article": "Honda CB600F",
+  "file": "File:Honda_CB600F_Hornet_2011.JPG",
+  "url": "https://commons.wikimedia.org/wiki/File:Honda_CB600F_Hornet_2011.JPG",
+  "license": "CC BY-SA 3.0",
+  "artist": "Sedimin"
+ },
+ "honda-cb350": {
+  "article": "Honda CB350",
+  "file": "File:Honda_350.jpg",
+  "url": "https://commons.wikimedia.org/wiki/File:Honda_350.jpg",
+  "license": "CC BY 4.0",
+  "artist": "Ken Downie"
+ },
+ "tvs-apache-rtr-160": {
+  "article": "TVS Apache",
+  "file": "File:Apache_rtr_310.jpg",
+  "url": "https://commons.wikimedia.org/wiki/File:Apache_rtr_310.jpg",
+  "license": "CC BY-SA 4.0",
+  "artist": "Crazyranga"
+ },
+ "tvs-ntorq-125": {
+  "article": "TVS Ntorq 125",
+  "file": "File:TVS_Ntorq_125_Race_XP.jpg",
+  "url": "https://commons.wikimedia.org/wiki/File:TVS_Ntorq_125_Race_XP.jpg",
+  "license": "CC BY-SA 4.0",
+  "artist": "MotorideSA"
+ },
+ "tvs-iqube": {
+  "article": "TVS Jupiter",
+  "file": "File:TVS_Jupiter.jpg",
+  "url": "https://commons.wikimedia.org/wiki/File:TVS_Jupiter.jpg",
+  "license": "CC BY 3.0",
+  "artist": "ADITYA MOTORIDE"
+ },
+ "royal-enfield-interceptor-650": {
+  "article": "Royal Enfield Interceptor 650",
+  "file": "File:Royal_Enfield_650_02.jpeg",
+  "url": "https://commons.wikimedia.org/wiki/File:Royal_Enfield_650_02.jpeg",
+  "license": "CC BY-SA 3.0 de",
+  "artist": "AxelKing"
+ },
+ "yamaha-fz-s": {
+  "article": "Yamaha MT-07",
+  "file": "File:Yamaha_MT-07_2025_EICMA_2024.jpg",
+  "url": "https://commons.wikimedia.org/wiki/File:Yamaha_MT-07_2025_EICMA_2024.jpg",
+  "license": "CC BY-SA 4.0",
+  "artist": "AVMOTO"
+ },
+ "yamaha-r15": {
+  "article": "Yamaha YZF-R15",
+  "file": "File:Yamaha_R15_V3.0.jpg",
+  "url": "https://commons.wikimedia.org/wiki/File:Yamaha_R15_V3.0.jpg",
+  "license": "CC BY-SA 4.0",
+  "artist": "Akshayanil919"
+ },
+ "yamaha-mt-15": {
+  "article": "Yamaha MT-15",
+  "file": "File:2018_Yamaha_MT-15.jpg",
+  "url": "https://commons.wikimedia.org/wiki/File:2018_Yamaha_MT-15.jpg",
+  "license": "CC BY-SA 4.0",
+  "artist": "Chanokchon"
+ },
+ "yamaha-fascino": {
+  "article": "Malaguti Password",
+  "file": "File:Malaguti_Password.jpg",
+  "url": "https://commons.wikimedia.org/wiki/File:Malaguti_Password.jpg",
+  "license": "CC BY-SA 4.0",
+  "artist": "Corvettec6r"
+ },
+ "suzuki-access-125": {
+  "article": "Suzuki Access 125",
+  "file": "File:Japan-Mobility-Show-2025-RuinDig_2481.jpg",
+  "url": "https://commons.wikimedia.org/wiki/File:Japan-Mobility-Show-2025-RuinDig_2481.jpg",
+  "license": "CC BY 4.0",
+  "artist": "RuinDig/Yuki Uchida"
+ },
+ "suzuki-burgman-street": {
+  "article": "Suzuki Burgman",
+  "file": "File:BURGMAN650_K6.JPG",
+  "url": "https://commons.wikimedia.org/wiki/File:BURGMAN650_K6.JPG",
+  "license": "CC BY-SA 2.0 de",
+  "artist": "\u00a92007 by MMcM\n\nOriginal uploader is MichaelMcMike at de.wikipedia"
+ },
+ "ktm-adventure-390": {
+  "article": "KTM 390 series",
+  "file": "File:Ktm_duke_390.jpg",
+  "url": "https://commons.wikimedia.org/wiki/File:Ktm_duke_390.jpg",
+  "license": "CC BY-SA 4.0",
+  "artist": "28pg"
+ },
+ "maruti-suzuki-baleno": {
+  "article": "Suzuki Baleno (2015)",
+  "file": "File:2017_Suzuki_Baleno_SZ3_Dualjet_1.2_Front.jpg",
+  "url": "https://commons.wikimedia.org/wiki/File:2017_Suzuki_Baleno_SZ3_Dualjet_1.2_Front.jpg",
+  "license": "CC BY-SA 4.0",
+  "artist": "Vauxford"
+ },
+ "maruti-suzuki-wagon-r": {
+  "article": "Maruti Suzuki Wagon R",
+  "file": "File:2018_Suzuki_Karimun_Wagon_R_GL_(front).jpg",
+  "url": "https://commons.wikimedia.org/wiki/File:2018_Suzuki_Karimun_Wagon_R_GL_(front).jpg",
+  "license": "CC BY-SA 4.0",
+  "artist": "Alex Neman"
+ },
+ "maruti-suzuki-alto-k10": {
+  "article": "Maruti Suzuki Alto",
+  "file": "File:Suzuki_Alto_800_GL_2011.jpg",
+  "url": "https://commons.wikimedia.org/wiki/File:Suzuki_Alto_800_GL_2011.jpg",
+  "license": "CC BY-SA 2.0",
+  "artist": "RL GNZLZ from Chile"
+ },
+ "maruti-suzuki-dzire": {
+  "article": "Suzuki Dzire",
+  "file": "File:Suzuki_Dzire_II_1.2_GLX_Hybrid_Arctic_White_Pearl.jpg",
+  "url": "https://commons.wikimedia.org/wiki/File:Suzuki_Dzire_II_1.2_GLX_Hybrid_Arctic_White_Pearl.jpg",
+  "license": "CC BY-SA 4.0",
+  "artist": "Ethan Llamas"
+ },
+ "maruti-suzuki-brezza": {
+  "article": "Suzuki Brezza",
+  "file": "File:2022_Maruti_Suzuki_Brezza_ZXi+_(India)_front_view_03.png",
+  "url": "https://commons.wikimedia.org/wiki/File:2022_Maruti_Suzuki_Brezza_ZXi%2B_(India)_front_view_03.png",
+  "license": "CC BY 3.0",
+  "artist": "DriveSpark"
+ },
+ "maruti-suzuki-ertiga": {
+  "article": "Suzuki Ertiga",
+  "file": "File:Suzuki_Ertiga_NC_FL_1.5_GLX_Hybrid_Snow_White_Pearl.jpg",
+  "url": "https://commons.wikimedia.org/wiki/File:Suzuki_Ertiga_NC_FL_1.5_GLX_Hybrid_Snow_White_Pearl.jpg",
+  "license": "CC BY-SA 4.0",
+  "artist": "Ethan Llamas"
+ },
+ "maruti-suzuki-celerio": {
+  "article": "Suzuki Celerio",
+  "file": "File:2021_Maruti_Suzuki_Celerio_ZXi_(India)_front_view_02.png",
+  "url": "https://commons.wikimedia.org/wiki/File:2021_Maruti_Suzuki_Celerio_ZXi_(India)_front_view_02.png",
+  "license": "CC BY 3.0",
+  "artist": "Exhibit Magazine"
+ },
+ "maruti-suzuki-fronx": {
+  "article": "Suzuki Fronx",
+  "file": "File:2024_Suzuki_Fronx.jpg",
+  "url": "https://commons.wikimedia.org/wiki/File:2024_Suzuki_Fronx.jpg",
+  "license": "CC0",
+  "artist": "TTTNIS"
+ },
+ "maruti-suzuki-grand-vitara": {
+  "article": "Suzuki Vitara",
+  "file": "File:2018_Suzuki_Vitara_(LY)_S_Turbo_wagon_(2018-11-02)_01.jpg",
+  "url": "https://commons.wikimedia.org/wiki/File:2018_Suzuki_Vitara_(LY)_S_Turbo_wagon_(2018-11-02)_01.jpg",
+  "license": "CC BY-SA 4.0",
+  "artist": "EurovisionNim"
+ },
+ "hyundai-exter": {
+  "article": "Hyundai Exter",
+  "file": "File:2023_Hyundai_Exter_SX_(O).png",
+  "url": "https://commons.wikimedia.org/wiki/File:2023_Hyundai_Exter_SX_(O).png",
+  "license": "CC BY 3.0",
+  "artist": "Connect2Sam"
+ },
+ "hyundai-aura": {
+  "article": "Hyundai Aura",
+  "file": "File:Hyundai_Grand_i10_Sedan_2022_(53703857804)_(cropped).jpg",
+  "url": "https://commons.wikimedia.org/wiki/File:Hyundai_Grand_i10_Sedan_2022_(53703857804)_(cropped).jpg",
+  "license": "CC BY-SA 2.0",
+  "artist": "RL GNZLZ from Chile"
+ },
+ "hyundai-alcazar": {
+  "article": "Hyundai Alcazar",
+  "file": "File:2021_Hyundai_Alcazar_2.0_Signature_(India)_front_view.png",
+  "url": "https://commons.wikimedia.org/wiki/File:2021_Hyundai_Alcazar_2.0_Signature_(India)_front_view.png",
+  "license": "CC BY 3.0",
+  "artist": "Hindi DriveSpark"
+ },
+ "tata-punch": {
+  "article": "Tata Punch",
+  "file": "File:2021_Tata_Punch_Creative_(India)_front_view_01.png",
+  "url": "https://commons.wikimedia.org/wiki/File:2021_Tata_Punch_Creative_(India)_front_view_01.png",
+  "license": "CC BY 3.0",
+  "artist": "Athira Murali"
+ },
+ "tata-tiago": {
+  "article": "Tata Tiago",
+  "file": "File:2022_Tata_Tiago_XZA+_front_20230512.jpg",
+  "url": "https://commons.wikimedia.org/wiki/File:2022_Tata_Tiago_XZA%2B_front_20230512.jpg",
+  "license": "CC BY-SA 4.0",
+  "artist": "Dairokkan9"
+ },
+ "tata-altroz": {
+  "article": "Tata Altroz",
+  "file": "File:Tata_Altroz_front_20230617.jpg",
+  "url": "https://commons.wikimedia.org/wiki/File:Tata_Altroz_front_20230617.jpg",
+  "license": "CC BY-SA 4.0",
+  "artist": "Dairokkan9"
+ },
+ "tata-harrier": {
+  "article": "Tata Harrier",
+  "file": "File:Tata_Buzzard_Sport,_GIMS_2019,_Le_Grand-Saconnex_(GIMS0651).jpg",
+  "url": "https://commons.wikimedia.org/wiki/File:Tata_Buzzard_Sport,_GIMS_2019,_Le_Grand-Saconnex_(GIMS0651).jpg",
+  "license": "CC BY-SA 4.0",
+  "artist": "Matti Blume"
+ },
+ "tata-safari": {
+  "article": "Tata Safari",
+  "file": "File:Tata_Safari_II_front_-_PSM_2009.jpg",
+  "url": "https://commons.wikimedia.org/wiki/File:Tata_Safari_II_front_-_PSM_2009.jpg",
+  "license": "CC BY-SA 3.0",
+  "artist": "Michge"
+ },
+ "mahindra-xuv-3xo": {
+  "article": "Mahindra XUV 3XO",
+  "file": "File:2025_Mahindra_XUV_3XO_AX7L_front.jpg",
+  "url": "https://commons.wikimedia.org/wiki/File:2025_Mahindra_XUV_3XO_AX7L_front.jpg",
+  "license": "CC BY-SA 4.0",
+  "artist": "LuvsMG481"
+ },
+ "mahindra-scorpio-classic": {
+  "article": "Mahindra Scorpio",
+  "file": "File:Mahindra_Scorpio_GLX_2.6_m-Hawk_2011_(36756517492).jpg",
+  "url": "https://commons.wikimedia.org/wiki/File:Mahindra_Scorpio_GLX_2.6_m-Hawk_2011_(36756517492).jpg",
+  "license": "CC BY-SA 2.0",
+  "artist": "RL GNZLZ from Chile"
+ },
+ "kia-seltos": {
+  "article": "Kia Seltos",
+  "file": "File:Kia_Seltos_SP2_PE_Snow_White_Pearl_(17)_(cropped).jpg",
+  "url": "https://commons.wikimedia.org/wiki/File:Kia_Seltos_SP2_PE_Snow_White_Pearl_(17)_(cropped).jpg",
+  "license": "CC BY-SA 4.0",
+  "artist": "Damian B Oh"
+ },
+ "kia-sonet": {
+  "article": "Kia Sonet",
+  "file": "File:2021_Kia_Sonet_1.5_Premiere_(Indonesia)_front_view_03.jpg",
+  "url": "https://commons.wikimedia.org/wiki/File:2021_Kia_Sonet_1.5_Premiere_(Indonesia)_front_view_03.jpg",
+  "license": "CC BY-SA 4.0",
+  "artist": "Andra Febrian"
+ },
+ "kia-carens": {
+  "article": "Kia Carens",
+  "file": "File:2016_Kia_Rondo_LX_Value_in_Sterling_Metallic,_Front_Right,_05-18-2023.jpg",
+  "url": "https://commons.wikimedia.org/wiki/File:2016_Kia_Rondo_LX_Value_in_Sterling_Metallic,_Front_Right,_05-18-2023.jpg",
+  "license": "CC BY-SA 4.0",
+  "artist": "Elise240SX"
+ },
+ "kia-carnival": {
+  "article": "Kia Carnival",
+  "file": "File:2025_Kia_Carnival_Hybrid_EX,_front_right,_10-12-2025.jpg",
+  "url": "https://commons.wikimedia.org/wiki/File:2025_Kia_Carnival_Hybrid_EX,_front_right,_10-12-2025.jpg",
+  "license": "CC BY-SA 4.0",
+  "artist": "MercurySable99"
+ },
+ "toyota-innova-crysta": {
+  "article": "Toyota Innova",
+  "file": "File:Toyota_Innova_Zenix_2.0_V_(III)_\u2013_f_22032025.jpg",
+  "url": "https://commons.wikimedia.org/wiki/File:Toyota_Innova_Zenix_2.0_V_(III)_%E2%80%93_f_22032025.jpg",
+  "license": "CC BY-SA 3.0 de",
+  "artist": "\u00a9 M 93"
+ },
+ "toyota-innova-hycross": {
+  "article": "Toyota Innova",
+  "file": "File:Toyota_Innova_Zenix_2.0_V_(III)_\u2013_f_22032025.jpg",
+  "url": "https://commons.wikimedia.org/wiki/File:Toyota_Innova_Zenix_2.0_V_(III)_%E2%80%93_f_22032025.jpg",
+  "license": "CC BY-SA 3.0 de",
+  "artist": "\u00a9 M 93"
+ },
+ "honda-elevate": {
+  "article": "Honda Elevate",
+  "file": "File:2026_Honda_WR-V_Prestige_(Colombia)_front_view.jpg",
+  "url": "https://commons.wikimedia.org/wiki/File:2026_Honda_WR-V_Prestige_(Colombia)_front_view.jpg",
+  "license": "CC BY 3.0",
+  "artist": "Autosdeprimera"
+ },
+ "mg-zs-ev": {
+  "article": "MG ZS (crossover)",
+  "file": "File:MG_ZS_(crossover,_second_generation)_DSC_8542.jpg",
+  "url": "https://commons.wikimedia.org/wiki/File:MG_ZS_(crossover,_second_generation)_DSC_8542.jpg",
+  "license": "CC BY-SA 4.0",
+  "artist": "Alexander Migl"
+ },
+ "mg-comet-ev": {
+  "article": "Wuling Air EV",
+  "file": "File:2023_Wuling_Air_EV_Standard_Range.jpg",
+  "url": "https://commons.wikimedia.org/wiki/File:2023_Wuling_Air_EV_Standard_Range.jpg",
+  "license": "CC BY-SA 4.0",
+  "artist": "Chanokchon"
+ },
+ "mg-windsor-ev": {
+  "article": "Baojun Yunduo",
+  "file": "File:Baojun_Yunduo_010.jpg",
+  "url": "https://commons.wikimedia.org/wiki/File:Baojun_Yunduo_010.jpg",
+  "license": "CC0",
+  "artist": "JustAnotherCarDesigner"
+ },
+ "renault-kwid": {
+  "article": "Renault Kwid",
+  "file": "File:2023_Renault_Kwid_Iconic_(Colombia)_front_view_01.png",
+  "url": "https://commons.wikimedia.org/wiki/File:2023_Renault_Kwid_Iconic_(Colombia)_front_view_01.png",
+  "license": "CC BY 3.0",
+  "artist": "Autosdeprimera"
+ },
+ "renault-kiger": {
+  "article": "Renault Kiger",
+  "file": "File:Renault_Kiger_front_20230602.jpg",
+  "url": "https://commons.wikimedia.org/wiki/File:Renault_Kiger_front_20230602.jpg",
+  "license": "CC BY-SA 4.0",
+  "artist": "Dairokkan9"
+ },
+ "renault-triber": {
+  "article": "Renault Triber",
+  "file": "File:2021_Renault_Triber_RXZ_(Indonesia)_front_view.jpg",
+  "url": "https://commons.wikimedia.org/wiki/File:2021_Renault_Triber_RXZ_(Indonesia)_front_view.jpg",
+  "license": "CC BY-SA 4.0",
+  "artist": "Andra Febrian"
+ },
+ "nissan-magnite": {
+  "article": "Nissan Magnite",
+  "file": "File:Nissan_Magnite_2025_1.0_Exclusive_at_WTC_Montevideo_-_04.jpg",
+  "url": "https://commons.wikimedia.org/wiki/File:Nissan_Magnite_2025_1.0_Exclusive_at_WTC_Montevideo_-_04.jpg",
+  "license": "CC BY-SA 4.0",
+  "artist": "NaBUru38"
  }
 }
