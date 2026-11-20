@@ -1405,3 +1405,60 @@ Consequence for callers: a partner whose offer was cancelled before they accepte
 - **The "business" card is withdrawn.** B2B stays in `docs/FUTURE-ROADMAP.md` only, until it has its own panel. That supersedes point 5 above.
 
 The endpoints now take `get_current_identity` instead of `require_user`. The side comes from the verified role. A feature from the other side's list is a 400 `INVALID_FEATURE` (a new registry code), and admins get a 403. Clients key the cached list by side, because one login can hold both profiles (ADR-034).
+
+---
+
+# ADR-036: Abandoned jobs are closed by the worker or dropped from the live view
+
+**Date.** 2026-11-20. **Status.** Accepted. Closes ADR-032's "Not done" item on jobs left in `requested`.
+
+**Context.** Nothing cancelled a job on a clock. Two kinds sat on the admin board and in the stuck-jobs alert forever: jobs left in `requested` (two from 2026-09-15, raised before dispatch was wired) and `no_match_found` jobs whose ten-minute search had ended. The team asked whether jobs auto-cancel. They did not.
+
+**Decision.**
+1. **`requested` for `ORPHAN_REQUESTED_S` (5 min) → cancelled by the dispatch worker.** `dispatch_job` runs inside the request that creates the job, in milliseconds, so a job still `requested` after five minutes means that process died between the two steps. Nothing else will ever move it, and the owner's app shows "searching". The worker's third work list reads the candidates without a lock; `dispatch_service.expire_orphaned_request` locks the job, re-checks status and age, then writes the cancel (`cancellation_reason = "Expired: the search never started"`), its history row and the owner's notification in one commit. The five-minute margin is what makes this safe against `dispatch_job`, which reads without a lock.
+2. **A new actor, `"system"`, and event `job_expired`** ("Your request could not be started. Please request help again."). It goes to the owner only. Reusing `job_cancelled_by_partner` (what `actor_role=None` resolved to) would tell an owner that a partner who never existed cancelled.
+3. **`no_match_found` is not rewritten.** It is an outcome the analytics count (ADR-021). Rewriting it to `cancelled` would move ended searches out of the no-match rate. Both clients already show it as ended once the window closes. Instead, the admin "live" board and the stuck-jobs alert ignore a `no_match_found` job raised more than `NO_MATCH_LIVE_FOR_S` (1 h) ago. Filtering the board on `no_match_found` still shows all of them.
+4. **Jobs that have a partner (`assigned`, `partner_en_route`, `in_progress`) are never auto-cancelled.** A real person may be on the road. They stay in the alert for staff to act on.
+
+**Rejected.** A new terminal status `expired`: a schema change, plus a new branch in every client and every analytics query, for a case that happens after a crash.
+
+**Tests.** `tests/unit/test_abandoned_jobs.py` (7); `test_every_message_is_reachable` failed until `job_expired` was registered. Applied to production on 2026-11-20 to `1cadc5c7` and `fb907e38` through the same function.
+
+---
+
+# ADR-037: Client crash reports go to the server log; uptime is a scheduled GitHub check
+
+**Date.** 2026-11-20. **Status.** Accepted.
+
+**Context.** Mobile had no crash reporting. Web's error boundary could post to `VITE_ERROR_REPORT_URL`, but it was unset, so in practice nothing reported. Sentry and a hosted uptime monitor each need an account the team does not have yet.
+
+**Decision.**
+1. **`POST /api/v1/client-errors`**: unauthenticated (a crash can come before sign-in or from a broken session), 10 per minute per address (`rate_limit.check`), every field length-capped, unknown fields refused (422), `platform` one of web/android/ios. Each report becomes one `client_error` ERROR log line, with the path cut at `?` and `#` because a query string can carry a share token. Nothing is stored. No user id, phone or token is accepted.
+2. Mobile reports from the root error boundary and from React Native's global handler (`src/services/errorReport.ts`), at most once per message every 30 s. Web reports there by default; `VITE_ERROR_REPORT_URL` still overrides. The web body now matches the schema (it used camelCase and an `at` field, which the endpoint would refuse), and a failed send no longer becomes an unhandled rejection.
+3. **Uptime**: `.github/workflows/uptime.yml` checks `/health` every 10 minutes (and `WEB_URL` if set). It fails unless the database reports connected. A failed run is the alert (GitHub's Actions email). It also keeps Render's free instance awake.
+
+**Rejected.** Storing reports in Postgres: a public write path into the production database, for data the logs already hold. Sentry now: needs an account. Swapping it in later is a client-only change.
+
+**Consequences.** Reports are only as durable as Render's log retention. Scheduled GitHub runs can be delayed under load and stop after 60 days without repository activity.
+
+---
+
+# ADR-038: Partner documents live in a private bucket; staff review them, and verification waits on them
+
+**Date.** 2026-11-20. **Status.** Accepted. Closes G4.
+
+**Context.** Partners were verified on a phone call. `partner_documents` had existed since the first schema but nothing wrote to it. A towing partner could only be enabled by inserting a `partner_equipment` row by hand. On 2026-11-20 the team settled the three open questions: (1) yes to a private Supabase Storage bucket; (2) every partner uploads a driving licence and a government photo ID, and a towing partner also uploads the tow vehicle's RC and a photo of the tow equipment; (3) files are kept while the account exists and deleted 90 days after rejection or removal; only ops and super admin may open them, and every view is audited.
+
+**Decision.**
+1. **Storage.** Bucket `partner-documents`: private, 5 MB per file, JPEG/PNG/WebP/PDF only (created 2026-11-20). Only the backend holds a key (`SUPABASE_SECRET_KEY`, `app/utils/storage.py`). Upload is three steps: `POST /partners/me/documents` creates an unconfirmed row and returns a signed upload URL for exactly one object, `{partner_id}/{document_id}.{ext}` (no user text in the path). The client PUTs the file to that URL. `POST .../{id}/confirm` checks the object exists before the row counts. `file_url` holds the object path and stays NULL until confirmation.
+2. **One document per type.** A confirmed upload replaces the earlier one of its type: the old row and file are deleted, enforced by a partial unique index. This is how a rejected document is re-sent.
+3. **The partner never gets a file back**, only status and the rejection reason. Staff get a 60-second signed URL from `GET /admin/partners/{id}/documents/{doc}/view`, behind the new `documents` staff area (super_admin, ops). Each view writes `partner_document_viewed` to the audit log in the same commit. `PATCH .../documents/{doc}` approves or rejects (a reason is required, and the partner sees it), with an optional expiry date. It is audited.
+4. **Verification gate.** `PATCH /admin/partners/{id}/verify` to `verified` returns 409 `PARTNER_DOCUMENTS_INCOMPLETE` unless every required document is approved. Partners verified before this ADR keep their status, because the gate applies only to the transition.
+5. **Towing.** "Needs tow documents" means the partner offers a service with `requires_vehicle_equipment`. When both tow documents are approved, the partner gets one verified `partner_equipment` row (`tow_vehicle`, with the RC number the partner typed, normalised). That row is what dispatch already checks (ADR-009). A rejected tow document sets it back to rejected.
+6. **Retention.** Rejecting a partner sets `retain_until = now + 90 days` on their documents, and verifying again clears it. An hourly loop beside the dispatch worker (`document_retention.py`) deletes files and then rows past `retain_until`, plus uploads started and never confirmed after a day. It also marks approved documents past their expiry date `expired`.
+
+**Rejected.** Client uploads with a Supabase user session and storage RLS: it would make the bucket's policy the access control, outside the service layer and its tests. Base64 through the API: it puts 5 MB bodies on the dispatch process.
+
+**Not done.** An expired document does not un-verify the partner; staff see it on the review dialog. No reminder before expiry. Partner account deletion does not exist yet (G10). When it is built, it must set `retain_until`.
+
+**Tests.** `tests/unit/test_partner_documents.py` (11), `test_admin_partner_verification.py` (+2). `tests/integration/check_partner_documents.py` (33, range 85x) runs against the real bucket: refusals, signed upload, replacement deleting the old file, role gate (support and finance get 403), the exact bytes served by the view link, public read refused, the verification gate, tow equipment, and the sweep deleting files. `check_admin_ops` and `check_admin_partners` now seed approved documents before verifying, and assert the 409 without them.

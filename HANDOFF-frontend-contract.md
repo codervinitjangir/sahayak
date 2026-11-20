@@ -2434,3 +2434,27 @@ POST is idempotent (200 every time). Any other `feature` value, or an extra fiel
   - Owner home (web and mobile).
   - Web partner dashboard, as a full-width card under the bento grid.
   - Mobile partner Home tab, under "Your standing".
+
+## 23. Abandoned jobs, crash reports, partner documents (ADR-036/037/038, 2026-11-20)
+
+Both clients are already updated in this pass. This section is the record.
+
+**Jobs (ADR-036).**
+- A job stuck in `requested` for 5 minutes is cancelled by the server. `cancellation_reason` is `"Expired: the search never started"`, and the owner gets the new notification event **`job_expired`** (push title "Request expired"). Render it like any cancelled job.
+- A `no_match_found` job is no longer "live" on the admin board an hour after it was raised. Its status does not change.
+
+**`POST /api/v1/client-errors` (ADR-037).** Unauthenticated, 10/min per address, 202 `{accepted: true}`. Body: `platform` (`web|android|ios`, required), `message` (required, ≤2000), optional `stack` (≤4000), `component_stack` (≤2000), `path` (≤300, query string stripped), `app_version` (≤40), `user_agent` (≤300). Unknown fields → 422. Send no user id, phone or token.
+
+**Partner documents (ADR-038).**
+| Call | Who | Notes |
+|---|---|---|
+| `GET /partners/me/documents` | partner | `{required: DocType[], documents: [{doc_type, status: missing\|pending\|approved\|rejected\|expired, document_id, rejection_reason, expiry_date, uploaded_at}], complete}` |
+| `POST /partners/me/documents` `{doc_type, content_type, reference_number?}` | partner | 201 `{document_id, upload_url, max_bytes}`. `content_type` ∈ jpeg/png/webp/pdf. `reference_number` is required for `tow_vehicle_rc`. 400 `DOCUMENT_NOT_REQUIRED` for tow docs from a non-towing partner. 503 `DOCUMENT_STORAGE_UNAVAILABLE` |
+| `PUT {upload_url}` | partner | Raw file body, `Content-Type` as declared, ≤5 MB. Goes straight to Storage, with no auth header |
+| `POST /partners/me/documents/{id}/confirm` | partner | Returns the checklist. 409 `DOCUMENT_NOT_UPLOADED` if the PUT has not landed. 404 `DOCUMENT_NOT_FOUND` for an id that isn't yours. Replaces any earlier document of that type |
+| `GET /admin/partners/{id}/documents/{doc}/view` | ops, super_admin | `{url, expires_in: 60}`. Audited on every call. Open it at once |
+| `PATCH /admin/partners/{id}/documents/{doc}` `{status: approved\|rejected, reason?, expiry_date?}` | ops, super_admin | `reason` is required for a rejection |
+| `GET /admin/partners/{id}` | admin | Adds `documents_required`, `documents_complete`, and `documents[].reference_number`. Unconfirmed uploads are not listed |
+| `PATCH /admin/partners/{id}/verify` → `verified` | ops, super_admin | **New 409 `PARTNER_DOCUMENTS_INCOMPLETE`** until every required document is approved |
+
+DocType: `driving_licence`, `photo_id`, plus `tow_vehicle_rc` and `tow_equipment_photo` for partners offering towing.

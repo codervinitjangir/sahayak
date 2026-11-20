@@ -18,8 +18,8 @@ has moved: those items need a person. See section F for what this pass did not d
 | Race and concurrency protections | Done. 17 of 17 live harnesses green, 906 checks (N1 closed) |
 | Launch readiness | About 45%. Code hygiene moved; every section A item is still open |
 
-Verified on 2026-11-14 (third pass): backend 598 unit tests, web 145, mobile 39 (12 component); live harnesses not re-run in the third pass. Earlier: live harnesses as above.
-Not verified: any physical phone (mobile was run through its web target only).
+Verified on 2026-11-20: backend 661 unit tests, web 162, mobile 76; live harnesses: see section H.
+Physical device: the owner and partner flows ran on one Android phone (2026-11-15 to 11-18). No iPhone yet. The 2026-11-20 additions (document upload, crash reporting) need a new APK build and have not run on a phone.
 
 ---
 
@@ -51,7 +51,7 @@ Not verified: any physical phone (mobile was run through its web target only).
 ### Product gaps
 
 - [ ] G3 Partner payouts, tax invoices, refunds and disputes (payments C-E), after the money decision
-- [ ] G4 Partner documents and equipment upload with staff review (waiting on three decisions, section E). Towing partners can only be enabled by direct database edit today
+- [x] G4 Partner documents with staff review (2026-11-20, ADR-038): private bucket, licence + photo ID (+ tow RC and equipment photo for towing), verify blocked until approved, tow equipment verified from the documents, 90-day retention after rejection. Not done: expiry reminders; an expired document does not un-verify the partner
 - [ ] G6 Hindi and Kannada (English only today)
 - [ ] G11 Offline-tolerant request queue for poor highway signal
 - [ ] R8 Payments hardening, remainder: payment gateway, signature-checked webhooks, integer paise, duplicate and out-of-order tests. Done so far: server-side amount, partner/admin-only confirm, idempotent confirm
@@ -62,16 +62,16 @@ Not verified: any physical phone (mobile was run through its web target only).
 - [~] E4 `backend/tests/smoke/smoke_e2e.py` drives one job from request to rating over real HTTP with two Supabase test numbers. **Not yet seen passing**: run locally it signed the owner number in and then Supabase refused the partner test number (HTTP 403), so everything after sign-in is unverified. It needs the two test numbers set up as its docstring says
 - [~] E5 Runbook written (`docs/DEPLOYMENT.md`: environments, secrets, release checklist, rollback). CORS is now configuration (`CORS_ALLOWED_ORIGINS`) and `backend/.dockerignore` keeps `.env` out of the image. No staging environment exists yet: that needs accounts
 - [~] E6 `scripts/restore_db.sh` added (refuses to target the live database). No backup schedule and no drill has been run
-- [~] E7 Admin alerts endpoint only. No uptime monitor, log alerting or status page
+- [~] E7 Admin alerts endpoint, plus `.github/workflows/uptime.yml` checking `/health` (database included) every 10 min (ADR-037; set repo variable `WEB_URL` to check the web origin too). It starts once pushed. No log alerting or status page
 - [x] E8 `HANDOFF-frontend-contract.md` section 19 and a changes table in `docs/FRONTEND-GUIDE.md`. **Adarsh has not been told**: that is yours to do
 
 ### Mobile and web launch items
 
 - [ ] Store assets: screenshots, iOS privacy-nutrition labels, Android data-safety form, listing copy, EAS build profiles and signing
-- [~] Crash and error reporting: web has a root error boundary that can POST crashes to `VITE_ERROR_REPORT_URL` (unset by default). Mobile has none. Sentry and analytics need an account
+- [x] Crash reporting (2026-11-20, ADR-037): web and mobile post to `POST /api/v1/client-errors`, logged as `client_error` on the server; no vendor needed. Sentry and analytics remain optional
 - [ ] Replace stock photographs in the web landing collage (they show people who are not Sahayak partners)
 - [~] SEO basics: `robots.txt` and `sitemap.xml` added with the placeholder domain (R1). No social preview image
-- [ ] Uptime monitoring on web (the error boundary is done, see above)
+- [~] Uptime monitoring: the workflow is written (E7); set `WEB_URL` once the web is deployed
 - [ ] Re-check `npx expo install --check` before each store build
 
 ---
@@ -105,7 +105,6 @@ Recorded 2026-11-14 at the end of the second pass. None of these has any code ye
 
 | Item | What it is waiting for | First step when picked up |
 |---|---|---|
-| G4 Partner document upload and staff review | Three decisions from you: (1) OK to create a private storage bucket in the Supabase project; (2) which documents are required per category (licence, ID, vehicle RC, tow equipment proof); (3) how long identity documents are kept and who may view them | An ADR, then signed upload URLs from the backend, a review queue beside partner verification, and expiry reminders. Auth and privacy: full regression |
 | G6 Hindi and Kannada | A native speaker to review each language. Machine-only translation of emergency instructions is not acceptable | Move every string in web and mobile into translation files (English first, no behaviour change), then add the two languages |
 | G11 Offline-tolerant request queue | A physical device: it cannot be verified in a browser | Mobile only. Queue the request locally with its idempotency key and send when signal returns; the backend already de-duplicates on that key |
 | Payments back office, gateway, webhooks, integer paise | G3: who holds the money, and CA sign-off | Blocked until then |
@@ -114,10 +113,10 @@ Recorded 2026-11-14 at the end of the second pass. None of these has any code ye
 
 ## F. Loose ends from the second pass
 
-- **Smoke test not yet seen passing.** `backend/tests/smoke/smoke_e2e.py` signed the owner test number in, then Supabase refused the partner number `+919000000902` with HTTP 403. Check that both numbers are listed under Authentication > Phone > Test phone numbers with the OTP the guide gives, that the partner account still exists and is verified (a harness run deleted the hand-made one earlier, see N2), then run it again.
+- **Smoke test not yet seen passing.** Re-checked 2026-11-20: both accounts exist, are linked, and the partner is verified; `+919000000901` signs in with OTP 123456 but `+919000000902` gets `otp_expired`, so it is **not** in Supabase's test phone numbers (Authentication > Sign In / Providers > Phone > Test OTP). Add `919000000902=123456` there. Earlier: `backend/tests/smoke/smoke_e2e.py` signed the owner test number in, then Supabase refused the partner number `+919000000902` with HTTP 403. Check that both numbers are listed under Authentication > Phone > Test phone numbers with the OTP the guide gives, that the partner account still exists and is verified (a harness run deleted the hand-made one earlier, see N2), then run it again.
 - **Adarsh has not been told** about `HANDOFF-frontend-contract.md` sections 19 to 19.4. Two changes can break a client that assumes otherwise: an owner's job can go from assigned back to matching, and a partner with only an offer no longer receives owner details from `GET /jobs/{id}`.
 - **Staff roles now gate writes.** Changing prices and recording a refund need finance or super admin; partner verification and owner suspension need ops or super admin. The one linked admin today is a super admin. The unlinked `ops` row has no sign-in.
-- **Two stale live jobs** in the shared database (`1cadc5c7`, `fb907e38`) are still there and show as stuck on the alerts line. Cancel them from the Jobs board or leave them; I did not touch them.
+- [x] **Two stale live jobs** (`1cadc5c7`, `fb907e38`, stuck in `requested` since 2026-09-15) cancelled on 2026-11-20 through the new worker path (ADR-036). Jobs stuck in `requested` now cancel themselves after 5 min; ended `no_match_found` searches leave the live board after an hour.
 - [x] **Push deliveries bounded** (third pass): one at a time, backlog capped at 500, overflow logged as `push_dropped` (ADR-026 amendment 2).
 - **Committed in the third pass** along with E3: the `@expo/ngrok` dev dependency (it shared `mobile/package.json`). Still not committed: `mobile/expo-qr.png`, `.claude/`. Nothing is pushed.
 
@@ -126,12 +125,25 @@ Recorded 2026-11-14 at the end of the second pass. None of these has any code ye
 
 ## G. Next steps, in order
 
-1. Tell Adarsh about HANDOFF section 19 to 19.4.
+1. Tell Adarsh about HANDOFF sections 19 to 23.
 2. R1, R2, R3: real contact details and UPI ID, rotate the Maps key, lawyer review. No code, long lead time.
 3. Fix the two smoke-test numbers and get `smoke_e2e.py` passing once.
 4. Create the staging environment, take the first backup and run one restore drill (`docs/DEPLOYMENT.md`).
 5. R5 and G2 in one device session; that also closes N6.
 6. An uptime monitor on `/health` and the web origin, and crash reporting for mobile.
-7. Answer the three G4 questions in section E, then build G4.
+7. Rebuild the APK (document upload needs the new image-picker native module) and test G4 on a phone.
 8. G6 once a reviewer is available, then G11 on a device.
 9. G3 when the money decision is made, then the payments back office.
+
+## H. 2026-11-20 pass: abandoned jobs, crash reporting, uptime, partner documents
+
+Built: ADR-036 (worker cancels jobs stuck in `requested`; old `no_match_found` leaves the live board), ADR-037 (`POST /client-errors` from both apps; `uptime.yml`), ADR-038 (G4 partner documents, private bucket `partner-documents`, migration `0013` applied to production). HANDOFF section 23.
+
+Regression: backend 661 unit, web 162, mobile 76, all passing. Live: 971 of 973 checks across nineteen harnesses (new: `check_partner_documents` 33). The two failures are in `check_admin_analytics` (98/100): it counts live work across the whole database, and a real job (`1123e9be`, partner `+919000000902`, en route since 13:15 UTC on 11-20) was live during the run. Not a code regression. Re-run once that job is finished. `check_notifications` first refused to start because of the two `job_expired` rows from cancelling the stale jobs (removed). Then it failed its event-vocabulary check until `job_expired` was added to it. 79/79 after that.
+
+Still open from this pass:
+- **Rebuild the APK.** Document upload uses `expo-image-picker` (a new native module) and crash reporting is new JS. The APK from 2026-11-18 has neither. No phone was connected on 11-20.
+- **Add `919000000902=123456`** to Supabase test phone numbers, then run `smoke_e2e.py`.
+- **Push to GitHub** so `uptime.yml` and Render pick up this work. Nothing is committed yet.
+- Render must have `SUPABASE_SECRET_KEY` set, or document upload answers 503.
+- R2: maps no longer use a key (ADR-031), but the old key in git history should still be deleted in Google Cloud.
