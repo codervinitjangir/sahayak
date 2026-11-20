@@ -32,6 +32,8 @@ Backend (see `backend/.env.example` for the full list):
 | `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY` | the production project's |
 | `REDIS_URL` | production Redis |
 | `CORS_ALLOWED_ORIGINS` | the web origin(s), comma-separated. **Not `*`** |
+| `API_DOCS_ENABLED` | `false` (hides `/docs`, `/redoc` and `/openapi.json`; on in local development) |
+| `STAFF_ALERT_WEBHOOK_URL`, `STAFF_ALERT_REPEAT_MIN` | the staff channel's incoming-webhook URL (Slack, Google Chat or Discord), `60`. Blank turns staff alerts off (ADR-047) |
 | `SHARE_LINK_SECRET` | 32+ random bytes. Rotating it revokes every share link already sent |
 | `PUSH_ENABLED`, `EXPO_ACCESS_TOKEN` | `true`; token only with Expo enhanced push security |
 | `DISPATCH_WORKER_ENABLED`, `DISPATCH_WORKER_INTERVAL_S` | `true`, `15` (ADR-032). The worker runs in every API process; overlap is safe |

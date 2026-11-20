@@ -5,7 +5,9 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-DisputeReason = Literal["overcharged", "service_not_done", "partner_behaviour", "damage", "other"]
+DisputeReason = Literal[
+    "overcharged", "service_not_done", "partner_behaviour", "damage", "off_app_payment", "other"
+]
 DisputeStatus = Literal["open", "resolved", "rejected", "refunded"]
 DisputeResolution = Literal["resolved", "rejected", "refunded"]
 

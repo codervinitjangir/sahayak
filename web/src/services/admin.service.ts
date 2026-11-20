@@ -163,6 +163,22 @@ export interface AdminAlert {
   message: string;
   count: number;
   job_ids: string[];
+  /** ADR-043 partner flags: the partners to review. */
+  partner_ids?: string[];
+}
+
+export type DisputeReason = 'overcharged' | 'service_not_done' | 'partner_behaviour' | 'damage' | 'off_app_payment' | 'other';
+export type DisputeStatus = 'open' | 'resolved' | 'rejected' | 'refunded';
+
+export interface AdminDispute {
+  id: string;
+  job_id: string;
+  reason: DisputeReason;
+  description?: string | null;
+  status: DisputeStatus;
+  resolution_note?: string | null;
+  created_at: string;
+  resolved_at?: string | null;
 }
 
 export interface AdminAlerts {
@@ -371,6 +387,21 @@ export const adminService = {
     const res = await apiClient<AdminCatalogueItem>(`/admin/services/${encodeURIComponent(code)}/price`, {
       method: 'PATCH',
       body: JSON.stringify({ base_price: basePrice, reason }),
+    });
+    return res.data;
+  },
+
+  /** ADR-027 queue. Any staff role may read; resolving is gated by role on the server. */
+  async listDisputes(status: DisputeStatus, offset = 0): Promise<{ items: AdminDispute[]; total: number }> {
+    const res = await apiClient<{ items: AdminDispute[]; total: number }>(
+      `/admin/disputes?status=${status}&limit=50&offset=${offset}`, { method: 'GET' });
+    return res.data;
+  },
+
+  /** 'refunded' needs finance or super admin; the money is returned outside the app. */
+  async resolveDispute(id: string, resolution: Exclude<DisputeStatus, 'open'>, note: string): Promise<AdminDispute> {
+    const res = await apiClient<AdminDispute>(`/admin/disputes/${id}`, {
+      method: 'PATCH', body: JSON.stringify({ resolution, note }),
     });
     return res.data;
   },

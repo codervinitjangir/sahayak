@@ -170,6 +170,21 @@ def one(sql: str, params=None):
     result = rows(sql, params)
     return result[0] if result else None
 
+def owner_approves(job_id: str, price) -> None:
+    """ADR-039: a final price above estimate + 10% needs the owner's approval.
+
+    Recorded directly as an approved revision so this harness keeps testing what
+    it tests. check_job_lifecycle drives the real propose/approve endpoints.
+    The row is removed with the job (ON DELETE CASCADE).
+    """
+    conn.cursor().execute(
+        "INSERT INTO job_price_revisions (job_id, partner_id, proposed_amount, reason, status, decided_at) "
+        "SELECT a.job_id, a.partner_id, %(p)s, 'harness: approved by owner', 'approved', now() "
+        "FROM job_assignments a WHERE a.job_id = %(i)s AND a.status = 'accepted' LIMIT 1",
+        {"i": job_id, "p": price},
+    )
+
+
 
 def purge() -> None:
     """Remove everything this script creates, in foreign-key order.
@@ -382,6 +397,7 @@ async def job_through_to(c, tag: str, final_status: str, price: float | None = N
             body: dict = {"status": step}
             if step == "completed":
                 body["price_final"] = price if price is not None else 500
+                owner_approves(job_id, body["price_final"])
             r = await c.post(f"/api/v1/jobs/{job_id}/status", json=body, headers=hdr(token))
         if r.status_code != 200:
             raise SystemExit(f"job {tag} → {step} failed: {r.status_code} {r.text[:300]}")

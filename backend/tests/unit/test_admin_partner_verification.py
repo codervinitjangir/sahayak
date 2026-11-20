@@ -35,6 +35,7 @@ class FakePartner:
         rating_count: int = 24,
     ):
         self.id = partner_id
+        self.deleted_at = None  # ADR-045
         self.phone = phone
         self.name = name
         self.business_name = business_name

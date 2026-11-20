@@ -39,10 +39,10 @@ Physical device: the owner and partner flows ran on one Android phone (2026-11-1
 
 ## B. Code still to build
 
-### Admin panel (7 of 8 built)
+### Admin panel (8 of 8 built)
 
 - [x] Staff accounts and roles (super admin, ops, support, finance) with a one-time invite bound to the invitee's verified number (ADR-029). Web: Staff tab and `/staff/join`. The first super admin is still set by SQL
-- [ ] Support inbox and disputes (tied to payments item E)
+- [x] Support inbox for disputes (2026-11-21): web Reports tab, with resolve, record a refund, or reject. Price history and audited tow photos are shown. Moving money waits on G3
 - [x] Pricing editor: `services.base_price` is a column staff can change, audited (ADR-028). Web: Pricing tab. Service names, codes and categories are still migration-only
 - [ ] Payments back office: collections, commission, payout runs, reconciliation
 - [x] Alerts: stuck jobs, no-match rate, partners on duty (`GET /admin/alerts`, shown above the Jobs board). Not by zone: zone cover lives in Redis and is not judged. Nobody is notified; staff must have the board open
@@ -51,9 +51,9 @@ Physical device: the owner and partner flows ran on one Android phone (2026-11-1
 ### Product gaps
 
 - [ ] G3 Partner payouts, tax invoices, refunds and disputes (payments C-E), after the money decision
-- [x] G4 Partner documents with staff review (2026-11-20, ADR-038): private bucket, licence + photo ID (+ tow RC and equipment photo for towing), verify blocked until approved, tow equipment verified from the documents, 90-day retention after rejection. Not done: expiry reminders; an expired document does not un-verify the partner
+- [x] G4 Partner documents with staff review (2026-11-20, ADR-038): private bucket, licence + photo ID (+ tow RC and equipment photo for towing), verify blocked until approved, tow equipment verified from the documents, 90-day retention after rejection. Expiry reminders added 2026-11-21 (ADR-038 amendment). An expired document still does not un-verify the partner
 - [ ] G6 Hindi and Kannada (English only today)
-- [ ] G11 Offline-tolerant request queue for poor highway signal
+- [~] G11 Poor highway signal: resend for three minutes with the same key (2026-11-21, ADR-044). There is deliberately no queue that persists after the app closes. Not tried on a device
 - [ ] R8 Payments hardening, remainder: payment gateway, signature-checked webhooks, integer paise, duplicate and out-of-order tests. Done so far: server-side amount, partner/admin-only confirm, idempotent confirm
 
 ### Engineering hygiene
@@ -147,3 +147,63 @@ Still open from this pass:
 - **Push to GitHub** so `uptime.yml` and Render pick up this work. Nothing is committed yet.
 - Render must have `SUPABASE_SECRET_KEY` set, or document upload answers 503.
 - R2: maps no longer use a key (ADR-031), but the old key in git history should still be deleted in Google Cloud.
+
+
+## I. 2026-11-21 pass: trust and safety (what goes wrong with apps like this)
+
+Research: `docs/research/2026-11-21-roadside-app-failures.md`. It covers failure modes F1 to F10, where each step goes (phone OTP, start code, extra charges, photos) and the edge cases. Reddit blocks automated reading, so none of its threads are quoted.
+
+Built: ADR-039 (price changes above estimate + 10% need the owner's approval before completion), ADR-040 (the start code is refused more than 1 km from the pickup), ADR-041 (the owner can ask for another partner once the first is overdue), ADR-042 (pickup and drop photos for towing), ADR-043 (an "asked to pay outside the app" report on cancelled jobs, plus four partner-risk alerts), ADR-044 (no signal: resend for three minutes), the ADR-038 amendment (document expiry reminders), and the admin **Reports** tab (support inbox for disputes). Migration `0014` was applied to production. HANDOFF section 24.
+
+Regression: backend 698 unit, web 167, mobile 85, all passing; ruff clean. Live, re-run after the change: job_lifecycle 88, payments_and_sharing 29, ratings 44, notifications 79, job_cancellation 54, partner_documents 33, admin_ops 72, all passing. The rest passed earlier in the pass: token_rules 30, job_race 43, dispatch_race 69, partner_offers 28, dispatch_flow 50, dispatch_capacity 49, vehicle_registration 54, admin_partners 20, dispatch_worker 28. admin_analytics is still 98/100 because of the same real job (`1123e9be`, partner_en_route since 11-20 13:15 UTC); finish or cancel it and re-run. Not run: auth_flow and user_registration (they need uvicorn:8010).
+
+Still open from this pass:
+- **Rebuild the APK** and try the tow photos, the resend banner and price approval on a phone. None has been run on a device.
+- Web has no owner "Report a problem" screen (mobile does). Refunds stay a note only until G3.
+- The 1 km start radius, the 10% margin and the overdue rule are first guesses. Check them against real jobs after launch.
+
+
+## J. 2026-11-21 second pass: launch readiness and competitors
+
+Asked: "can real users use it, are there apps like this, why did some shut down". Answers:
+`docs/LAUNCH-READINESS-2026-11-21.md` (verdict: a closed pilot after list P1-P9, not a public
+launch yet) and `docs/research/2026-11-21-competitors.md` (ReadyAssist, GoMechanic, Urban Company,
+HONK, Urgently, Wrench; shutdowns Autto.in, Taskbob, Doormint, Homejoy; lessons).
+
+Built: ADR-045 (partner account deletion in app, web and API; the **shared-login bug** fixed, where
+deleting an owner deleted the login a partner profile still used), ADR-046 (security headers; `API_DOCS_ENABLED`),
+the public `/delete-account` page, the grievance-officer section in Terms, push tokens removed on owner
+deletion. Migration `0015` applied to production. HANDOFF section 25.
+
+Regression after this pass: backend 708 unit, web 171, mobile 87, ruff clean. Live: all twenty
+harnesses run (auth_flow 77 and user_registration 36 with uvicorn up), 1004 of 1006 checks pass; the
+two failures are admin_analytics counting the real job `1123e9be` again (section H). New harness:
+`check_partner_deletion` 23.
+
+New items for section A (need a person):
+- **P1/P2: paid Render instance (no sleeping) and paid Supabase plan (backups, no pausing).** Pilot blockers.
+- Set `API_DOCS_ENABLED=false` on Render.
+- Appoint and name a grievance officer (part of R1); the Terms show a placeholder.
+- Gig-worker levies (Code on Social Security 1-2% of turnover; Karnataka welfare fee 1-5% of payouts): ask a CA and price them in.
+
+New product gaps (code, later): partner background location while navigating in another app (needs a
+Play declaration); fleet or insurer accounts (B2B channel, after G3); DPDP consent notice in the Rules'
+format and a breach runbook (duties apply from about May 2027).
+
+## K. 2026-11-21 third pass: the small code items from PLAN section 2.3A
+
+Built: partner data export (`GET /partners/me/export`, ADR-045 amendment; mobile and web "Download
+my data"); web owner "Report a problem" (parity with mobile, ADR-043 endpoints); staff alert
+webhook (ADR-047, `STAFF_ALERT_WEBHOOK_URL`, `STAFF_ALERT_REPEAT_MIN`); itemised privacy notice
+(`PRIVACY_ITEMS`), "Your rights", Terms 18+; `docs/DPDP-READINESS.md` (retention schedule, breach
+runbook, to-do before May 2027). HANDOFF section 26. No migration.
+
+Regression after this pass: backend 715 unit, web 177, mobile 88, ruff clean, both typechecks clean.
+Live: all twenty harnesses, 1013 of 1015 checks pass (auth_flow 77 and user_registration 36 with
+uvicorn up; check_partner_deletion now 32). The two failures are again admin_analytics counting the
+real job `1123e9be` (section H).
+
+New items for section A (need a person):
+- Create a Slack, Google Chat or Discord incoming webhook for the ops channel and set
+  `STAFF_ALERT_WEBHOOK_URL` on Render; leave it blank and nothing is sent.
+- Lawyer review of the new privacy table and `docs/DPDP-READINESS.md` (part of R3).

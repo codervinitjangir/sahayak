@@ -10,10 +10,16 @@ import { Colors, Radius, Spacing, Typography } from "../../../constants/theme";
 import ScreenHero from "../../../components/ui/ScreenHero";
 import Button from "../../../components/ui/Button";
 import { ErrorState, SectionHeader } from "../../../components/ui/kit";
-import { disputesApi, DISPUTE_REASONS, type DisputeReason, type DisputeStatus } from "../../../services/api/disputes";
+import {
+  CANCELLED_JOB_REASONS,
+  disputesApi,
+  DISPUTE_REASONS,
+  type DisputeReason,
+  type DisputeStatus,
+} from "../../../services/api/disputes";
 import { formatWhen } from "../../shared/ownerData";
 
-type Params = { ReportProblem: { jobId: string; title?: string } };
+type Params = { ReportProblem: { jobId: string; title?: string; cancelled?: boolean } };
 
 const STATUS: Record<DisputeStatus, { label: string; color: string; bg: string; icon: keyof typeof Ionicons.glyphMap }> = {
   open: { label: "Under review", color: "#B45309", bg: "#FEF3C7", icon: "time" },
@@ -24,7 +30,8 @@ const STATUS: Record<DisputeStatus, { label: string; color: string; bg: string; 
 
 export default function ReportProblemScreen() {
   const nav = useNavigation();
-  const { jobId, title } = useRoute<RouteProp<Params, "ReportProblem">>().params;
+  const { jobId, title, cancelled } = useRoute<RouteProp<Params, "ReportProblem">>().params;
+  const reasons = cancelled ? DISPUTE_REASONS.filter((r) => CANCELLED_JOB_REASONS.includes(r.value)) : DISPUTE_REASONS;
   const list = useQuery({ queryKey: ["disputes", jobId], queryFn: () => disputesApi.list(jobId) });
   const [reason, setReason] = useState<DisputeReason | null>(null);
   const [text, setText] = useState("");
@@ -48,7 +55,7 @@ export default function ReportProblemScreen() {
         code === "DISPUTE_ALREADY_OPEN"
           ? "You already have an open report for this job."
           : code === "JOB_NOT_DISPUTABLE"
-            ? "You can report a problem once the job is completed."
+            ? "This job cannot be reported: it was not completed, and no partner had accepted it."
             : "Could not send your report. Try again."
       );
       if (code === "DISPUTE_ALREADY_OPEN") void list.refetch();
@@ -99,7 +106,7 @@ export default function ReportProblemScreen() {
               <View style={{ gap: Spacing.md }}>
                 <SectionHeader title="What went wrong?" />
                 <View style={styles.reasons} accessibilityRole="radiogroup">
-                  {DISPUTE_REASONS.map((r) => {
+                  {reasons.map((r) => {
                     const on = reason === r.value;
                     return (
                       <Pressable

@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from app.middlewares.security_headers import SecurityHeadersMiddleware
 
 from app.api.admin import router as admin_router, admin_partners_router, admin_ops_router
 from app.api.admin_staff import admin_staff_router
@@ -12,6 +13,7 @@ from app.api.disputes import admin_disputes_router, router as disputes_router
 from app.api.health import router as health_router
 from app.api.job_assignments import router as job_assignments_router
 from app.api.jobs import router as jobs_router
+from app.api.job_safeguards import router as job_safeguards_router
 from app.api.client_errors import router as client_errors_router
 from app.api.feature_interest import router as feature_interest_router
 from app.api.notifications import router as notifications_router
@@ -65,11 +67,15 @@ async def lifespan(app: FastAPI):
     log_event("app_stopped", outcome="success")
 
 
+_docs = get_settings().API_DOCS_ENABLED
 app = FastAPI(
     title="Sahayak API",
     description="Real-Time Emergency Vehicle Assistance & Service Dispatch Platform",
     version="0.1.0",
-    lifespan=lifespan
+    lifespan=lifespan,
+    docs_url="/docs" if _docs else None,
+    redoc_url="/redoc" if _docs else None,
+    openapi_url="/openapi.json" if _docs else None,
 )
 
 # CORS: origins come from CORS_ALLOWED_ORIGINS ("*" by default, for local
@@ -87,6 +93,7 @@ app.add_middleware(
 
 # Added last, so it sits outermost: every request — including ones CORS or a
 # validation error short-circuits — gets a correlation id and an access log line.
+app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RequestIdMiddleware)
 
 # Render HTTPException, validation failures and unhandled errors in the
@@ -104,6 +111,7 @@ app.include_router(auth_router)
 
 # Include the jobs router (POST /api/v1/jobs, GET /api/v1/jobs/{job_id})
 app.include_router(jobs_router)
+app.include_router(job_safeguards_router)
 
 # Include the partners router (registration, availability, location, coverage)
 app.include_router(partners_router)

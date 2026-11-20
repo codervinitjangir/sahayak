@@ -174,3 +174,28 @@ def test_approving_the_second_tow_document_verifies_tow_equipment(monkeypatch):
     asyncio.run(svc.review(s, PID, photo.id, DocumentReviewRequest(status="approved"), STAFF))
     assert equipment == [("KA01AB1234", "verified")]
     assert audits == ["partner_document_approved"] and s.commits == 1
+
+
+# ---------- ADR-038 amendment: expiry reminders ----------
+
+@pytest.mark.asyncio
+async def test_sweep_tells_partners_whose_document_lapsed_and_those_about_to(monkeypatch):
+    from unittest.mock import AsyncMock as _AM
+    from app.services import notification_service, partner_document_service as pds
+
+    lapsed, soon = uuid.uuid4(), uuid.uuid4()
+    monkeypatch.setattr(pds.repo, "due_for_deletion", _AM(return_value=[]))
+    monkeypatch.setattr(pds.repo, "mark_expired", _AM(return_value=[lapsed, lapsed]))
+    reminder_query = _AM(return_value=[soon])
+    monkeypatch.setattr(pds.repo, "partners_to_remind", reminder_query)
+    sent = []
+    monkeypatch.setattr(notification_service, "notify_partner",
+                        _AM(side_effect=lambda _db, pid, event: sent.append((pid, event))))
+    now = datetime(2026, 11, 21, 9, tzinfo=timezone.utc)
+    db = _AM()
+    _, expired = await pds.sweep_retention(db, now=now)
+    assert expired == 2
+    assert sent == [(lapsed, "document_expired"), (soon, "document_expiring")]
+    _, today, until, not_since = reminder_query.await_args.args
+    assert (until - today).days == 14 and (now - not_since).days == 20
+    db.commit.assert_awaited()

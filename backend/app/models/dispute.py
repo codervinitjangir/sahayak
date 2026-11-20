@@ -8,7 +8,9 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.config.database import Base
 
-DISPUTE_REASONS = ("overcharged", "service_not_done", "partner_behaviour", "damage", "other")
+DISPUTE_REASONS = (
+    "overcharged", "service_not_done", "partner_behaviour", "damage", "off_app_payment", "other"
+)
 DISPUTE_STATUSES = ("open", "resolved", "rejected", "refunded")
 
 
@@ -32,7 +34,7 @@ class JobDispute(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "reason IN ('overcharged','service_not_done','partner_behaviour','damage','other')",
+            "reason IN ('overcharged','service_not_done','partner_behaviour','damage','off_app_payment','other')",
             name="check_dispute_reason",
         ),
         CheckConstraint("status IN ('open','resolved','rejected','refunded')", name="check_dispute_status"),

@@ -22,6 +22,8 @@ import { Button } from '../../components/ui/Button';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import { StarRating } from '../../components/ui/StarRating';
 import { SafetyStrip } from '../../components/SafetyStrip';
+import { OwnerSafeguards } from '../../components/JobSafeguards';
+import { ReportProblem } from '../../components/ReportProblem';
 import { jobsService } from '../../services/jobs.service';
 import { paymentsService } from '../../services/payments.service';
 import { Job, JobStatus, JobTimelineEvent, SearchStatus } from '../../types/jobs';
@@ -315,16 +317,20 @@ export const JobTrackingPage: React.FC = () => {
               <span className="block text-xs font-bold uppercase tracking-wide text-ink-muted">Your start code</span>
               <span className="block text-3xl font-bold tracking-[0.4em] text-ink tnum">{job.start_code}</span>
               <span className="block text-sm text-ink-soft mt-1">
-                Read this to your partner only once they have reached your vehicle. Work cannot start without it.
+                Say this to your partner face to face, at your vehicle. Never share it on a call or message. Work cannot start without it.
               </span>
             </div>
+          )}
+
+          {(job.status === 'assigned' || job.status === 'partner_en_route' || job.status === 'in_progress') && (
+            <OwnerSafeguards jobId={job.id} />
           )}
 
           {job.price_estimate != null && job.status !== 'cancelled' && job.status !== 'no_match_found' && (
             <p className="text-sm text-slate-700">
               {job.status === 'completed' && job.price_final != null
                 ? <>Final amount: <strong>₹{Number(job.price_final)}</strong></>
-                : <>Upfront estimate: <strong>₹{Number(job.price_estimate)}</strong> — the partner confirms the final amount on completion.</>}
+                : <>Upfront estimate: <strong>₹{Number(job.price_estimate)}</strong> — anything more than 10% above it needs your approval in the app.</>}
             </p>
           )}
 
@@ -501,6 +507,12 @@ export const JobTrackingPage: React.FC = () => {
             <CheckCircle2 className="w-4 h-4" aria-hidden="true" />
             Thanks for rating this service.
           </div>
+        )}
+
+        {/* Report a problem: completed jobs, and cancelled jobs a partner had accepted (ADR-043). */}
+        {(job.status === 'completed'
+          || (job.status === 'cancelled' && Boolean(job.current_assignment?.partner_name || job.partner?.name))) && (
+          <ReportProblem jobId={job.id} cancelled={job.status === 'cancelled'} />
         )}
 
         {/* Cancellation Action (available across all active non-terminal statuses; no_match_found has dedicated prompt below) */}

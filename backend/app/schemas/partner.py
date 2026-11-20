@@ -360,3 +360,8 @@ class PartnerReviewsResponse(BaseModel):
     items: List[PartnerReviewItem]
     limit: int
     offset: int
+
+
+class PartnerDeleteResponse(BaseModel):
+    """ADR-045. DELETE /partners/me."""
+    deleted: bool = True

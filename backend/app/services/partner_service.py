@@ -53,6 +53,7 @@ from app.services import job_service
 from app.services.auth_service import Identity
 from app.utils.errors import (
     BadRequestError,
+    ConflictError,
     ErrorCode,
     ForbiddenError,
     InternalError,
@@ -609,3 +610,131 @@ async def list_my_reviews(db: AsyncSession, identity: Identity, limit: int, offs
         ],
         limit=limit, offset=offset,
     )
+
+
+async def delete_me(db: AsyncSession, identity: Identity) -> None:
+    """Delete the calling partner's account (ADR-045): anonymise, do not remove.
+
+    409 ACCOUNT_HAS_ACTIVE_JOB while an owner is waiting on them or an offer is
+    open. Otherwise, in one transaction, the profile is scrubbed (see
+    partner_repository.erase_partner_data). After commit, best-effort: document
+    files are removed from storage, the live position is dropped from Redis,
+    and the Supabase login is deleted unless an owner or staff profile still
+    signs in with it.
+    """
+    from app.services import auth_service
+    from app.utils import storage
+
+    partner = await _load_partner_or_404(db, identity.local_id)
+    if await partner_repository.count_live_work(db, partner.id) > 0:
+        raise ConflictError(
+            ErrorCode.ACCOUNT_HAS_ACTIVE_JOB,
+            "Finish or hand back your active job, and answer any open offer, before deleting your account",
+        )
+    partner_id, auth_user_id = partner.id, partner.auth_user_id
+    try:
+        paths = await partner_repository.erase_partner_data(db, partner)
+        await db.commit()
+    except SQLAlchemyError as exc:
+        await db.rollback()
+        log_event("partner_account_delete_failed", level=logging.ERROR, partner_id=str(partner_id),
+                  error_type=type(exc).__name__, outcome="failure")
+        raise InternalError("Could not delete your account") from exc
+    log_event("partner_account_deleted", partner_id=str(partner_id), outcome="success")
+
+    if paths:
+        try:
+            await storage.delete_objects(paths)
+        except Exception as exc:  # the rows are gone; an orphan file is swept by hand
+            log_event("partner_document_files_delete_failed", level=logging.WARNING,
+                      partner_id=str(partner_id), error_type=type(exc).__name__, outcome="failure")
+    try:
+        client = get_redis()
+        await client.zrem(PARTNER_LOCATIONS_KEY, str(partner_id))
+        await client.delete(location_updated_at_key(partner_id))
+    except RedisError as exc:
+        log_event("partner_location_clear_failed", level=logging.WARNING,
+                  partner_id=str(partner_id), error_type=type(exc).__name__, outcome="failure")
+    await auth_service.delete_login_if_unused(db, auth_user_id)
+
+
+def _iso(value):
+    return value.isoformat() if value is not None else None
+
+
+def _num(value):
+    return float(value) if value is not None else None
+
+
+async def export_me(db: AsyncSession, identity: Identity) -> dict:
+    """Everything Sahayak stores about the calling partner, as plain JSON.
+
+    The partner-side twin of the owner export (G10, ADR-045 amendment), for the
+    DPDP right of access. Left out on purpose: owners' names, phones and
+    addresses on the partner's jobs (the owner's data), storage paths of the
+    partner's documents (internal), and the scoring internals of each offer.
+    """
+    partner = await _load_partner_or_404(db, identity.local_id)
+    rows = await partner_repository.export_partner_rows(db, partner.id)
+    payments_by_job: dict = {}
+    for pay in rows["payments"]:
+        payments_by_job.setdefault(pay.job_id, []).append({
+            "amount": _num(pay.amount), "status": pay.status,
+            "method": pay.payment_method, "at": _iso(pay.created_at),
+        })
+    ratings_by_job: dict = {}
+    for r in rows["ratings"]:
+        ratings_by_job.setdefault(r.job_id, []).append(
+            {"by": "owner" if r.rated_by == "user" else "you", "rating": r.rating, "comment": r.comment})
+    log_event("partner_data_exported", partner_id=str(partner.id),
+              assignments=len(rows["assignments"]), outcome="success")
+    return {
+        "exported_at": _iso(datetime.now(timezone.utc)),
+        "profile": {
+            "id": str(partner.id), "name": partner.name, "phone": partner.phone,
+            "verification_status": partner.verification_status,
+            "verification_note": partner.verification_note,
+            "is_available": bool(partner.is_available),
+            "rating_avg": _num(partner.rating_avg), "rating_count": partner.rating_count,
+            "created_at": _iso(partner.created_at),
+        },
+        "services": [{"code": code, "name": name} for code, name in rows["services"]],
+        "equipment": [
+            {"type": e.equipment_type, "registration_number": e.registration_number,
+             "verification_status": e.verification_status, "verified_at": _iso(e.verified_at)}
+            for e in rows["equipment"]
+        ],
+        "documents": [
+            {"type": d.doc_type, "status": d.status, "reference_number": d.reference_number,
+             "expiry_date": _iso(d.expiry_date), "uploaded_at": _iso(d.uploaded_at),
+             "rejection_reason": d.rejection_reason}
+            for d in rows["documents"]
+        ],
+        "jobs": [
+            {"job_id": str(a.job_id), "service": code, "job_status": job_status,
+             "your_assignment": a.status, "offered_at": _iso(a.offered_at),
+             "responded_at": _iso(a.responded_at), "accepted_at": _iso(a.accepted_at),
+             "rejection_reason": a.rejection_reason,
+             "distance_at_offer_m": _num(a.distance_at_offer_m),
+             "estimated_arrival_min": a.estimated_arrival_min,
+             "price_final": _num(price_final), "requested_at": _iso(requested_at),
+             "completed_at": _iso(completed_at), "cancelled_at": _iso(cancelled_at),
+             "payments": payments_by_job.get(a.job_id, []) if a.status in ("accepted", "completed") else [],
+             "ratings": ratings_by_job.get(a.job_id, []) if a.status in ("accepted", "completed") else []}
+            for a, job_status, price_final, requested_at, completed_at, cancelled_at, code in rows["assignments"]
+        ],
+        "price_requests": [
+            {"job_id": str(v.job_id), "amount": _num(v.proposed_amount), "reason": v.reason,
+             "status": v.status, "created_at": _iso(v.created_at), "decided_at": _iso(v.decided_at)}
+            for v in rows["revisions"]
+        ],
+        "photos": [
+            {"job_id": str(p.job_id), "stage": p.stage, "created_at": _iso(p.created_at),
+             "uploaded_at": _iso(p.uploaded_at)}
+            for p in rows["photos"]
+        ],
+        "notifications": [
+            {"event": n.event, "message": n.message, "read": bool(n.is_read), "at": _iso(n.sent_at)}
+            for n in rows["notifications"]
+        ],
+    }

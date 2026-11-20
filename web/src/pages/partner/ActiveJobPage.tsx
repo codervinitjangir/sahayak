@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { PartnerPriceRequest } from '../../components/JobSafeguards';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, ArrowLeft, Car, MapPin, Phone, Wrench } from 'lucide-react';
@@ -85,6 +86,12 @@ export const ActiveJobPage: React.FC = () => {
     ? transition.error instanceof ApiError
       ? transition.error.code === 'INVALID_START_CODE'
         ? 'That code does not match. Ask the owner to read the 4-digit code on their screen again.'
+        : transition.error.code === 'PRICE_APPROVAL_REQUIRED'
+          ? 'This is above what the owner agreed. Ask the owner to approve the new price, or enter the agreed amount.'
+        : transition.error.code === 'JOB_PHOTOS_REQUIRED'
+          ? 'A tow needs a photo before towing and at the drop point. Add them in the Sahayak partner app.'
+        : transition.error.code === 'PARTNER_NOT_AT_PICKUP'
+          ? 'Sahayak sees you more than 1 km from the pickup. Enter the code when you reach the vehicle.'
         : transition.error.code === 'PRICE_FINAL_OUT_OF_RANGE'
           ? 'That amount is far above the quote. Check it and enter the amount you actually charged.'
           : transition.error.message
@@ -202,6 +209,12 @@ export const ActiveJobPage: React.FC = () => {
                   placeholder="••••"
                 />
                 <p className="mt-2 text-sm text-slate-500">Ask the owner for the code shown on their tracking screen. Work starts only after it matches.</p>
+              </Card>
+            )}
+
+            {needsPrice && (
+              <Card aria-label="Extra charges">
+                <PartnerPriceRequest jobId={job.id} />
               </Card>
             )}
 

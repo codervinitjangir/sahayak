@@ -38,6 +38,7 @@ from app.schemas.partner import (
     PartnerAvailabilityRequest,
     PartnerAvailabilityResponse,
     PartnerCreateRequest,
+    PartnerDeleteResponse,
     PartnerEarningsResponse,
     PartnerLocationRequest,
     PartnerLocationResponse,
@@ -172,6 +173,30 @@ async def update_my_partner_profile(
     """Phone is the login and verification status is staff-owned; neither is editable here."""
     partner = await partner_service.update_my_name(db, identity, payload.name)
     return envelope(PartnerMeResponse.model_validate(partner))
+
+
+@router.get("/me/export", summary="Download everything Sahayak stores about you (JSON)")
+async def export_my_partner_data(
+    identity: Identity = Depends(require_partner),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[dict]:
+    """The partner twin of GET /users/me/export (ADR-045 amendment)."""
+    return envelope(await partner_service.export_me(db, identity))
+
+
+@router.delete(
+    "/me",
+    response_model=ApiResponse[PartnerDeleteResponse],
+    status_code=status.HTTP_200_OK,
+    summary="Delete your partner account (ADR-045)",
+)
+async def delete_my_partner_account(
+    identity: Identity = Depends(require_partner),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[PartnerDeleteResponse]:
+    """409 ACCOUNT_HAS_ACTIVE_JOB while a job or an offer is open. Irreversible."""
+    await partner_service.delete_me(db, identity)
+    return envelope(PartnerDeleteResponse())
 
 
 @router.get(

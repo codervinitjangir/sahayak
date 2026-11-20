@@ -122,6 +122,21 @@ def one(sql: str, params=None):
     result = rows(sql, params)
     return result[0] if result else None
 
+def owner_approves(job_id: str, price) -> None:
+    """ADR-039: a final price above estimate + 10% needs the owner's approval.
+
+    Recorded directly as an approved revision so this harness keeps testing what
+    it tests. check_job_lifecycle drives the real propose/approve endpoints.
+    The row is removed with the job (ON DELETE CASCADE).
+    """
+    conn.cursor().execute(
+        "INSERT INTO job_price_revisions (job_id, partner_id, proposed_amount, reason, status, decided_at) "
+        "SELECT a.job_id, a.partner_id, %(p)s, 'harness: approved by owner', 'approved', now() "
+        "FROM job_assignments a WHERE a.job_id = %(i)s AND a.status = 'accepted' LIMIT 1",
+        {"i": job_id, "p": price},
+    )
+
+
 
 def start_code_of(job_id: str) -> str:
     """The owner's code, read from the row the way the owner's GET would show it."""
@@ -394,10 +409,48 @@ async def main() -> None:
         check("the refused /status start wrote nothing",
               job_row(job_a)["status"] == "partner_en_route", chain(job_a))
 
+        # ADR-040: a fresh fix 6 km from the pickup cannot start the job.
+        wid = partners[worker]["id"]
+        await c.post(f"/api/v1/partners/{wid}/location", json={"lat": FAR_LAT, "lng": PICKUP_LNG}, headers=hdr(token))
+        r = await c.post(f"/api/v1/jobs/{job_a}/start",
+                         json={"start_code": start_code_of(job_a)}, headers=hdr(token))
+        check("the right code from 6 km away is 409 PARTNER_NOT_AT_PICKUP",
+              r.status_code == 409 and code_of(r) == "PARTNER_NOT_AT_PICKUP", f"HTTP {r.status_code} {code_of(r)}")
+        check("the far start wrote nothing", job_row(job_a)["status"] == "partner_en_route", chain(job_a))
+        await c.post(f"/api/v1/partners/{wid}/location", json={"lat": NEAR_LAT, "lng": PICKUP_LNG}, headers=hdr(token))
+
         r = await c.post(f"/api/v1/jobs/{job_a}/start",
                          json={"start_code": start_code_of(job_a)}, headers=hdr(token))
         check("partner_en_route → in_progress accepted via /start", r.status_code == 200,
               f"HTTP {r.status_code} {code_of(r)}")
+
+        # ADR-039: above estimate + 10% the owner must approve first, through the API.
+        r = await c.post(f"/api/v1/jobs/{job_a}/status",
+                         json={"status": "completed", "price_final": 1250.50}, headers=hdr(token))
+        check("completing above the estimate without approval is 409 PRICE_APPROVAL_REQUIRED",
+              r.status_code == 409 and code_of(r) == "PRICE_APPROVAL_REQUIRED", f"HTTP {r.status_code} {code_of(r)}")
+        check("the refused completion wrote nothing", job_row(job_a)["status"] == "in_progress", chain(job_a))
+        r = await c.post(f"/api/v1/jobs/{job_a}/price-revisions",
+                         json={"amount": 1250.50, "reason": "battery needs replacing"}, headers=hdr(token))
+        check("the partner asks the owner for 1250.50 (201)", r.status_code == 201, f"HTTP {r.status_code} {code_of(r)}")
+        rev_id = data_of(r)["id"] if r.status_code == 201 else "00000000-0000-0000-0000-000000000000"
+        r = await c.post(f"/api/v1/jobs/{job_a}/price-revisions",
+                         json={"amount": 1300, "reason": "and a terminal"}, headers=hdr(token))
+        check("a second request while one is pending is 409 PRICE_REVISION_PENDING",
+              r.status_code == 409 and code_of(r) == "PRICE_REVISION_PENDING", f"HTTP {r.status_code} {code_of(r)}")
+        r = await c.get(f"/api/v1/jobs/{job_a}/safeguards", headers=hdr(owner_token))
+        sg = data_of(r) if r.status_code == 200 else {}
+        check("the owner sees the pending request on /safeguards",
+              (sg.get("pending_revision") or {}).get("id") == rev_id, f"HTTP {r.status_code}")
+        r = await c.post(f"/api/v1/jobs/{job_a}/price-revisions/{rev_id}/decision",
+                         json={"approve": True}, headers=hdr(token))
+        check("the partner cannot approve their own request (403)", r.status_code == 403, f"HTTP {r.status_code}")
+        r = await c.post(f"/api/v1/jobs/{job_a}/price-revisions/{rev_id}/decision",
+                         json={"approve": True}, headers=hdr(owner_token))
+        check("the owner approves (200)", r.status_code == 200, f"HTTP {r.status_code} {code_of(r)}")
+        n = one("SELECT count(*) AS n FROM notifications WHERE job_id = %(i)s "
+                "AND event IN ('price_revision_requested', 'price_revision_approved')", {"i": job_a})["n"]
+        check("both sides were notified", n == 2, f"{n} rows")
 
         r = await c.post(f"/api/v1/jobs/{job_a}/status",
                          json={"status": "completed", "price_final": 1250.50},
@@ -488,6 +541,7 @@ async def main() -> None:
               r.status_code == 409, f"HTTP {r.status_code} {code_of(r)}")
 
         # Walk it to completed, then try to move it again.
+        owner_approves(job_d, 640)
         for target, body in (("partner_en_route", {}), ("in_progress", {}),
                              ("completed", {"price_final": 640})):
             if target == "in_progress":
@@ -599,6 +653,7 @@ async def main() -> None:
         check("a server-owned status cannot be requested at all (422)",
               r.status_code == 422, "dispatch owns 'assigned'; a partner cannot rewind a job")
 
+        owner_approves(job_e, 700)
         r = await c.post(f"/api/v1/jobs/{job_e}/status",
                          json={"status": "completed", "price_final": 700}, headers=hdr(etoken))
         check("the same completion succeeds once the body is right", r.status_code == 200,

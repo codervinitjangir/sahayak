@@ -72,6 +72,10 @@ export interface DocumentUploadTicket {
 }
 
 export const partnerApi = {
+  /** Delete the partner account (DELETE /partners/me, ADR-045). 409 ACCOUNT_HAS_ACTIVE_JOB while a job or offer is open. */
+  deleteMe: () => apiClient.delete<{ deleted: boolean }>("/partners/me").then((r) => r.data),
+  /** Everything Sahayak stores about the partner (GET /partners/me/export). */
+  exportMe: () => apiClient.get<Record<string, unknown>>("/partners/me/export").then((r) => r.data),
   /** Edit the partner's display name (PATCH /partners/me, G8). */
   updateMe: (name: string) =>
     apiClient

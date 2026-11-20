@@ -159,6 +159,13 @@ async def run_forever(interval_s: float, session_factory=AsyncSessionLocal) -> N
                     error_type=type(exc).__name__,
                     outcome="failure",
                 )
+            # ADR-047: critical alerts to the staff channel, at most once a minute.
+            try:
+                from app.services import staff_alert_service
+                await staff_alert_service.check(session_factory)
+            except Exception as exc:  # noqa: BLE001 - alerts must never stop dispatch
+                log_event("staff_alert_check_failed", level=logging.WARNING,
+                          error_type=type(exc).__name__, outcome="failure")
             await asyncio.sleep(interval_s)
     except asyncio.CancelledError:
         log_event("dispatch_worker_stopped", outcome="success")

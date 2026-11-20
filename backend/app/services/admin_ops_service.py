@@ -244,6 +244,41 @@ LOW_PARTNERS_ON_DUTY = 3
 _MAX_ALERT_JOB_IDS = 20
 
 
+# ADR-043. Thresholds over RISK_WINDOW_DAYS. One occurrence is life (a car that
+# started on its own, a basement with no GPS); a repeat is a pattern to review.
+RISK_WINDOW_DAYS = 30
+RISK_THRESHOLDS = {"cancel_after_start": 2, "unverified_start": 3, "owner_swap": 2}
+_RISK_SPECS = (
+    (2, "cancel_after_start", "PARTNER_CANCELS_AFTER_START", "critical",
+     "partner(s) cancelled {n} jobs after entering the start code in {d} days. "
+     "This is how off-app cash deals look: call the owners."),
+    (3, "unverified_start", "PARTNER_STARTS_WITHOUT_GPS", "warning",
+     "partner(s) started jobs with location off {n} times in {d} days."),
+    (4, "owner_swap", "PARTNER_OFTEN_LATE", "warning",
+     "partner(s) were replaced by owners for being late {n} times in {d} days."),
+)
+
+
+def _risk_alerts(partner_risk, off_app_reports: int) -> list[AdminAlert]:
+    out: list[AdminAlert] = []
+    for index, key, code, severity, text in _RISK_SPECS:
+        hits = sorted((row for row in partner_risk if row[index] >= RISK_THRESHOLDS[key]),
+                      key=lambda row: -row[index])
+        if hits:
+            total = sum(row[index] for row in hits)
+            out.append(AdminAlert(
+                code=code, severity=severity, count=len(hits),
+                message=f"{len(hits)} " + text.format(n=total, d=RISK_WINDOW_DAYS),
+                partner_ids=[row[0] for row in hits[:_MAX_ALERT_JOB_IDS]],
+            ))
+    if off_app_reports:
+        out.append(AdminAlert(
+            code="OFF_APP_PAYMENT_REPORTS", severity="critical", count=off_app_reports,
+            message=f"{off_app_reports} owner report(s) say a partner asked to be paid outside the app.",
+        ))
+    return out
+
+
 def _search_long_over(status: str, requested_at: Optional[datetime], now: datetime) -> bool:
     return (status == "no_match_found" and requested_at is not None
             and now - requested_at > timedelta(seconds=NO_MATCH_LIVE_FOR_S))
@@ -256,8 +291,10 @@ def evaluate_alerts(
     window_counts: dict[str, int],
     partners_on_duty: int,
     partners_verified: int,
+    partner_risk: Sequence[tuple[uuid.UUID, str, int, int, int]] = (),
+    off_app_reports: int = 0,
 ) -> AdminAlertsResponse:
-    """Pure: turn the three reads into alerts. Tested without a database."""
+    """Pure: turn the reads into alerts. Tested without a database."""
     alerts: list[AdminAlert] = []
     # ADR-036: a search that ended long ago is history, not a live job.
     live_jobs = [j for j in live_jobs if not _search_long_over(j[1], j[2], now)]
@@ -298,6 +335,8 @@ def evaluate_alerts(
             message=f"Only {partners_on_duty} verified partner(s) on duty.",
         ))
 
+    alerts.extend(_risk_alerts(partner_risk, off_app_reports))
+
     return AdminAlertsResponse(
         generated_at=now, alerts=alerts, live_jobs=len(live_jobs),
         partners_on_duty=partners_on_duty, partners_verified=partners_verified,
@@ -315,8 +354,11 @@ async def get_alerts(db: AsyncSession) -> AdminAlertsResponse:
     counts = await admin_ops_repository.job_status_counts_since(
         db, now - timedelta(minutes=NO_MATCH_WINDOW_MINUTES))
     on_duty, verified = await admin_ops_repository.partner_duty_counts(db)
+    risk = await admin_ops_repository.partner_risk_counts(db, now - timedelta(days=RISK_WINDOW_DAYS))
+    off_app = await admin_ops_repository.open_off_app_reports(db)
     return evaluate_alerts(now=now, live_jobs=live, window_counts=counts,
-                           partners_on_duty=on_duty, partners_verified=verified)
+                           partners_on_duty=on_duty, partners_verified=verified,
+                           partner_risk=risk, off_app_reports=off_app)
 
 
 # ---------------------------------------------------------------------------

@@ -112,11 +112,36 @@ async def due_for_deletion(db, now: datetime, abandoned_before: datetime, limit:
     return result.scalars().all()
 
 
-async def mark_expired(db, today: date) -> int:
+async def mark_expired(db, today: date) -> list:
+    """Mark lapsed approved documents expired; returns the partner ids affected."""
     result = await db.execute(
         update(PartnerDocument)
         .where(PartnerDocument.status == "approved", PartnerDocument.expiry_date < today)
         .values(status="expired")
+        .returning(PartnerDocument.partner_id)
     )
     await db.flush()
-    return result.rowcount or 0
+    return list(result.scalars().all())
+
+
+async def partners_to_remind(db, today: date, until: date, not_since) -> list:
+    """Partners with an approved document expiring in [today, until] who have
+    not been sent a document_expiring notification since `not_since`."""
+    from app.models.notification import Notification
+    reminded = (
+        select(Notification.id).where(
+            Notification.recipient_type == "partner",
+            Notification.recipient_id == PartnerDocument.partner_id,
+            Notification.event == "document_expiring",
+            Notification.sent_at >= not_since,
+        ).exists()
+    )
+    result = await db.execute(
+        select(PartnerDocument.partner_id).where(
+            PartnerDocument.status == "approved",
+            PartnerDocument.expiry_date >= today,
+            PartnerDocument.expiry_date <= until,
+            ~reminded,
+        ).distinct()
+    )
+    return list(result.scalars().all())

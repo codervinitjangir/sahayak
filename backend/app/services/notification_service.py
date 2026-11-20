@@ -108,6 +108,16 @@ NOTIFICATION_EVENTS: dict[str, str] = {
     # ADR-030. Neither is a job status change, so neither is in EVENT_FOR_STATUS.
     "job_reassigned_by_support": "Sahayak support moved this job to another partner.",
     "job_reassigning": "Sahayak support is finding you another partner.",
+    # ADR-039: extra charges. The amount is not in the text; the job screen shows it.
+    "price_revision_requested": "Your partner has asked to charge more than the estimate. Please review.",
+    "price_revision_approved": "The owner approved your new price.",
+    "price_revision_rejected": "The owner did not approve the new price. Complete at the agreed price or cancel.",
+    # ADR-041: the owner asked for another partner because this one was late.
+    "job_reassigned_by_owner": "The owner asked for another partner because the job was overdue.",
+    "job_reassigning_by_owner": "We are finding you another partner.",
+    # ADR-038 amendment: partner document expiry. Not tied to a job.
+    "document_expiring": "A document you uploaded expires within two weeks. Upload a new one from Verification.",
+    "document_expired": "A document you uploaded has expired. Upload a new one from Verification to keep your profile verified.",
 }
 
 # Which event a status change produces. `cancelled` is absent on purpose: it is
@@ -525,3 +535,21 @@ async def notify_reassignment(
         )
         written += 1
     return written
+
+
+async def notify_event(
+    db: AsyncSession, *, recipient_type: RecipientRole, recipient_id: uuid.UUID, event: str, job_id: uuid.UUID
+) -> None:
+    """One feed row (and its push) for an event that is not a job status change."""
+    await _write_notification(
+        db, recipient_type=recipient_type, recipient_id=recipient_id,
+        event=event, message=NOTIFICATION_EVENTS[event], job_id=job_id, channel=CHANNEL_IN_APP,
+    )
+
+
+async def notify_partner(db: AsyncSession, partner_id: uuid.UUID, event: str) -> None:
+    """A partner notification that belongs to no job (document expiry)."""
+    await _write_notification(
+        db, recipient_type="partner", recipient_id=partner_id,
+        event=event, message=NOTIFICATION_EVENTS[event], job_id=None, channel=CHANNEL_IN_APP,
+    )

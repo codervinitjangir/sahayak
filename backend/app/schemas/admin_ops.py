@@ -88,11 +88,13 @@ class AdminAuditListResponse(BaseModel):
 class AdminAlert(BaseModel):
     """One condition staff should look at now. Computed on read, never stored."""
 
-    code: str = Field(..., description="STUCK_JOBS | HIGH_NO_MATCH_RATE | NO_PARTNERS_ON_DUTY | LOW_PARTNERS_ON_DUTY")
+    code: str = Field(..., description="STUCK_JOBS | HIGH_NO_MATCH_RATE | NO_PARTNERS_ON_DUTY | LOW_PARTNERS_ON_DUTY | PARTNER_CANCELS_AFTER_START | PARTNER_STARTS_WITHOUT_GPS | PARTNER_OFTEN_LATE | OFF_APP_PAYMENT_REPORTS")
     severity: str = Field(..., description="'critical' or 'warning'")
     message: str
     count: int = 0
     job_ids: list[uuid.UUID] = Field(default_factory=list, description="For STUCK_JOBS: oldest first, at most 20.")
+    partner_ids: list[uuid.UUID] = Field(
+        default_factory=list, description="For the ADR-043 partner flags: the partners to review, at most 20.")
 
 
 class AdminAlertsResponse(BaseModel):

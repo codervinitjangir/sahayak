@@ -160,3 +160,8 @@ async def erase_owner_data(db: AsyncSession, user_id: uuid.UUID) -> None:
     await db.execute(
         delete(Notification).where(Notification.recipient_type == "user").where(Notification.recipient_id == user_id)
     )
+    # ADR-045: a deleted owner's devices are not told anything again.
+    from app.models.device_push_token import DevicePushToken
+    await db.execute(
+        delete(DevicePushToken).where(DevicePushToken.owner_type == "user").where(DevicePushToken.owner_id == user_id)
+    )

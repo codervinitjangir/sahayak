@@ -76,7 +76,7 @@ from app.schemas.admin_ops import (
 from app.services import admin_analytics_service, admin_ops_service, partner_document_service
 from app.services.auth_service import Identity
 from app.utils.auth import require_admin, require_staff
-from app.utils.errors import NotFoundError
+from app.utils.errors import ConflictError, NotFoundError
 
 _ERROR_RESPONSES = {
     400: {"model": ErrorResponse, "description": "`from` is later than `to`"},
@@ -349,6 +349,9 @@ async def verify_partner(
     before = await partner_repository.get_partner_by_id(db, partner_id)
     if not before:
         raise NotFoundError("PARTNER_NOT_FOUND", "Partner not found")
+    if before.deleted_at is not None:
+        # ADR-045: the partner deleted their account; nothing about it can change.
+        raise ConflictError("PARTNER_ACCOUNT_DELETED", "This partner deleted their account")
     from_status = before.verification_status
     if payload.verification_status == "verified" and from_status != "verified":
         await partner_document_service.assert_complete_for_verification(db, partner_id)

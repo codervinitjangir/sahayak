@@ -5,6 +5,7 @@
 // in_progress is POST /jobs/{id}/start with the owner's code, and completion
 // requires the partner to enter the amount actually charged.
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import PartnerJobSafeguards from "../components/PartnerJobSafeguards";
 import { useKeyboardHeight } from "../../../hooks/useKeyboardHeight";
 import { View, Text, StyleSheet, TouchableOpacity, Platform, StatusBar, Animated, Linking, Pressable, TextInput, ActivityIndicator, Keyboard, ScrollView } from "react-native";
 import { showDialog } from "../../../components/ui/AppDialog";
@@ -230,7 +231,12 @@ export default function ActiveJobScreen() {
       setStep("in_progress");
     } catch (err: any) {
       const codeName = errorCodeOf(err);
-      if (codeName === "INVALID_START_CODE") {
+      if (codeName === "PARTNER_NOT_AT_PICKUP") {
+        showDialog(
+          "You are not at the vehicle yet",
+          "Sahayak sees you more than 1 km from the pickup. Start the job when you reach the customer. If the pin is wrong, call the customer."
+        );
+      } else if (codeName === "INVALID_START_CODE") {
         setOtp(["", "", "", ""]);
         otpRefs.current[0]?.focus();
         showDialog(
@@ -265,7 +271,16 @@ export default function ActiveJobScreen() {
       nav.replace("PartnerJobDone", { jobId: job.id });
     } catch (err: any) {
       const codeName = errorCodeOf(err);
-      if (codeName === "INVALID_STATUS_TRANSITION") {
+      if (codeName === "PRICE_APPROVAL_REQUIRED") {
+        showDialog(
+          "The owner has not approved this price",
+          "This is above what the owner agreed. Use \"Ask owner to approve\" above, or enter the agreed price."
+        );
+      } else if (codeName === "JOB_PHOTOS_REQUIRED") {
+        showDialog("Photos needed", "Add a photo of the vehicle before towing and one at the drop point, then complete.");
+      } else if (codeName === "PRICE_FINAL_OUT_OF_RANGE") {
+        showDialog("Amount too high", "That is above the most this job can be billed. Check the amount.");
+      } else if (codeName === "INVALID_STATUS_TRANSITION") {
         showDialog(
           "Job cannot be completed",
           "The job is no longer in progress. Refresh the job to see its current state."
@@ -586,6 +601,8 @@ export default function ActiveJobScreen() {
               <Text style={styles.verifiedText}>Code verified · Work underway</Text>
             </View>
 
+            <PartnerJobSafeguards jobId={job.id} />
+
             <Text style={styles.amountLabel}>Final amount charged</Text>
             <View style={styles.amountRow}>
               <Text style={styles.amountCurrency}>₹</Text>
@@ -600,7 +617,7 @@ export default function ActiveJobScreen() {
               />
             </View>
             <Text style={styles.amountHint}>
-              Enter what you actually charged. The customer sees this as the final price.
+              Enter what you actually charged, within what the owner agreed. The customer sees this as the final price.
             </Text>
 
             <Button

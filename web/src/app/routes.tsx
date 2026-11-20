@@ -8,7 +8,7 @@ import { GuestOrOwner, RequireRole } from './RouteGuards';
 
 import { LandingPage } from '../pages/landing/LandingPage';
 import { LoginPage } from '../pages/auth/LoginPage';
-import { TermsPage, PrivacyPage } from '../pages/legal/LegalPage';
+import { TermsPage, PrivacyPage, AccountDeletionPage } from '../pages/legal/LegalPage';
 import { OwnerSignup } from '../pages/owner/OwnerSignup';
 import { PublicTrackPage } from '../pages/public/PublicTrackPage';
 const PartnerSignup = lazy(() => import('../pages/partner/PartnerSignup').then((m) => ({ default: m.PartnerSignup })));
@@ -32,6 +32,7 @@ export const AppRoutes: React.FC = () => {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/terms" element={<TermsPage />} />
       <Route path="/privacy" element={<PrivacyPage />} />
+      <Route path="/delete-account" element={<AccountDeletionPage />} />
       <Route path="/track/:jobId" element={<PublicTrackPage />} />
       <Route path="/signup" element={<Navigate to="/owner/signup" replace />} />
       <Route path="/owner/signup" element={<OwnerSignup />} />

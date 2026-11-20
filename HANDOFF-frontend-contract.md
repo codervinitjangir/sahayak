@@ -2458,3 +2458,63 @@ Both clients are already updated in this pass. This section is the record.
 | `PATCH /admin/partners/{id}/verify` → `verified` | ops, super_admin | **New 409 `PARTNER_DOCUMENTS_INCOMPLETE`** until every required document is approved |
 
 DocType: `driving_licence`, `photo_id`, plus `tow_vehicle_rc` and `tow_equipment_photo` for partners offering towing.
+
+## 24. Job safeguards: price approval, start at the pickup, a new partner when late, tow photos, off-app reports (ADR-039 to ADR-044, 2026-11-21)
+
+Research behind these: `docs/research/2026-11-21-roadside-app-failures.md`. Web and mobile already use all of it (owner tracking, partner active job, admin Reports tab).
+
+**New: `GET /jobs/{id}/safeguards`** (owner, assigned partner, staff ops/support/super; anyone else 404). Poll it beside `GET /jobs/{id}` on active-job screens (10 s is fine).
+
+```json
+{ "job_id": "...", "status": "in_progress", "price_estimate": "499.00",
+  "price_allowed_max": "548.90", "price_ceiling": "5000.00",
+  "pending_revision": { "id": "...", "proposed_amount": "900.00", "reason": "battery", "status": "pending", "created_at": "...", "decided_at": null },
+  "revisions": [ ... ], "photos_required": false, "photos": [ { "id": "...", "stage": "pickup", "uploaded_at": "..." } ],
+  "new_partner_available_at": "2026-11-21T10:40:00Z", "can_request_new_partner": false }
+```
+
+| Endpoint | Who | Notes |
+|---|---|---|
+| `POST /jobs/{id}/price-revisions {amount, reason}` | assigned partner | 201. 400 `PRICE_REVISION_NOT_NEEDED` (within estimate + 10%), 400 `PRICE_FINAL_OUT_OF_RANGE`, 409 `PRICE_REVISION_PENDING`, 409 `PRICE_REVISION_CLOSED` |
+| `POST /jobs/{id}/price-revisions/{rid}/decision {approve}` | owner | 200. 404 for anyone else; 409 `PRICE_REVISION_CLOSED` |
+| `POST /jobs/{id}/request-new-partner` | owner | 200 with safeguards. 409 `PARTNER_NOT_OVERDUE`, 409 `JOB_NOT_REASSIGNABLE` |
+| `POST /jobs/{id}/photos {stage: pickup or drop, content_type}` | assigned partner | 201 `{photo_id, upload_url, max_bytes}`; PUT the file, then confirm |
+| `POST /jobs/{id}/photos/{pid}/confirm` | assigned partner | 409 `JOB_PHOTO_NOT_UPLOADED` before the PUT |
+| `GET /jobs/{id}/photos/{pid}/url` | owner, partner, staff | 60-second link; staff views audited |
+
+**Changed behaviour a client must handle**
+
+* `POST /jobs/{id}/status` to `completed`: **409 `PRICE_APPROVAL_REQUIRED`** when `price_final` is above `price_allowed_max`; **409 `JOB_PHOTOS_REQUIRED`** on a tow without a pickup and a drop photo.
+* `POST /jobs/{id}/start`: **409 `PARTNER_NOT_AT_PICKUP`** when the partner's fresh fix is over 1 km from the pickup. With no recent fix it still starts.
+* A job can go `assigned`/`partner_en_route` back to `matching` when the owner asks for another partner (as with a staff reassign, section 19). The released partner gets `job_reassigned_by_owner`.
+* Disputes: new reason `off_app_payment`. A **cancelled** job a partner had accepted can be reported for `off_app_payment`, `partner_behaviour`, `damage` or `other`.
+* New notification events: `price_revision_requested` (owner), `price_revision_approved`, `price_revision_rejected`, `job_reassigned_by_owner` (partner), `job_reassigning_by_owner` (owner), `document_expiring`, `document_expired` (partner, `job_id` null).
+* `GET /admin/alerts`: new codes `PARTNER_CANCELS_AFTER_START`, `PARTNER_STARTS_WITHOUT_GPS`, `PARTNER_OFTEN_LATE`, `OFF_APP_PAYMENT_REPORTS`; each alert now has `partner_ids` (may be empty).
+
+## 25. Partner account deletion, deletion web page, security headers (ADR-045, ADR-046, 2026-11-21)
+
+Web and mobile already use all of this.
+
+| Endpoint | Who | Notes |
+|---|---|---|
+| `DELETE /partners/me` | partner | 200 `{deleted: true}`, then sign the user out. **409 `ACCOUNT_HAS_ACTIVE_JOB`** while a job is assigned, en route or in progress, or an offer is open. Irreversible |
+| `PATCH /admin/partners/{id}/verify` | staff | New: **409 `PARTNER_ACCOUNT_DELETED`** for a partner who deleted their account |
+
+* A deleted partner shows in admin lists as "Deleted partner", `suspended`, with the note "Account deleted by the partner".
+* If the same number also has an owner profile, that profile keeps working: deleting one profile never deletes the shared login. The same now holds for `DELETE /users/me`.
+* New public web route `/delete-account` (no sign-in). Use it as the account-deletion URL in the Play Console Data safety form.
+* Terms now include a "Complaints and grievance officer" section (`GRIEVANCE_OFFICER` in `web/src/pages/legal/LegalPage.tsx`; the name is a placeholder until one is appointed).
+* Every API response now carries `X-Content-Type-Options`, `X-Frame-Options` and `Referrer-Policy` (and HSTS over HTTPS). Production will stop serving `/docs` and `/openapi.json` once `API_DOCS_ENABLED=false` is set.
+
+## 26. Partner data export, web Report a problem, privacy notice, staff alerts (ADR-045 amendment, ADR-047, 2026-11-21)
+
+**New endpoint.** `GET /api/v1/partners/me/export` (partner only; an owner identity gets 403). Returns `{profile, services, equipment, documents, jobs, price_requests, photos, notifications}`. Documents have no file path. Each job has `your_assignment` and, only when the partner accepted it, `payments` and `ratings` (`by` is `"owner"` or `"you"`). No owner details anywhere. Clients save it as a JSON file: mobile uses the Share sheet, web a download ("Download my data", next to "Delete partner account").
+
+**Web owner "Report a problem".** `web/src/components/ReportProblem.tsx` on the tracking page of a completed job, or a cancelled job that had a partner. Uses the existing `POST/GET /jobs/{id}/disputes` (ADR-043); same reasons as mobile, fewer on a cancelled job. Errors `JOB_NOT_DISPUTABLE` and `DISPUTE_ALREADY_OPEN` are shown in plain words. No backend change.
+
+**Privacy and Terms.** `/privacy` now has an itemised table (`PRIVACY_ITEMS`: information, why, how long) and a "Your rights" section (export, correction, delete, location choice, nomination, complaint to the Data Protection Board). Terms say users must be 18 or older. Keep `PRIVACY_ITEMS` in step when a new kind of data is collected. Runbook and retention schedule: `docs/DPDP-READINESS.md`.
+
+**Server settings (Render).** `STAFF_ALERT_WEBHOOK_URL` (blank = off) and `STAFF_ALERT_REPEAT_MIN` (default 60). Nothing for the clients.
+
+Route fixtures re-exported for web and mobile (88 routes).
+

@@ -1462,3 +1462,161 @@ The endpoints now take `get_current_identity` instead of `require_user`. The sid
 **Not done.** An expired document does not un-verify the partner; staff see it on the review dialog. No reminder before expiry. Partner account deletion does not exist yet (G10). When it is built, it must set `retain_until`.
 
 **Tests.** `tests/unit/test_partner_documents.py` (11), `test_admin_partner_verification.py` (+2). `tests/integration/check_partner_documents.py` (33, range 85x) runs against the real bucket: refusals, signed upload, replacement deleting the old file, role gate (support and finance get 403), the exact bytes served by the view link, public read refused, the verification gate, tow equipment, and the sweep deleting files. `check_admin_ops` and `check_admin_partners` now seed approved documents before verifying, and assert the 409 without them.
+
+**Amendment (2026-11-21): expiry reminders.** The hourly sweep now tells the partner. Each document it marks `expired` sends that partner `document_expired`. A partner with an approved document expiring within 14 days gets `document_expiring`, at most once every 20 days. Both are in-app plus push, with `job_id` null. An expired document still does not un-verify the partner. Test: `test_partner_documents.py::test_sweep_tells_partners_whose_document_lapsed_and_those_about_to`.
+
+---
+
+# ADR-039: A final price above the estimate needs the owner's approval before completion
+
+**Date.** 2026-11-21. **Status.** Accepted. Research: `docs/research/2026-11-21-roadside-app-failures.md` F1.
+
+**Context.** The most common roadside complaint in India is the bill that grows once the driver is stranded. Sahayak showed an estimate (ADR-028), but the partner typed the final price alone at completion, bounded only by `PRICE_FINAL_OUT_OF_RANGE` (5x the estimate, floor ₹5,000, cap ₹50,000). An owner learned the price after the work, when "no" is no longer a choice.
+
+**Decision.**
+1. Up to **estimate + 10%** (rounded to paise) needs no approval. Above that, the partner asks in the app: `POST /jobs/{id}/price-revisions {amount, reason}` while the job is `assigned`, `partner_en_route` or `in_progress`. The owner answers with `POST /jobs/{id}/price-revisions/{rid}/decision {approve}`. Both take the job row lock.
+2. Completion (`POST /jobs/{id}/status` to `completed`) checks, under the lock it already holds, that `price_final` is at most `max(estimate + 10%, highest approved revision)`; otherwise **409 `PRICE_APPROVAL_REQUIRED`**. A job with no estimate (legacy rows; every live service has a price) needs approval for any price. A revision still pending at completion is marked `withdrawn` in the same transaction.
+3. One pending revision per job (partial unique index; 409 `PRICE_REVISION_PENDING`). A revision inside the free margin is refused (400 `PRICE_REVISION_NOT_NEEDED`), and one above the hard ceiling gets the existing 400 `PRICE_FINAL_OUT_OF_RANGE`. Answered revisions and finished jobs: 409 `PRICE_REVISION_CLOSED`.
+4. Both sides are notified (`price_revision_requested` to the owner, `price_revision_approved|rejected` to the partner), with no amount in the text.
+5. `GET /jobs/{id}/safeguards` returns `price_allowed_max`, `price_ceiling`, `pending_revision` and the history, for the owner, the assigned partner and staff.
+
+**Rejected.** An owner OTP at completion: complaint sites describe technicians asking for the end-of-job code before finishing, so it moves pressure onto the owner without giving them a choice. Approval after completion: the same problem.
+
+**Consequences.** A rejection leaves the partner two moves: complete at the agreed price, or cancel. A partner who keeps cancelling after work started shows up in ADR-043's flags.
+
+**Tests.** `tests/unit/test_job_safeguards.py` (margin rounding, gate above/below/at the approved amount, no-estimate case, proposal refusals, unique-index mapping, owner-only decision, closed revision).
+
+---
+
+# ADR-040: The start code is refused when the partner's fresh GPS fix is over 1 km from the pickup
+
+**Date.** 2026-11-21. **Status.** Accepted. Extends the start code (migration 008). Research F2.
+
+**Context.** The start code proves the owner handed it over, not that the partner was standing there. A code read out over the phone starts a job from anywhere; that is how "marked started, never came" and remote cash deals look. Ride-hailing start PINs exist for the same reason; Heetch also checks the pickup zone.
+
+**Decision.** After the code matches, `start_job` reads the partner's position from Redis. If it is **under 10 minutes old and more than 1,000 m** from the pickup (haversine), **409 `PARTNER_NOT_AT_PICKUP`**, nothing written. If there is no fix or it is stale, the start goes ahead and the `in_progress` history row carries the note *"Start location not verified (no recent GPS fix)"*.
+
+**Why allow a missing fix.** GPS fails in basements and parking structures, which are a real share of breakdowns (FUTURE-ROADMAP §2.2). Refusing would leave a partner standing at the car unable to start. The note makes the exception visible, and ADR-043 flags repeats.
+
+**Why 1 km.** Phone GPS in a city is often 50 to 300 m off, and a highway pin can be a few hundred metres from where the car stopped. 1 km refuses "from home" and passes "at the vehicle".
+
+**Tests.** `test_job_safeguards.py`: far fresh fix refused; 220 m allowed with no note; no fix and a stale fix allowed with the note; haversine sanity. `test_job_start_code.py` stubs the check.
+
+---
+
+# ADR-041: Once a partner is overdue, the owner can ask for another without starting again
+
+**Date.** 2026-11-21. **Status.** Accepted. Builds on ADR-030 (staff reassign). Research F3.
+
+**Context.** Waiting hours for a partner who never arrives is the commonest review on Trustpilot pages for US roadside apps. After acceptance, a Sahayak owner could only cancel and send a new request, losing their place and repeating the search.
+
+**Decision.** `POST /jobs/{id}/request-new-partner` (owner only, 404 for anyone else) while the job is `assigned` or `partner_en_route`. It is allowed from **accepted_at + max(2 x ETA, ETA + 20 min, 30 min)** (ETA defaults to 30 when unknown). Before that: 409 `PARTNER_NOT_OVERDUE`, nothing written. After work starts: 409 `JOB_NOT_REASSIGNABLE`. The same two steps as ADR-030: (1) under the job lock, every open assignment becomes `cancelled`, the job returns to `matching` with the history note *"Owner asked for another partner: overdue (ETA n min, from status)"*, the released partner gets `job_reassigned_by_owner`, the owner gets `job_reassigning_by_owner`, commit; (2) the ordinary re-dispatch, which never re-offers a partner who had the job. `GET /jobs/{id}/safeguards` returns `new_partner_available_at` and `can_request_new_partner` so the app shows the button only when it works.
+
+**Rejected.** Counting the release as the partner's `rejected`: that metric is the partner's answer to an offer (ADR-012). Lateness is counted by ADR-043 from the history note instead.
+
+**Tests.** `test_job_safeguards.py`: overdue arithmetic, early 409 with no writes, in-progress 409, release + history + notification + re-dispatch, stranger 404.
+
+---
+
+# ADR-042: Towing jobs need a pickup and a drop photo before they can complete
+
+**Date.** 2026-11-21. **Status.** Accepted. Reuses the private bucket from ADR-038. Research F4.
+
+**Context.** Tow damage disputes turn on timestamped photos taken before the vehicle moved; towers commonly answer "it was already damaged". Sahayak had none.
+
+**Decision.** Photos live in the existing private bucket under `jobs/{job_id}/{photo_id}.{ext}` (JPEG, PNG, WebP; 5 MB; 12 per job), table `job_photos` (`stage` = `pickup` or `drop`). Upload is the ADR-038 three-step: `POST /jobs/{id}/photos {stage, content_type}` returns a signed URL, the app PUTs the file, `POST .../{photo_id}/confirm` checks the object exists. Only the assigned partner uploads, while the job is `partner_en_route` or `in_progress`. For a service with `requires_vehicle_equipment`, completion returns **409 `JOB_PHOTOS_REQUIRED`** until both stages have a confirmed photo. `GET /jobs/{id}/photos/{photo_id}/url` gives a 60-second link to the owner, the assigned partner, or staff (super_admin, ops, support); staff views write `job_photo_viewed` to the audit log.
+
+**Not done.** No retention sweep for job photos yet; they are kept with the job. Non-towing services do not require photos.
+
+**Tests.** `test_job_safeguards.py`: each missing stage refused, both present passes, path shape.
+
+---
+
+# ADR-043: Off-app payment is reportable, and staff are flagged on the patterns it leaves
+
+**Date.** 2026-11-21. **Status.** Accepted. Extends ADR-027 and the admin alerts. Research F5.
+
+**Context.** Drivers on ride-hailing apps ask customers to cancel and pay cash to skip commission. On Sahayak that ends as a **cancelled** job, and ADR-027 only allowed reports on completed jobs, so the one report that mattered could not be made.
+
+**Decision.**
+1. New dispute reason `off_app_payment` (migration 0014). A cancelled job is reportable when a partner had accepted it, for `off_app_payment`, `partner_behaviour`, `damage` or `other` (not `overcharged` or `service_not_done`, which need a bill). A cancelled job nobody accepted stays 409 `JOB_NOT_DISPUTABLE`.
+2. `GET /admin/alerts` gains four computed alerts over 30 days, each with `partner_ids`: `PARTNER_CANCELS_AFTER_START` (critical, 2 or more partner cancellations after `in_progress`), `PARTNER_STARTS_WITHOUT_GPS` (3 or more unverified starts, ADR-040), `PARTNER_OFTEN_LATE` (2 or more owner swaps, ADR-041), and `OFF_APP_PAYMENT_REPORTS` (critical, any open report). One occurrence is life; a repeat is a pattern. Nothing is stored and nobody is blocked automatically: staff review.
+
+**Rejected.** Masked calling as the fix: it needs a telephony contract (G7) and does not stop a partner asking in person.
+
+**Tests.** `test_job_safeguards.py`: threshold boundaries, each flag, report allowed and refused on cancelled jobs.
+
+---
+
+# ADR-044: With no signal, the app resends the same request for three minutes, and does not queue it beyond that
+
+**Date.** 2026-11-21. **Status.** Accepted. Closes G11 in a bounded form.
+
+**Context.** Highways and basements lose signal. A request that fails to send leaves the driver retyping it, or tapping again and creating a second job.
+
+**Decision.** In `OwnerHelpFlowScreen`, a send that gets **no HTTP response** (offline, DNS, timeout) is resent every 5 s for up to 3 minutes, with the **same idempotency key**, so the backend (migration 009) never creates it twice even if an earlier attempt arrived and only its answer was lost. The screen shows "No signal. Sending again automatically" with a Stop button. A response with an error (4xx/5xx) is never retried. When the window closes the owner is told nothing was requested, and to call 112. Code: `mobile/src/features/jobs/sendRetry.ts`.
+
+**Rejected.** A persistent queue that sends after the app is closed or restarted: a request delivered ten minutes after the owner gave up and phoned someone else sends a partner to nobody, and the partner is the one who pays for it. SMS fallback: needs a gateway contract.
+
+**Tests.** `mobile/tests/send-retry.test.ts` (5): what counts as no signal, resend until success, no retry after a server answer, the window, Stop.
+
+---
+
+# ADR-045: Partners can delete their own account, and a login is deleted only when no profile still uses it
+
+**Date.** 2026-11-21. **Status.** Accepted. Extends ADR-025 (owner deletion) to partners.
+
+**Context.** Google Play requires an in-app way to delete any account an app lets people create, plus a web page that explains it. Owners have had deletion since ADR-025; partners had none. Separately, ADR-034 lets one phone number hold an owner and a partner profile on the same Supabase login, and owner deletion deleted that login outright. The partner profile was then locked out (bug, found in this review).
+
+**Decision.**
+1. `DELETE /api/v1/partners/me`. Refused with 409 `ACCOUNT_HAS_ACTIVE_JOB` while the partner holds an open offer or an accepted assignment on a job that is assigned, en route or in progress. Otherwise, in one transaction, the row is anonymised exactly like an owner's: name "Deleted partner", phone `del` + 12 hex characters of the id, `auth_user_id` null, off duty, `verification_status = suspended` with the note "Account deleted by the partner", `deleted_at` set (migration 0015). Services, equipment, documents, feature interest, the partner's notifications and push tokens are deleted. The free text of ratings the partner wrote is erased; the scores stay.
+2. Kept: jobs, assignments, the scores owners gave, payments, disputes and tow photos. The owner on the other side keeps their history, and an open report still needs its evidence.
+3. After commit, best-effort: document files are deleted from the private bucket, the live position is removed from Redis, and the login is deleted through `auth_service.delete_login_if_unused`.
+4. **A Supabase login is deleted only when no owner, partner or staff row still points at it.** This applies to owner deletion too, which fixes the bug.
+5. Staff cannot change the verification of a deleted partner (409 `PARTNER_ACCOUNT_DELETED`).
+6. Web: `/delete-account` explains the steps for both roles, what is kept and why, and an email route for people who cannot sign in.
+
+**Rejected.** Removing the row: jobs, payments and disputes reference it, and deleting it would rewrite the owners' history. Refusing deletion while a dispute is open: Play requires deletion to be available, and the job, photos and report stay anyway. Keeping identity documents after deletion "for fraud": a re-registered number goes through document verification again, which covers the risk, and keeping ID scans of a person who asked to leave conflicts with the DPDP purpose rule.
+
+**Residual risk.** A suspended partner can delete and register again with the same number. They start as `pending` and need approved documents and a staff decision before any offer, so the gate is the same as for any new partner.
+
+**Tests.** `tests/unit/test_partner_account_deletion.py` (10, including the shared-login regression that failed on the old code). Live: `tests/integration/check_partner_deletion.py` (23), range `+91900000082x`.
+
+**Amendment (2026-11-21): partner data export.** Owners already had `GET /users/me/export`; partners now get `GET /partners/me/export` (partner role only, so an owner identity gets 403). It returns the profile, services, equipment, documents (type, status, reference, expiry; **never the storage path**), every assignment with the job's status, service and final price, payments and ratings only where the partner accepted the job (an offer they never took shows neither), price requests, tow photos taken, and notifications. It holds **no owner personal data**: no owner name, number or address, because the partner's right of access covers the partner's data, not the owner's (same reasoning as ADR-017). Matching-score internals are left out. The download sits next to "Delete partner account" on mobile and web, so a partner can keep a copy before deleting. Tests: 2 unit in `test_partner_export_and_staff_alerts.py`; live section 2a of `check_partner_deletion.py` (now 32 checks).
+
+---
+
+# ADR-046: Browser security headers on every API response; API docs off in production
+
+**Date.** 2026-11-21. **Status.** Accepted.
+
+**Context.** Production served `/docs` and `/openapi.json` to anyone and sent no security headers.
+
+**Decision.** `SecurityHeadersMiddleware` adds `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY` and `Referrer-Policy: no-referrer` to every response, plus `Strict-Transport-Security: max-age=31536000` when the request arrived over HTTPS (`X-Forwarded-Proto` on Render). The setting `API_DOCS_ENABLED` (default true for local work) turns off `/docs`, `/redoc` and `/openapi.json`; production sets it to false.
+
+**Rejected.** A Content-Security-Policy on the API: JSON responses do not need one and a strict policy breaks the Swagger page. Hiding the docs is not security by itself; every route still checks identity. It only stops handing out the full route map.
+
+**Tests.** Two in `test_partner_account_deletion.py` (headers on HTTP, HSTS only behind HTTPS).
+
+---
+
+# ADR-047: Critical admin alerts are pushed to a staff webhook
+
+**Date.** 2026-11-21. **Status.** Accepted.
+
+**Context.** `GET /admin/alerts` (stuck jobs, no partner on duty, and so on) only helps if someone has the board open. At night, or with a small team, a job can sit stuck for an hour with nobody looking.
+
+**Decision.** The dispatch worker loop (ADR-032) calls `staff_alert_service.check()` after each sweep, at most once a minute. It computes the same alerts as `/admin/alerts` (one source of truth, `admin_ops_service.get_alerts`) and posts each **critical** alert to `STAFF_ALERT_WEBHOOK_URL` as `{"text": ..., "content": ...}`, which Slack, Google Chat and Discord incoming webhooks all accept. Warnings are not sent; they stay on the board.
+
+- **Once per alert, not once per minute.** A Redis `SET NX EX` on `staff_alert:sent:{code}` (expires after `STAFF_ALERT_REPEAT_MIN`, default 60) means one message per alert per hour, and only one process sends it when several workers run.
+- **A failed post is retried.** The key is deleted when the webhook does not answer 2xx, so the next tick tries again.
+- **"Cleared" is sent** when a critical alert goes away, so staff know they can stop looking.
+- **No personal data in the message.** Only the alert code, the count and the board's message; job and partner ids are left out, because webhook messages land in a third-party chat tool.
+- **Off by default.** A blank URL turns the whole check off; a failure inside it is logged (`staff_alert_check_failed`) and never stops dispatch.
+
+**Rejected.** Email: needs an SMTP provider and is slower to be seen. Push to staff phones: staff have no app. SMS: a provider decision (G7). A separate cron service: one more thing to deploy, while the worker loop is already running every few seconds.
+
+**Residual risk.** If the worker itself is down, no alert is sent; the external uptime monitor (ADR-037) covers that. A webhook URL is a secret: anyone holding it can post to the channel, so keep it in Render's env vars only.
+
+**Tests.** 5 unit in `test_partner_export_and_staff_alerts.py` (sent once, warnings never, cleared, retry after failure, no ids in the text, off without a URL and rate-limited); live section 2b of `check_partner_deletion.py` runs the check against the real tables with the post stubbed.
+

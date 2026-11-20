@@ -303,3 +303,127 @@ async def get_partner_with_credentials(
     return result.scalar_one_or_none()
 
 
+async def count_live_work(db: AsyncSession, partner_id: uuid.UUID) -> int:
+    """Open offers plus accepted assignments on a job that is still active.
+
+    ADR-045: a partner cannot delete their account while an owner is waiting on
+    them, or while an offer they could still accept is open.
+    """
+    result = await db.execute(
+        select(func.count(JobAssignment.id))
+        .join(Job, Job.id == JobAssignment.job_id)
+        .where(JobAssignment.partner_id == partner_id)
+        .where(
+            (JobAssignment.status == "offered")
+            | ((JobAssignment.status == "accepted") & Job.status.in_(("assigned", "partner_en_route", "in_progress")))
+        )
+    )
+    return int(result.scalar_one() or 0)
+
+
+async def erase_partner_data(db: AsyncSession, partner: Partner) -> list[str]:
+    """The deletes and scrubs behind partner account deletion (ADR-045). Flush only.
+
+    Removed: services, equipment, documents (rows here, files by the caller after
+    commit), feature-interest rows, the partner's notifications and push tokens,
+    and the free text of ratings the partner wrote. Kept, anonymised through the
+    row: jobs, assignments, the scores owners gave, payments, disputes and tow
+    photos, because the owners on the other side keep their history and an open
+    dispute still needs its evidence.
+
+    Returns the storage paths of the deleted documents.
+    """
+    from sqlalchemy import delete, update
+    from app.models.device_push_token import DevicePushToken
+    from app.models.feature_interest import FeatureInterest
+    from app.models.notification import Notification
+    from app.models.partner import PartnerDocument
+    from app.models.rating import Rating
+
+    pid = partner.id
+    paths = list((await db.execute(
+        select(PartnerDocument.file_url)
+        .where(PartnerDocument.partner_id == pid, PartnerDocument.file_url.is_not(None))
+    )).scalars().all())
+    await db.execute(delete(PartnerDocument).where(PartnerDocument.partner_id == pid))
+    await db.execute(delete(PartnerEquipment).where(PartnerEquipment.partner_id == pid))
+    await db.execute(delete(PartnerService).where(PartnerService.partner_id == pid))
+    await db.execute(delete(FeatureInterest).where(FeatureInterest.partner_id == pid))
+    await db.execute(delete(Notification).where(
+        Notification.recipient_type == "partner", Notification.recipient_id == pid))
+    await db.execute(delete(DevicePushToken).where(
+        DevicePushToken.owner_type == "partner", DevicePushToken.owner_id == pid))
+    # The partner's own words about owners. The score stays (it is in the
+    # owner-facing history); the free text, which can name the owner, goes.
+    await db.execute(
+        update(Rating).where(Rating.rated_by == "partner")
+        .where(Rating.job_id.in_(
+            select(JobAssignment.job_id).where(JobAssignment.partner_id == pid)))
+        .values(comment=None)
+    )
+    partner.name = "Deleted partner"
+    # 15 chars, unique, never dialable: 'del' + 12 hex of the id (as for owners).
+    partner.phone = "del" + pid.hex[:12]
+    partner.auth_user_id = None
+    partner.is_available = False
+    partner.verification_status = "suspended"
+    partner.verification_note = "Account deleted by the partner"
+    partner.deleted_at = func.now()
+    await db.flush()
+    return paths
+
+
+async def export_partner_rows(db: AsyncSession, partner_id: uuid.UUID) -> dict:
+    """Everything stored about one partner, for the data export (ADR-045 amendment).
+
+    Rows only; the service decides which columns leave. Owner details on the
+    partner's jobs are not loaded at all: they are the owner's data.
+    """
+    from app.models.job_trust import JobPhoto, JobPriceRevision
+    from app.models.notification import Notification
+    from app.models.partner import PartnerDocument
+    from app.models.payment import Payment
+    from app.models.rating import Rating
+
+    services = (await db.execute(
+        select(Service.code, Service.name)
+        .join(PartnerService, PartnerService.service_id == Service.id)
+        .where(PartnerService.partner_id == partner_id)
+        .order_by(Service.code)
+    )).all()
+    equipment = (await db.execute(
+        select(PartnerEquipment).where(PartnerEquipment.partner_id == partner_id)
+    )).scalars().all()
+    documents = (await db.execute(
+        select(PartnerDocument).where(PartnerDocument.partner_id == partner_id)
+        .order_by(PartnerDocument.uploaded_at.desc())
+    )).scalars().all()
+    assignments = (await db.execute(
+        select(JobAssignment, Job.status, Job.price_final, Job.requested_at, Job.completed_at,
+               Job.cancelled_at, Service.code)
+        .join(Job, Job.id == JobAssignment.job_id)
+        .join(Service, Service.id == Job.service_id)
+        .where(JobAssignment.partner_id == partner_id)
+        .order_by(JobAssignment.offered_at.desc().nulls_last())
+    )).all()
+    job_ids = list({a[0].job_id for a in assignments})
+    payments = ratings = []
+    if job_ids:
+        payments = (await db.execute(select(Payment).where(Payment.job_id.in_(job_ids)))).scalars().all()
+        ratings = (await db.execute(select(Rating).where(Rating.job_id.in_(job_ids)))).scalars().all()
+    revisions = (await db.execute(
+        select(JobPriceRevision).where(JobPriceRevision.partner_id == partner_id)
+        .order_by(JobPriceRevision.created_at.desc())
+    )).scalars().all()
+    photos = (await db.execute(
+        select(JobPhoto).where(JobPhoto.partner_id == partner_id).order_by(JobPhoto.created_at.desc())
+    )).scalars().all()
+    notifications = (await db.execute(
+        select(Notification).where(Notification.recipient_type == "partner")
+        .where(Notification.recipient_id == partner_id).order_by(Notification.sent_at.desc())
+    )).scalars().all()
+    return {
+        "services": services, "equipment": equipment, "documents": documents,
+        "assignments": assignments, "payments": payments, "ratings": ratings,
+        "revisions": revisions, "photos": photos, "notifications": notifications,
+    }

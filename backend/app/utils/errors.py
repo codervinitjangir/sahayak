@@ -108,6 +108,22 @@ class ErrorCode:
     # validation failure on the same request.
     INVALID_START_CODE = "INVALID_START_CODE"
 
+    # 2026-11-21 trust and safety pass.
+    # ADR-039: completing above the estimate (+10%) without the owner's approval.
+    PRICE_APPROVAL_REQUIRED = "PRICE_APPROVAL_REQUIRED"            # 409
+    PRICE_REVISION_PENDING = "PRICE_REVISION_PENDING"              # 409, one at a time
+    PRICE_REVISION_NOT_FOUND = "PRICE_REVISION_NOT_FOUND"          # 404
+    PRICE_REVISION_NOT_NEEDED = "PRICE_REVISION_NOT_NEEDED"        # 400, amount within the free margin
+    PRICE_REVISION_CLOSED = "PRICE_REVISION_CLOSED"                # 409, already answered or job moved on
+    # ADR-040: the partner's fresh GPS fix is too far from the pickup to start.
+    PARTNER_NOT_AT_PICKUP = "PARTNER_NOT_AT_PICKUP"                # 409
+    # ADR-041: owner asked for another partner before the overdue point.
+    PARTNER_NOT_OVERDUE = "PARTNER_NOT_OVERDUE"                    # 409
+    # ADR-042: a towing job cannot complete without before and after photos.
+    JOB_PHOTOS_REQUIRED = "JOB_PHOTOS_REQUIRED"                    # 409
+    JOB_PHOTO_NOT_FOUND = "JOB_PHOTO_NOT_FOUND"                    # 404
+    JOB_PHOTO_NOT_UPLOADED = "JOB_PHOTO_NOT_UPLOADED"              # 409
+
     # Ratings
     #
     # The job is not in a state where rating it means anything. Only a
@@ -163,6 +179,7 @@ class ErrorCode:
     # Partners
     PARTNER_ALREADY_EXISTS = "PARTNER_ALREADY_EXISTS"
     PARTNER_NOT_FOUND = "PARTNER_NOT_FOUND"
+    PARTNER_ACCOUNT_DELETED = "PARTNER_ACCOUNT_DELETED"  # ADR-045
     INVALID_CATEGORY_CODE = "INVALID_CATEGORY_CODE"
     # ADR-035: a feature id that is not on the caller profile's coming-soon list.
     INVALID_FEATURE = "INVALID_FEATURE"

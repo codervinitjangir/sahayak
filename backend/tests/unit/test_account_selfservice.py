@@ -67,7 +67,7 @@ async def test_delete_anonymises_then_removes_the_login():
          patch("app.repositories.user_repository.count_active_jobs", AsyncMock(return_value=0)), \
          patch("app.repositories.user_repository.erase_owner_data", AsyncMock()) as erase, \
          patch("app.repositories.user_repository.update_user_fields", side_effect=upd), \
-         patch("app.services.auth_service.delete_supabase_user", remove_login):
+         patch("app.services.auth_service.auth_user_still_used", AsyncMock(return_value=False)),          patch("app.services.auth_service.delete_supabase_user", remove_login):
         await user_service.delete_me(db, me.id, "auth-1")
 
     erase.assert_awaited_once()

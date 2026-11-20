@@ -114,7 +114,7 @@ export default function ActivityTab() {
         }}
         onReport={(id, title) => {
           setSelected(null);
-          nav.navigate("ReportProblem", { jobId: id, title });
+          nav.navigate("ReportProblem", { jobId: id, title, cancelled: selected?.status === "cancelled" });
         }}
       />
     </View>
@@ -257,6 +257,17 @@ function JobSheet({
                   <Button label="Cancel request" variant="danger" onPress={confirmCancel} loading={busy} />
                   <Button label="Keep request" variant="ghost" onPress={() => setCancelling(false)} disabled={busy} />
                 </View>
+              </View>
+            ) : null}
+
+            {/* ADR-043: a cancelled job a partner had accepted can be reported
+                (e.g. "cancel and pay me cash"). counterpart_name is set only then. */}
+            {job.status === "cancelled" && job.counterpart_name ? (
+              <View style={styles.docRow}>
+                <Pressable onPress={() => onReport(job.id, job.service_name ?? undefined)} accessibilityRole="button" style={({ pressed }) => [styles.docBtn, pressed && { opacity: 0.8 }]}>
+                  <Ionicons name="flag-outline" size={20} color={Colors.emergency} />
+                  <Text style={[styles.docText, { color: Colors.emergency }]}>Report a problem</Text>
+                </Pressable>
               </View>
             ) : null}
 

@@ -10,6 +10,7 @@ vi.mock("@react-navigation/native", () => ({ useNavigation: () => nav, useRoute:
 vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({ invalidateQueries: vi.fn() }) }));
 vi.mock("../../src/components/map/RealMap", () => ({ default: () => null }));
 vi.mock("../../src/components/ui/SafetyActions", () => ({ default: () => null }));
+vi.mock("../../src/components/ui/OwnerJobSafeguards", () => ({ default: () => null }));
 vi.mock("../../src/features/account/AddVehicleModal", () => ({ default: () => null }));
 vi.mock("../../src/features/shared/ownerData", () => ({ QK: { jobs: ["owner", "jobs"] } }));
 vi.mock("../../src/store/jobStore", () => ({ useJobStore: () => ({ setStartCode: vi.fn() }) }));
