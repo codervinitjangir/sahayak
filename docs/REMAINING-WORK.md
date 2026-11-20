@@ -113,7 +113,7 @@ Recorded 2026-11-14 at the end of the second pass. None of these has any code ye
 
 ## F. Loose ends from the second pass
 
-- **Smoke test not yet seen passing.** Re-checked 2026-11-20: both accounts exist, are linked, and the partner is verified; `+919000000901` signs in with OTP 123456 but `+919000000902` gets `otp_expired`, so it is **not** in Supabase's test phone numbers (Authentication > Sign In / Providers > Phone > Test OTP). Add `919000000902=123456` there. Earlier: `backend/tests/smoke/smoke_e2e.py` signed the owner test number in, then Supabase refused the partner number `+919000000902` with HTTP 403. Check that both numbers are listed under Authentication > Phone > Test phone numbers with the OTP the guide gives, that the partner account still exists and is verified (a harness run deleted the hand-made one earlier, see N2), then run it again.
+- **Smoke test not yet seen passing.** Re-checked 2026-11-20: both accounts exist, are linked, and the partner is verified; `+919000000901` signs in with OTP 123456 but `+919000000902` gets `otp_expired`, because its test OTP is `654321`, not 123456 (verified signing in, 2026-11-20). The smoke test used one OTP for both numbers; it now takes `SMOKE_PARTNER_OTP=654321`. Run it against staging once one exists. Earlier: `backend/tests/smoke/smoke_e2e.py` signed the owner test number in, then Supabase refused the partner number `+919000000902` with HTTP 403. Check that both numbers are listed under Authentication > Phone > Test phone numbers with the OTP the guide gives, that the partner account still exists and is verified (a harness run deleted the hand-made one earlier, see N2), then run it again.
 - **Adarsh has not been told** about `HANDOFF-frontend-contract.md` sections 19 to 19.4. Two changes can break a client that assumes otherwise: an owner's job can go from assigned back to matching, and a partner with only an offer no longer receives owner details from `GET /jobs/{id}`.
 - **Staff roles now gate writes.** Changing prices and recording a refund need finance or super admin; partner verification and owner suspension need ops or super admin. The one linked admin today is a super admin. The unlinked `ops` row has no sign-in.
 - [x] **Two stale live jobs** (`1cadc5c7`, `fb907e38`, stuck in `requested` since 2026-09-15) cancelled on 2026-11-20 through the new worker path (ADR-036). Jobs stuck in `requested` now cancel themselves after 5 min; ended `no_match_found` searches leave the live board after an hour.
@@ -143,7 +143,7 @@ Regression: backend 661 unit, web 162, mobile 76, all passing. Live: 971 of 973 
 
 Still open from this pass:
 - **Rebuild the APK.** Document upload uses `expo-image-picker` (a new native module) and crash reporting is new JS. The APK from 2026-11-18 has neither. No phone was connected on 11-20.
-- **Add `919000000902=123456`** to Supabase test phone numbers, then run `smoke_e2e.py`.
+- Smoke test: partner OTP is `654321` (`SMOKE_PARTNER_OTP`); not yet run, since it should target staging, not production.
 - **Push to GitHub** so `uptime.yml` and Render pick up this work. Nothing is committed yet.
 - Render must have `SUPABASE_SECRET_KEY` set, or document upload answers 503.
 - R2: maps no longer use a key (ADR-031), but the old key in git history should still be deleted in Google Cloud.

@@ -3,7 +3,8 @@
     SMOKE_API_URL=https://staging-api.example/api/v1 \\
     SMOKE_SUPABASE_URL=https://<project>.supabase.co \\
     SMOKE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_... \\
-    SMOKE_OWNER_PHONE=+91900000090X SMOKE_PARTNER_PHONE=+91900000090Y SMOKE_OTP=123456 \\
+    SMOKE_OWNER_PHONE=+91900000090X SMOKE_PARTNER_PHONE=+91900000090Y SMOKE_OTP=123456 \
+    SMOKE_PARTNER_OTP=654321 \   # optional; defaults to SMOKE_OTP
     python tests/smoke/smoke_e2e.py
 
 What it needs, set up once per environment:
@@ -50,6 +51,8 @@ class Smoke:
         self.owner_phone = env("SMOKE_OWNER_PHONE")
         self.partner_phone = env("SMOKE_PARTNER_PHONE")
         self.otp = env("SMOKE_OTP")
+        # Supabase test numbers can each have their own fixed OTP.
+        self.partner_otp = os.environ.get("SMOKE_PARTNER_OTP", "").strip() or self.otp
         self.http = httpx.Client(timeout=30)
         self.failed = False
         self.step_no = 0
@@ -62,11 +65,11 @@ class Smoke:
             self.failed = True
         return ok
 
-    def sign_in(self, phone: str) -> str:
+    def sign_in(self, phone: str, otp: str) -> str:
         headers = {"apikey": self.pub, "Content-Type": "application/json"}
         self.http.post(f"{self.supabase}/auth/v1/otp", headers=headers, json={"phone": phone})
         r = self.http.post(f"{self.supabase}/auth/v1/verify", headers=headers,
-                           json={"phone": phone, "token": self.otp, "type": "sms"})
+                           json={"phone": phone, "token": otp, "type": "sms"})
         token = r.json().get("access_token") if r.status_code == 200 else None
         if not token:
             print(f"FAIL  could not sign in the test number ending {phone[-4:]}: HTTP {r.status_code}")
@@ -96,8 +99,8 @@ class Smoke:
                   health.status_code == 200 and (self.data(health) or {}).get("database") == "connected",
                   self.why(health))
 
-        owner = self.sign_in(self.owner_phone)
-        partner = self.sign_in(self.partner_phone)
+        owner = self.sign_in(self.owner_phone, self.otp)
+        partner = self.sign_in(self.partner_phone, self.partner_otp)
 
         r = self.call("GET", "/auth/me", owner)
         if not self.step("owner number resolves to an owner", r.status_code == 200 and self.data(r)["role"] == "user", self.why(r)):

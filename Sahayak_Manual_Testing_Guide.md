@@ -41,7 +41,7 @@ Real endpoints require a Supabase-issued JWT. To get tokens without sending real
 1. **Supabase Dashboard** → your project → **Authentication → Providers → Phone** → Ensure Phone is enabled.
 2. Under **Test phone numbers**, add (the `+91900000090x` range is reserved for manual testing; no automated harness uses or deletes it):
    * `+919000000901` with OTP `123456` (For Vehicle Owner)
-   * `+919000000902` with OTP `123456` (For Partner / Mechanic)
+   * `+919000000902` with OTP `654321` (For Partner / Mechanic)
 
 ### Step 0A: Request & Verify OTP for Owner (saves `{{token}}`)
 
@@ -96,7 +96,7 @@ export TOKEN="<paste_access_token_here>"
 ### Step 0B: Request & Verify OTP for Partner (saves `{{partner_token}}`)
 
 #### In Postman:
-1. Repeat verify with `phone`: `"+919000000902"`, `token`: `"123456"`.
+1. Repeat verify with `phone`: `"+919000000902"`, `token`: `"654321"`.
 2. **Scripts / Tests Tab:**
    ```javascript
    const res = pm.response.json();
