@@ -70,6 +70,7 @@ class AdminPartnerDocument(BaseModel):
     rejection_reason: Optional[str] = None
     expiry_date: Optional[date] = None
     uploaded_at: datetime
+    reference_number: Optional[str] = None   # tow vehicle RC number (ADR-038)
 
 
 class AdminPartnerEquipment(BaseModel):
@@ -82,4 +83,7 @@ class AdminPartnerEquipment(BaseModel):
 class AdminPartnerDetail(AdminPartnerSummary):
     documents: List[AdminPartnerDocument]
     equipment: List[AdminPartnerEquipment]
+    # ADR-038: what this partner must upload, and whether all of it is approved.
+    documents_required: List[str] = []
+    documents_complete: bool = False
 

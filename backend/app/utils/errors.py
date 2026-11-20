@@ -166,6 +166,12 @@ class ErrorCode:
     INVALID_CATEGORY_CODE = "INVALID_CATEGORY_CODE"
     # ADR-035: a feature id that is not on the caller profile's coming-soon list.
     INVALID_FEATURE = "INVALID_FEATURE"
+    # ADR-038: partner documents.
+    DOCUMENT_NOT_FOUND = "DOCUMENT_NOT_FOUND"            # 404, also for another partner's
+    DOCUMENT_NOT_UPLOADED = "DOCUMENT_NOT_UPLOADED"      # 409, confirm before the file arrived
+    DOCUMENT_NOT_REQUIRED = "DOCUMENT_NOT_REQUIRED"      # 400, tow documents for a non-towing partner
+    PARTNER_DOCUMENTS_INCOMPLETE = "PARTNER_DOCUMENTS_INCOMPLETE"  # 409, verify before every required one is approved
+    DOCUMENT_STORAGE_UNAVAILABLE = "DOCUMENT_STORAGE_UNAVAILABLE"  # 503
 
     # Notifications
     #

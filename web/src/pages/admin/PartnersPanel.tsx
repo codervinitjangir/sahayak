@@ -57,6 +57,57 @@ export const PartnersPanel: React.FC = () => {
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState('');
   const [actionError, setActionError] = useState<string | null>(null);
+  // ADR-038: per-document review. docReject holds the document being rejected.
+  const [docBusy, setDocBusy] = useState<string | null>(null);
+  const [docReject, setDocReject] = useState<string | null>(null);
+  const [docReason, setDocReason] = useState('');
+  const [docExpiry, setDocExpiry] = useState<Record<string, string>>({});
+
+  const viewDocument = async (documentId: string) => {
+    if (!reviewId) return;
+    // Open the tab inside the click so pop-up blockers allow it, then point it at the link.
+    const tab = window.open('', '_blank');
+    setDocBusy(documentId);
+    setActionError(null);
+    try {
+      const url = await adminService.viewPartnerDocument(reviewId, documentId);
+      if (tab) {
+        tab.opener = null;
+        tab.location.href = url;
+      } else {
+        window.location.assign(url);
+      }
+    } catch (err: any) {
+      tab?.close();
+      setActionError(err?.message || 'Could not open the document');
+    } finally {
+      setDocBusy(null);
+    }
+  };
+
+  const reviewDocument = async (documentId: string, status: 'approved' | 'rejected') => {
+    if (!reviewId) return;
+    if (status === 'rejected' && docReason.trim().length < 3) {
+      setActionError('Say why the document is rejected; the partner sees it.');
+      return;
+    }
+    setDocBusy(documentId);
+    setActionError(null);
+    try {
+      await adminService.reviewPartnerDocument(reviewId, documentId, {
+        status,
+        ...(status === 'rejected' ? { reason: docReason.trim() } : {}),
+        ...(status === 'approved' && docExpiry[documentId] ? { expiry_date: docExpiry[documentId] } : {}),
+      });
+      setDocReject(null);
+      setDocReason('');
+      setDetail(await adminService.getPartner(reviewId));
+    } catch (err: any) {
+      setActionError(err?.message || 'Could not save the review');
+    } finally {
+      setDocBusy(null);
+    }
+  };
 
   const closeReview = () => {
     setReviewId(null);
@@ -378,21 +429,93 @@ export const PartnersPanel: React.FC = () => {
               <h5 className="text-xs uppercase font-bold text-[#64748B] mb-1.5 flex items-center gap-1">
                 <FileText className="w-3 h-3" /> Documents ({detail.documents.length})
               </h5>
+              {detail.documents_required && detail.documents_required.length > 0 && (
+                <p className={`mb-1.5 ${detail.documents_complete ? 'text-[#166534]' : 'text-[#92400E]'}`}>
+                  {detail.documents_complete
+                    ? 'Every required document is approved.'
+                    : `Required before verifying: ${detail.documents_required.map(label).join(', ')}.`}
+                </p>
+              )}
               {detail.documents.length === 0 ? (
-                <p className="text-[#475569]">No documents uploaded — nothing to verify yet.</p>
+                <p className="text-[#475569]">No documents uploaded yet. The partner uploads them from the app.</p>
               ) : (
                 <ul className="space-y-1.5">
                   {detail.documents.map((d) => (
-                    <li
-                      key={d.id}
-                      className="flex items-center justify-between gap-2 p-2 rounded-[8px] border border-[#EEF2F6]"
-                    >
-                      <span className="font-semibold capitalize">{label(d.doc_type)}</span>
-                      <span className="text-[#475569]">
-                        {d.has_file ? 'file on record' : 'no file uploaded'}
-                        {d.expiry_date ? ` · expires ${d.expiry_date}` : ''} · {d.status}
-                        {d.rejection_reason ? ` (${d.rejection_reason})` : ''}
-                      </span>
+                    <li key={d.id} className="p-2 rounded-[8px] border border-[#EEF2F6] space-y-1.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-semibold capitalize">{label(d.doc_type)}</span>
+                        <span className="text-[#475569]">
+                          {d.reference_number ? `${d.reference_number} · ` : ''}
+                          {d.expiry_date ? `expires ${d.expiry_date} · ` : ''}
+                          {d.status}
+                          {d.rejection_reason ? ` (${d.rejection_reason})` : ''}
+                        </span>
+                      </div>
+                      {d.has_file && (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => void viewDocument(d.id)}
+                            aria-label={`View ${label(d.doc_type)}`}
+                            disabled={docBusy !== null}
+                            className="px-2 py-1 rounded-[6px] border border-[#CBD5E1] font-semibold disabled:opacity-50"
+                          >
+                            View file
+                          </button>
+                          {d.status !== 'approved' && (
+                            <>
+                              <input
+                                type="date"
+                                aria-label={`Expiry date of ${label(d.doc_type)} (optional)`}
+                                value={docExpiry[d.id] ?? ''}
+                                onChange={(e) => setDocExpiry((m) => ({ ...m, [d.id]: e.target.value }))}
+                                className="px-2 py-1 rounded-[6px] border border-[#CBD5E1]"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => void reviewDocument(d.id, 'approved')}
+                                aria-label={`Approve ${label(d.doc_type)}`}
+                                disabled={docBusy !== null}
+                                className="px-2 py-1 rounded-[6px] bg-[#166534] text-white font-semibold disabled:opacity-50"
+                              >
+                                Approve
+                              </button>
+                            </>
+                          )}
+                          {d.status !== 'rejected' && (
+                            <button
+                              type="button"
+                              onClick={() => { setDocReject(d.id); setDocReason(''); }}
+                              aria-label={`Reject ${label(d.doc_type)}`}
+                              disabled={docBusy !== null}
+                              className="px-2 py-1 rounded-[6px] border border-[#FCA5A5] text-[#991B1B] font-semibold disabled:opacity-50"
+                            >
+                              Reject
+                            </button>
+                          )}
+                        </div>
+                      )}
+                      {docReject === d.id && (
+                        <div className="flex gap-2">
+                          <input
+                            aria-label="Reason the partner will see"
+                            placeholder="Reason the partner will see"
+                            value={docReason}
+                            onChange={(e) => setDocReason(e.target.value)}
+                            maxLength={500}
+                            className="flex-1 px-2 py-1 rounded-[6px] border border-[#CBD5E1]"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => void reviewDocument(d.id, 'rejected')}
+                            aria-label={`Send rejection of ${label(d.doc_type)}`}
+                            disabled={docBusy !== null}
+                            className="px-2 py-1 rounded-[6px] bg-[#991B1B] text-white font-semibold disabled:opacity-50"
+                          >
+                            Send
+                          </button>
+                        </div>
+                      )}
                     </li>
                   ))}
                 </ul>

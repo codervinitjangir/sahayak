@@ -60,6 +60,7 @@ class FakeSession:
 
 
 AUDITS: list = []
+RETENTION: list = []
 
 
 @pytest.fixture(autouse=True)
@@ -75,6 +76,18 @@ def _audit_and_preread(monkeypatch):
 
     monkeypatch.setattr("app.repositories.partner_repository.get_partner_by_id", fake_get)
     monkeypatch.setattr("app.repositories.admin_ops_repository.add_audit", fake_audit)
+
+    # ADR-038 document gate and retention clock: complete by default here; the
+    # refusal has its own test below.
+    async def complete(db, partner_id):
+        return None
+
+    async def clock(db, partner_id, to_status):
+        RETENTION.append(to_status)
+
+    RETENTION.clear()
+    monkeypatch.setattr("app.services.partner_document_service.assert_complete_for_verification", complete)
+    monkeypatch.setattr("app.services.partner_document_service.on_verification_change", clock)
 
 
 def test_list_partners_returns_roster(monkeypatch):
@@ -171,3 +184,36 @@ def test_reject_passes_reason_to_repository(monkeypatch):
     res = asyncio.run(verify_partner(PARTNER_ID, payload, identity=ADMIN_IDENTITY, db=db))
     assert seen["note"] == "Blurry licence"
     assert res["data"].verification_note == "Blurry licence"
+
+
+def test_verifying_with_documents_incomplete_is_409_and_writes_nothing(monkeypatch):
+    from app.utils.errors import AppError, ConflictError, ErrorCode
+    writes = []
+
+    async def incomplete(db, partner_id):
+        raise ConflictError(ErrorCode.PARTNER_DOCUMENTS_INCOMPLETE, "Approve every required document first: photo_id")
+
+    async def fake_update(*a, **k):
+        writes.append(1)
+
+    monkeypatch.setattr("app.services.partner_document_service.assert_complete_for_verification", incomplete)
+    monkeypatch.setattr("app.repositories.partner_repository.update_partner_verification", fake_update)
+    db = FakeSession()
+    with pytest.raises(AppError) as exc:
+        asyncio.run(verify_partner(PARTNER_ID, AdminPartnerVerificationRequest(verification_status="verified"),
+                                   identity=ADMIN_IDENTITY, db=db))
+    assert exc.value.code == ErrorCode.PARTNER_DOCUMENTS_INCOMPLETE and exc.value.status_code == 409
+    assert writes == [] and AUDITS == [] and db.committed is not True
+
+
+def test_rejecting_starts_the_retention_clock(monkeypatch):
+    partner = FakePartner()
+
+    async def fake_update(db_session, partner_id, new_status, note=None):
+        partner.verification_status = new_status
+        return partner
+
+    monkeypatch.setattr("app.repositories.partner_repository.update_partner_verification", fake_update)
+    asyncio.run(verify_partner(PARTNER_ID, AdminPartnerVerificationRequest(verification_status="rejected", notes="Blurry licence"),
+                               identity=ADMIN_IDENTITY, db=FakeSession()))
+    assert RETENTION == ["rejected"]

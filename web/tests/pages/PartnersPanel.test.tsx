@@ -9,7 +9,8 @@ vi.mock('../../src/services/admin.service', async (orig) => {
   const real = await orig<typeof import('../../src/services/admin.service')>();
   return {
     ...real,
-    adminService: { listPartners: vi.fn(), getPartner: vi.fn(), verifyPartner: vi.fn() },
+    adminService: { listPartners: vi.fn(), getPartner: vi.fn(), verifyPartner: vi.fn(),
+      viewPartnerDocument: vi.fn(), reviewPartnerDocument: vi.fn() },
   };
 });
 
@@ -62,5 +63,24 @@ describe('PartnersPanel review flow', () => {
     await waitFor(() =>
       expect(adminService.verifyPartner).toHaveBeenCalledWith('p1', 'rejected', 'Licence expired'),
     );
+  });
+
+  it('reviews one document: a rejection needs the reason the partner will see (ADR-038)', async () => {
+    const user = userEvent.setup();
+    vi.mocked(adminService.reviewPartnerDocument).mockResolvedValue(undefined);
+    render(<PartnersPanel />);
+    await user.click(await screen.findByRole('button', { name: /review/i }));
+    await screen.findByText(/driving license/i);
+
+    await user.click(screen.getByRole('button', { name: /^reject driving license$/i }));
+    await user.click(screen.getByRole('button', { name: /send rejection of driving license/i }));
+    expect(adminService.reviewPartnerDocument).not.toHaveBeenCalled();
+    await user.type(screen.getByLabelText(/reason the partner will see/i), 'Photo is blurred');
+    await user.click(screen.getByRole('button', { name: /send rejection of driving license/i }));
+    await waitFor(() => expect(adminService.reviewPartnerDocument).toHaveBeenCalledWith(
+      'p1', 'd1', { status: 'rejected', reason: 'Photo is blurred' }));
+
+    await user.click(screen.getByRole('button', { name: /^approve driving license$/i }));
+    await waitFor(() => expect(adminService.reviewPartnerDocument).toHaveBeenCalledWith('p1', 'd1', { status: 'approved' }));
   });
 });

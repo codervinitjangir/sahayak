@@ -346,6 +346,14 @@ async def main():
 
         section("5. Partner verification is audited")
         r = await c.patch(f"/api/v1/admin/partners/{partner}/verify", json={"verification_status": "verified"})
+        check("verify without approved documents is 409 PARTNER_DOCUMENTS_INCOMPLETE (ADR-038)",
+              r.status_code == 409 and r.json()["error"]["code"] == "PARTNER_DOCUMENTS_INCOMPLETE",
+              f"HTTP {r.status_code} {r.text[:120]}")
+        for t in ("driving_licence", "photo_id"):
+            one("INSERT INTO partner_documents (partner_id, doc_type, status, file_url, content_type) "
+                "VALUES (%(p)s, %(t)s, 'approved', %(f)s, 'image/jpeg') RETURNING id",
+                {"p": partner, "t": t, "f": f"{partner}/qa-{t}.jpg"})
+        r = await c.patch(f"/api/v1/admin/partners/{partner}/verify", json={"verification_status": "verified"})
         a = one("SELECT action, details FROM admin_audit_log WHERE target_id=%(i)s", {"i": partner})
         check("verify writes partner_verified with from_status", r.status_code == 200 and a is not None
               and a["action"] == "partner_verified" and a["details"]["from_status"] == "pending", f"HTTP {r.status_code} {a}")

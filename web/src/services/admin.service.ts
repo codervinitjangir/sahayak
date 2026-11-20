@@ -57,6 +57,8 @@ export interface AdminPartnerDocument {
   rejection_reason: string | null;
   expiry_date: string | null;
   uploaded_at: string;
+  /** Tow vehicle RC number typed by the partner (ADR-038). */
+  reference_number?: string | null;
 }
 
 export interface AdminPartnerEquipment {
@@ -69,6 +71,9 @@ export interface AdminPartnerEquipment {
 export interface AdminPartnerDetail extends AdminPartnerSummary {
   documents: AdminPartnerDocument[];
   equipment: AdminPartnerEquipment[];
+  /** ADR-038: what this partner must upload, and whether all of it is approved. */
+  documents_required?: string[];
+  documents_complete?: boolean;
 }
 
 // ---- Back office (ADR-024) -------------------------------------------------
@@ -221,6 +226,28 @@ export const adminService = {
       method: 'GET',
     });
     return res.data;
+  },
+
+  /**
+   * A 60-second link to one document (ops/super admin only; every call is
+   * audited, ADR-038). Open it straight away; do not store it.
+   */
+  async viewPartnerDocument(partnerId: string, documentId: string): Promise<string> {
+    const res = await apiClient<{ url: string; expires_in: number }>(
+      `/admin/partners/${partnerId}/documents/${documentId}/view`, { method: 'GET' });
+    return res.data.url;
+  },
+
+  /** Approve or reject one document. A rejection needs a reason the partner sees. */
+  async reviewPartnerDocument(
+    partnerId: string,
+    documentId: string,
+    body: { status: 'approved' | 'rejected'; reason?: string; expiry_date?: string },
+  ): Promise<void> {
+    await apiClient(`/admin/partners/${partnerId}/documents/${documentId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    });
   },
 
   /** One partner with documents and equipment, for the review dialog. */

@@ -1,26 +1,29 @@
 import React from 'react';
+import { getApiBaseUrl } from '../services/api';
 
 /**
- * Where render crashes are sent, if anywhere. Unset (the default) reports
- * nothing. Set VITE_ERROR_REPORT_URL to an endpoint you operate (or a Sentry
- * tunnel) to receive a small JSON body; no user identifiers are included.
+ * Where render crashes are sent (ADR-037). By default the backend's
+ * POST /client-errors, which writes one server log line and stores nothing.
+ * VITE_ERROR_REPORT_URL overrides it (a Sentry tunnel, say). The body matches
+ * the backend schema, which refuses unknown fields; no user identifiers.
  */
-const REPORT_URL = import.meta.env.VITE_ERROR_REPORT_URL as string | undefined;
+const REPORT_URL =
+  (import.meta.env.VITE_ERROR_REPORT_URL as string | undefined) || `${getApiBaseUrl()}/client-errors`;
 
 export function reportClientError(error: unknown, componentStack?: string | null): void {
   if (!REPORT_URL) return;
   try {
     const body = JSON.stringify({
-      message: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? (error.stack ?? '').slice(0, 4000) : undefined,
-      componentStack: (componentStack ?? '').slice(0, 2000),
+      platform: 'web',
+      message: (error instanceof Error ? error.message : String(error)).slice(0, 2000) || 'Unknown error',
+      stack: error instanceof Error ? (error.stack ?? '').slice(0, 4000) || undefined : undefined,
+      component_stack: (componentStack ?? '').slice(0, 2000) || undefined,
       // Path only: a query string can carry a share token.
-      path: window.location.pathname,
-      userAgent: navigator.userAgent,
-      at: new Date().toISOString(),
+      path: window.location.pathname.slice(0, 300),
+      user_agent: navigator.userAgent.slice(0, 300),
     });
     if (navigator.sendBeacon) navigator.sendBeacon(REPORT_URL, new Blob([body], { type: 'application/json' }));
-    else void fetch(REPORT_URL, { method: 'POST', body, headers: { 'Content-Type': 'application/json' }, keepalive: true });
+    else void fetch(REPORT_URL, { method: 'POST', body, headers: { 'Content-Type': 'application/json' }, keepalive: true }).catch(() => undefined);
   } catch {
     // Reporting must never be the second failure.
   }

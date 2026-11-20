@@ -142,6 +142,7 @@ STAFF_WRITE_ROLES: dict[str, tuple[str, ...]] = {
     "staff": ("super_admin",),                         # invites, roles, switching access off
     "jobs": ("super_admin", "ops", "support"),         # staff cancel
     "partners": ("super_admin", "ops"),                # verification
+    "documents": ("super_admin", "ops"),               # view and review partner documents (ADR-038)
     "owners": ("super_admin", "ops"),                  # suspend / reinstate
     "disputes": ("super_admin", "ops", "support", "finance"),
     "refunds": ("super_admin", "finance"),             # a dispute resolved as refunded

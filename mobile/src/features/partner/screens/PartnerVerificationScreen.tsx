@@ -10,7 +10,8 @@ import Card from "../../../components/ui/Card";
 import Button from "../../../components/ui/Button";
 import { ErrorState, Skeleton } from "../../../components/ui/kit";
 import { useJobStore } from "../../../store/jobStore";
-import { partnerApi, type MobilePartnerService, type MobilePartnerTrustStats } from "../../../services/api/partner";
+import { partnerApi, type MobilePartnerService, type MobilePartnerTrustStats, type PartnerDocuments } from "../../../services/api/partner";
+import DocumentsCard from "../components/DocumentsCard";
 
 type IconName = keyof typeof Ionicons.glyphMap;
 
@@ -19,11 +20,11 @@ function metaFor(status?: string): { title: string; body: string; icon: IconName
     case "verified":
       return { title: "You are verified", body: "The Sahayak team has verified your account. Go on duty to receive job offers.", icon: "shield-checkmark", color: Colors.success, bg: Colors.successLight };
     case "rejected":
-      return { title: "Not approved", body: "The Sahayak team could not verify your account. Call support to find out why and what to send.", icon: "close-circle", color: Colors.error, bg: Colors.errorLight };
+      return { title: "Not approved", body: "The Sahayak team could not verify your account. Check your documents below for the reason, or call support.", icon: "close-circle", color: Colors.error, bg: Colors.errorLight };
     case "suspended":
       return { title: "Account suspended", body: "You will not receive jobs while suspended. Call support for details.", icon: "pause-circle", color: Colors.error, bg: Colors.errorLight };
     default:
-      return { title: "Verification pending", body: "The Sahayak team verifies every partner before they can receive jobs. You do not need to do anything else right now.", icon: "time", color: Colors.warning, bg: Colors.warningLight };
+      return { title: "Verification pending", body: "The Sahayak team verifies every partner before they can receive jobs. Upload your documents below so they can start.", icon: "time", color: Colors.warning, bg: Colors.warningLight };
   }
 }
 
@@ -32,15 +33,17 @@ export default function PartnerVerificationScreen() {
   const isOnline = useJobStore((s) => s.isOnline);
   const [stats, setStats] = useState<MobilePartnerTrustStats | null>(null);
   const [services, setServices] = useState<MobilePartnerService[] | null>(null);
+  const [docs, setDocs] = useState<PartnerDocuments | null>(null);
   const [failed, setFailed] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
     setFailed(false);
     try {
-      const [s, sv] = await Promise.all([partnerApi.getStats(), partnerApi.getServices()]);
+      const [s, sv, dc] = await Promise.all([partnerApi.getStats(), partnerApi.getServices(), partnerApi.getDocuments()]);
       setStats(s);
       setServices(sv.services ?? []);
+      setDocs(dc);
     } catch {
       setFailed(true);
     }
@@ -55,6 +58,7 @@ export default function PartnerVerificationScreen() {
   const verified = status === "verified";
   const steps = [
     { label: "You registered", done: true },
+    { label: "You upload your documents", done: !!docs && docs.documents.every((d) => d.status !== "missing") },
     { label: "The Sahayak team reviews your account", done: verified || status === "rejected" || status === "suspended" },
     { label: "You go on duty and receive offers", done: verified && isOnline },
   ];
@@ -79,6 +83,8 @@ export default function PartnerVerificationScreen() {
             </View>
           </View>
 
+          {docs && !verified ? <DocumentsCard docs={docs} onChange={setDocs} /> : null}
+
           <Card>
             <Text style={styles.h2}>What happens next</Text>
             {steps.map((s, i) => (
@@ -102,7 +108,7 @@ export default function PartnerVerificationScreen() {
             ) : (
               <Text style={styles.body}>No services are linked to your account yet.</Text>
             )}
-            <Text style={styles.note}>Services that need equipment, like towing, are enabled once the Sahayak team has verified it.</Text>
+            <Text style={styles.note}>Services that need equipment, like towing, are enabled once the Sahayak team has approved your tow vehicle RC and equipment photo.</Text>
             <View style={{ marginTop: Spacing.md }}>
               <Button label="Edit services" variant="outline" onPress={() => navigation.navigate("PartnerServices")} />
             </View>

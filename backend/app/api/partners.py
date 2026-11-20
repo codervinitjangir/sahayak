@@ -382,3 +382,59 @@ async def link_services(
             db, partner_id, payload.service_codes, identity
         )
     )
+
+
+# ---------------------------------------------------------------------------
+# Documents (ADR-038): the partner's checklist, upload and confirm. The partner
+# never gets a file back; staff review it in the admin console.
+# ---------------------------------------------------------------------------
+from app.schemas.partner_document import (  # noqa: E402
+    DocumentUploadRequest,
+    DocumentUploadTicket,
+    PartnerDocumentsResponse,
+)
+from app.services import partner_document_service  # noqa: E402
+
+
+@router.get(
+    "/me/documents",
+    response_model=ApiResponse[PartnerDocumentsResponse],
+    summary="My required documents and their review status",
+)
+async def my_documents(
+    identity: Identity = Depends(require_partner),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[PartnerDocumentsResponse]:
+    return envelope(await partner_document_service.checklist(db, identity.local_id))
+
+
+@router.post(
+    "/me/documents",
+    response_model=ApiResponse[DocumentUploadTicket],
+    status_code=status.HTTP_201_CREATED,
+    summary="Start a document upload: returns a one-time upload URL",
+)
+async def start_document_upload(
+    payload: DocumentUploadRequest,
+    identity: Identity = Depends(require_partner),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[DocumentUploadTicket]:
+    """PUT the file to `upload_url` (Content-Type as declared, at most 5 MB), then
+    POST .../{document_id}/confirm. 400 DOCUMENT_NOT_REQUIRED for tow documents
+    from a partner who does not offer towing. 503 DOCUMENT_STORAGE_UNAVAILABLE."""
+    return envelope(await partner_document_service.start_upload(db, identity.local_id, payload))
+
+
+@router.post(
+    "/me/documents/{document_id}/confirm",
+    response_model=ApiResponse[PartnerDocumentsResponse],
+    summary="Confirm an upload finished; it replaces any earlier document of that type",
+)
+async def confirm_document_upload(
+    document_id: uuid.UUID,
+    identity: Identity = Depends(require_partner),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[PartnerDocumentsResponse]:
+    """409 DOCUMENT_NOT_UPLOADED if the file is not in storage yet. 404 for an id
+    that is not yours."""
+    return envelope(await partner_document_service.confirm_upload(db, identity.local_id, document_id))

@@ -24,7 +24,7 @@ from app.config.database import AsyncSessionLocal  # noqa: E402
 from app.models.partner import Partner, PartnerDocument, PartnerEquipment  # noqa: E402
 from app.schemas.admin import AdminPartnerVerificationRequest  # noqa: E402
 from app.services.auth_service import Identity  # noqa: E402
-from app.utils.errors import NotFoundError  # noqa: E402
+from app.utils.errors import AppError, NotFoundError  # noqa: E402
 
 # Verification writes an audit row whose admin_id is a foreign key to admins
 # (ADR-024), so the identity must be a real admins row, not a random uuid.
@@ -67,9 +67,12 @@ async def main() -> None:
             db.add(partner)
             await db.flush()
             pid = partner.id
-            db.add(PartnerDocument(partner_id=pid, doc_type="driving_license",
-                                   file_url="private/bucket/x.pdf"))
-            db.add(PartnerDocument(partner_id=pid, doc_type="rc_book"))
+            db.add(PartnerDocument(partner_id=pid, doc_type="driving_licence", status="approved",
+                                   file_url=f"{pid}/x.pdf", content_type="application/pdf"))
+            db.add(PartnerDocument(partner_id=pid, doc_type="photo_id",
+                                   file_url=f"{pid}/y.jpg", content_type="image/jpeg"))
+            # An upload started and never confirmed (ADR-038): not a document to review.
+            db.add(PartnerDocument(partner_id=pid, doc_type="photo_id", content_type="image/jpeg"))
             db.add(PartnerEquipment(partner_id=pid, equipment_type="flatbed",
                                     registration_number="KA01QA0001"))
             await db.commit()
@@ -83,12 +86,16 @@ async def main() -> None:
 
             print("2. Detail")
             d = (await get_partner_detail(pid, identity=ADMIN, db=db))["data"]
-            check("detail returns both documents", len(d.documents) == 2, str(len(d.documents)))
+            check("detail returns both confirmed documents, not the unfinished upload",
+                  len(d.documents) == 2, str(len(d.documents)))
+            check("detail lists what is required and that it is not complete (ADR-038)",
+                  d.documents_required == ["driving_licence", "photo_id"] and d.documents_complete is False,
+                  f"{d.documents_required} {d.documents_complete}")
             check("detail returns the equipment", len(d.equipment) == 1
                   and d.equipment[0].registration_number == "KA01QA0001")
             by_type = {x.doc_type: x for x in d.documents}
             check("has_file reflects a stored file without exposing its path",
-                  by_type["driving_license"].has_file and not by_type["rc_book"].has_file
+                  by_type["driving_licence"].has_file and by_type["photo_id"].has_file
                   and "file_url" not in d.model_dump()["documents"][0])
             try:
                 await get_partner_detail(uuid.uuid4(), identity=ADMIN, db=db)
@@ -117,8 +124,25 @@ async def main() -> None:
                   r.verification_status == "rejected" and r.verification_note == "RC book expired")
             d = (await get_partner_detail(pid, identity=ADMIN, db=db))["data"]
             check("the reason is visible on the detail view", d.verification_note == "RC book expired")
+            try:
+                await verify_partner(pid, AdminPartnerVerificationRequest(
+                    verification_status="verified"), identity=ADMIN, db=db)
+                check("verifying with a pending photo ID is refused (ADR-038)", False)
+            except AppError as e:
+                check("verifying with a pending photo ID is refused (ADR-038)",
+                      e.code == "PARTNER_DOCUMENTS_INCOMPLETE" and e.status_code == 409)
+                await db.rollback()
+            retain = (await db.execute(text("SELECT count(*) FROM partner_documents WHERE partner_id = :p "
+                                            "AND retain_until > now() + interval '89 days'"), {"p": pid})).scalar_one()
+            check("the rejection started the 90-day retention clock on every document", retain == 3, str(retain))
+            await db.execute(text("UPDATE partner_documents SET status = 'approved' WHERE partner_id = :p "
+                                  "AND file_url IS NOT NULL"), {"p": pid})
+            await db.commit()
             r = (await verify_partner(pid, AdminPartnerVerificationRequest(
                 verification_status="verified", notes="ignored"), identity=ADMIN, db=db))["data"]
+            retain = (await db.execute(text("SELECT count(*) FROM partner_documents WHERE partner_id = :p "
+                                            "AND retain_until IS NOT NULL"), {"p": pid})).scalar_one()
+            check("verifying again stops the clock", retain == 0, str(retain))
             check("verifying clears the reason (and drops stray notes)",
                   r.verification_status == "verified" and r.verification_note is None)
             try:

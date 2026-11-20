@@ -1,0 +1,36 @@
+# Uptime monitor (E7). Every 10 minutes, GET the API's /health and, if the
+# repository variable WEB_URL is set, the web origin. A failing run is the
+# alert: GitHub emails the people watching this repository's Actions.
+# It also keeps Render's free instance from sleeping between real requests.
+# Override the API with the repository variable API_HEALTH_URL.
+name: uptime
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      API_HEALTH_URL: ${{ vars.API_HEALTH_URL || 'https://sahayak-backend-1zzq.onrender.com/health' }}
+      WEB_URL: ${{ vars.WEB_URL }}
+    steps:
+      - name: API /health answers and reaches the database
+        run: |
+          # Render's free tier can take ~60 s to wake; retry before calling it down.
+          for i in 1 2 3; do
+            body=$(curl -fsS -m 90 "$API_HEALTH_URL") && break
+            echo "attempt $i failed"; body=""; sleep 15
+          done
+          echo "$body"
+          test -n "$body" || { echo "::error::API unreachable"; exit 1; }
+          echo "$body" | grep -q '"database":"connected"\|"database": "connected"' \
+            || { echo "::error::API up but database not connected"; exit 1; }
+      - name: Web origin answers
+        if: env.WEB_URL != ''
+        run: curl -fsS -m 30 -o /dev/null -w "%{http_code}\n" "$WEB_URL"

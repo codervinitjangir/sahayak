@@ -60,6 +60,7 @@ from app.schemas.analytics import (
     AnalyticsOverview,
 )
 from app.schemas.common import ApiResponse, ErrorResponse, envelope
+from app.schemas.partner_document import DocumentReviewRequest, DocumentViewUrl, PartnerDocumentsResponse
 from app.schemas.admin_ops import (
     AdminServiceItem,
     AdminServicePriceRequest,
@@ -72,7 +73,7 @@ from app.schemas.admin_ops import (
     AdminUserListResponse,
     AdminUserSuspensionRequest,
 )
-from app.services import admin_analytics_service, admin_ops_service
+from app.services import admin_analytics_service, admin_ops_service, partner_document_service
 from app.services.auth_service import Identity
 from app.utils.auth import require_admin, require_staff
 from app.utils.errors import NotFoundError
@@ -295,6 +296,7 @@ async def get_partner_detail(
     p = await partner_repository.get_partner_with_credentials(db, partner_id)
     if not p:
         raise NotFoundError("PARTNER_NOT_FOUND", "Partner not found")
+    docs_state = await partner_document_service.checklist(db, partner_id)
     return envelope(
         AdminPartnerDetail(
             **_partner_summary(p).model_dump(),
@@ -307,9 +309,13 @@ async def get_partner_detail(
                     rejection_reason=d.rejection_reason,
                     expiry_date=d.expiry_date,
                     uploaded_at=d.uploaded_at,
+                    reference_number=d.reference_number,
                 )
-                for d in p.documents
+                # Unconfirmed uploads (no file yet) are not documents to review.
+                for d in p.documents if d.file_url
             ],
+            documents_required=list(docs_state.required),
+            documents_complete=docs_state.complete,
             equipment=[
                 AdminPartnerEquipment(
                     id=e.id,
@@ -335,9 +341,17 @@ async def verify_partner(
     identity: Identity = Depends(require_staff("partners")),
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[AdminPartnerSummary]:
-    """Promote or reject a partner's verification status for dispatch eligibility."""
+    """Promote or reject a partner's verification status for dispatch eligibility.
+
+    409 PARTNER_DOCUMENTS_INCOMPLETE when verifying a partner whose required
+    documents are not all approved (ADR-038). Rejecting starts the 90-day
+    document retention clock; verifying stops it."""
     before = await partner_repository.get_partner_by_id(db, partner_id)
-    from_status = before.verification_status if before else None
+    if not before:
+        raise NotFoundError("PARTNER_NOT_FOUND", "Partner not found")
+    from_status = before.verification_status
+    if payload.verification_status == "verified" and from_status != "verified":
+        await partner_document_service.assert_complete_for_verification(db, partner_id)
     partner = await partner_repository.update_partner_verification(
         db, partner_id, payload.verification_status, payload.notes
     )
@@ -349,10 +363,43 @@ async def verify_partner(
         db, partner_id, from_status=from_status or "", to_status=payload.verification_status,
         note=payload.notes, identity=identity,
     )
+    await partner_document_service.on_verification_change(db, partner_id, payload.verification_status)
     await db.commit()
     await db.refresh(partner)
 
     return envelope(_partner_summary(partner))
+
+
+@admin_partners_router.get(
+    "/{partner_id}/documents/{document_id}/view",
+    response_model=ApiResponse[DocumentViewUrl],
+    summary="A 60-second link to one partner document (ops/super admin, audited)",
+)
+async def view_partner_document(
+    partner_id: uuid.UUID,
+    document_id: uuid.UUID,
+    identity: Identity = Depends(require_staff("documents")),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[DocumentViewUrl]:
+    """Every call writes a partner_document_viewed audit row (ADR-038)."""
+    return envelope(await partner_document_service.view_url(db, partner_id, document_id, identity))
+
+
+@admin_partners_router.patch(
+    "/{partner_id}/documents/{document_id}",
+    response_model=ApiResponse[PartnerDocumentsResponse],
+    summary="Approve or reject one partner document (ops/super admin, audited)",
+)
+async def review_partner_document(
+    partner_id: uuid.UUID,
+    document_id: uuid.UUID,
+    payload: DocumentReviewRequest,
+    identity: Identity = Depends(require_staff("documents")),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[PartnerDocumentsResponse]:
+    """A rejection needs a reason (the partner sees it). Approving both tow
+    documents gives the partner verified tow equipment."""
+    return envelope(await partner_document_service.review(db, partner_id, document_id, payload, identity))
 
 
 # ---------------------------------------------------------------------------

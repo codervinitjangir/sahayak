@@ -17,6 +17,9 @@ import { AppDialogHost } from "./src/components/ui/AppDialog";
 import AppLaunchSequence from "./src/components/splash/AppLaunchSequence";
 import { Colors } from "./src/constants/theme";
 import { useAuthStore } from "./src/store/authStore";
+import { installGlobalCrashHandler, reportCrash } from "./src/services/errorReport";
+
+installGlobalCrashHandler();
 
 // Keep native splash screen visible until our identical JS layer takes over
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -60,6 +63,7 @@ class ErrorBoundary extends React.Component<
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     console.error("Sahayak App Crash:", error, errorInfo);
+    reportCrash(error, errorInfo.componentStack);
   }
 
   render() {

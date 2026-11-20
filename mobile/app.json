@@ -57,7 +57,15 @@
           "imageWidth": 160
         }
       ],
-      "@maplibre/maplibre-react-native"
+      "@maplibre/maplibre-react-native",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Sahayak uses your photos only when you choose a document to upload for verification.",
+          "cameraPermission": "Sahayak uses the camera only when you photograph a document for verification.",
+          "microphonePermission": false
+        }
+      ]
     ],
     "description": "Emergency roadside assistance",
     "extra": {

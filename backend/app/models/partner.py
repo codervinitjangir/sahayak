@@ -149,6 +149,10 @@ class PartnerDocument(Base):
     )
     rejection_reason: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     expiry_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    # ADR-038 (alembic/0013). file_url is the object path in the private bucket.
+    content_type: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
+    reference_number: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
+    retain_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     uploaded_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -157,6 +161,10 @@ class PartnerDocument(Base):
         CheckConstraint(
             "status IN ('pending','approved','rejected','expired')",
             name="check_document_status"
+        ),
+        CheckConstraint(
+            "doc_type IN ('driving_licence','photo_id','tow_vehicle_rc','tow_equipment_photo')",
+            name="check_document_type"
         ),
     )
 

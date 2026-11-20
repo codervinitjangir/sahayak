@@ -12,6 +12,7 @@ from app.api.disputes import admin_disputes_router, router as disputes_router
 from app.api.health import router as health_router
 from app.api.job_assignments import router as job_assignments_router
 from app.api.jobs import router as jobs_router
+from app.api.client_errors import router as client_errors_router
 from app.api.feature_interest import router as feature_interest_router
 from app.api.notifications import router as notifications_router
 from app.api.partners import router as partners_router
@@ -25,7 +26,7 @@ from app.config.redis_client import close_redis
 from app.config.settings import get_settings
 from app.middlewares.error_handlers import register_error_handlers
 from app.middlewares.request_id import RequestIdMiddleware
-from app.services import dispatch_worker, push_service
+from app.services import dispatch_worker, document_retention, push_service
 from app.utils.logging import configure_logging, log_event
 
 configure_logging()
@@ -36,12 +37,19 @@ async def lifespan(app: FastAPI):
     log_event("app_started", outcome="success")
     settings = get_settings()
     worker = None
+    retention = None
     if settings.DISPATCH_WORKER_ENABLED:
         # ADR-032: offer timeouts and server-side search escalation.
         worker = asyncio.create_task(
             dispatch_worker.run_forever(settings.DISPATCH_WORKER_INTERVAL_S)
         )
+        # ADR-038: partner document retention, hourly.
+        retention = asyncio.create_task(document_retention.run_forever(3600))
     yield
+    if retention is not None:
+        retention.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await retention
     # Stop the worker first, so it cannot start a sweep (and stage pushes)
     # after the push drain below has run.
     if worker is not None:
@@ -126,6 +134,8 @@ app.include_router(devices_router)
 # prefix, /api/v1/notifications, shared with nothing.
 app.include_router(notifications_router)
 app.include_router(feature_interest_router)
+# Client crash reports (ADR-037): unauthenticated, rate-limited, logged only.
+app.include_router(client_errors_router)
 
 # Include the services router (/api/v1/services). Unauthenticated: a seeded
 # reference table with no user data, which both frontends need before a token

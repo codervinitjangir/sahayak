@@ -50,6 +50,27 @@ export interface MobilePartnerEarnings {
   lifetime_jobs: number;
 }
 
+// ─── Documents (ADR-038) ─────────────────────────────────────────────────────
+export type DocType = "driving_licence" | "photo_id" | "tow_vehicle_rc" | "tow_equipment_photo";
+export interface PartnerDocumentItem {
+  doc_type: DocType;
+  status: "missing" | "pending" | "approved" | "rejected" | "expired";
+  document_id?: string | null;
+  rejection_reason?: string | null;
+  expiry_date?: string | null;
+  uploaded_at?: string | null;
+}
+export interface PartnerDocuments {
+  required: DocType[];
+  documents: PartnerDocumentItem[];
+  complete: boolean;
+}
+export interface DocumentUploadTicket {
+  document_id: string;
+  upload_url: string;
+  max_bytes: number;
+}
+
 export const partnerApi = {
   /** Edit the partner's display name (PATCH /partners/me, G8). */
   updateMe: (name: string) =>
@@ -77,6 +98,18 @@ export const partnerApi = {
         params: { limit, offset },
       })
       .then((r) => r.data),
+
+  /** Required documents and their review status (ADR-038). */
+  getDocuments: () =>
+    apiClient.get<PartnerDocuments>("/partners/me/documents").then((r) => r.data),
+
+  /** Start an upload: returns a one-time URL to PUT the file to. */
+  startDocumentUpload: (body: { doc_type: DocType; content_type: string; reference_number?: string }) =>
+    apiClient.post<DocumentUploadTicket>("/partners/me/documents", body).then((r) => r.data),
+
+  /** The file is uploaded; make it the document of its type. */
+  confirmDocumentUpload: (documentId: string) =>
+    apiClient.post<PartnerDocuments>(`/partners/me/documents/${documentId}/confirm`).then((r) => r.data),
 
   /** Fetch partner performance and trust stats (GET /api/v1/partners/me/stats) */
   getStats: () =>
