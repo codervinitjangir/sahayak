@@ -75,7 +75,7 @@ def wiring(monkeypatch):
     async def get_responsible_assignment(db, job_id):
         return state["assignment"]
 
-    async def transition_job_status(db, job_id, payload, partner_id):
+    async def transition_job_status(db, job_id, payload, partner_id, history_note=None):
         state["transition_calls"].append(
             {"job_id": job_id, "status": payload.status, "partner_id": partner_id}
         )
@@ -86,6 +86,11 @@ def wiring(monkeypatch):
         job_repository, "get_responsible_assignment", get_responsible_assignment
     )
     monkeypatch.setattr(job_service, "transition_job_status", transition_job_status)
+
+    async def no_location_check(job, partner_id):  # ADR-040 has its own tests
+        return None
+
+    monkeypatch.setattr(job_service, "_check_partner_at_pickup", no_location_check)
     return state
 
 

@@ -22,6 +22,8 @@ import type { LatLng, OwnerStackParamList, ServiceType } from "../../../types";
 import Button from "../../../components/ui/Button";
 import RealMap from "../../../components/map/RealMap";
 import SafetyActions from "../../../components/ui/SafetyActions";
+import OwnerJobSafeguards from "../../../components/ui/OwnerJobSafeguards";
+import { RetryStopped, isNoSignal, sendWithRetry } from "../sendRetry";
 import { Chip, EmptyState, ErrorState, Skeleton, StatusChip, TERMINAL_STATUSES, type BackendJobStatus } from "../../../components/ui/kit";
 import { jobsApi, type BackendJob, type SearchStatus } from "../../../services/api/jobs";
 import { servicesApi, type MobileCatalogService } from "../../../services/api/services";
@@ -117,6 +119,9 @@ export default function OwnerHelpFlowScreen() {
   const [vehicleId, setVehicleId] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
   const [sending, setSending] = useState(false);
+  // G11: resending the same request while there is no signal.
+  const [retrying, setRetrying] = useState<{ attempt: number; secondsLeft: number } | null>(null);
+  const stopRetry = useRef(false);
   const [addVehicleOpen, setAddVehicleOpen] = useState(false);
   const idempotencyKey = useRef(newIdempotencyKey());
 
@@ -319,8 +324,9 @@ export default function OwnerHelpFlowScreen() {
   const send = async () => {
     if (!pickup || !serviceCode || !vehicleId) return;
     setSending(true);
+    stopRetry.current = false;
     try {
-      const created = await jobsApi.createJob(
+      const created = await sendWithRetry(() => jobsApi.createJob(
         {
           vehicle_id: vehicleId,
           service_code: serviceCode,
@@ -330,7 +336,10 @@ export default function OwnerHelpFlowScreen() {
           issue_description: notes.trim() || undefined,
         },
         idempotencyKey.current
-      );
+      ), {
+        stopped: () => stopRetry.current,
+        onRetry: (attempt, msLeft) => setRetrying({ attempt, secondsLeft: Math.round(msLeft / 1000) }),
+      });
       if (!created?.id) throw new Error("no id");
       idempotencyKey.current = newIdempotencyKey();
       setStartCode("");
@@ -338,9 +347,16 @@ export default function OwnerHelpFlowScreen() {
       setJob(created);
       setPhase("searching");
       void qc.invalidateQueries({ queryKey: QK.jobs });
-    } catch {
-      showDialog("Request not sent", "We could not reach Sahayak, so no partner has been requested. Check your connection and try again.");
+    } catch (err) {
+      if (err instanceof RetryStopped) {
+        showDialog("Request not sent", "You stopped sending. No partner has been requested. If you need help now, call 112.");
+      } else if (isNoSignal(err)) {
+        showDialog("No signal", "We kept trying for three minutes but could not reach Sahayak. No partner has been requested. Move to better signal and try again, or call 112.");
+      } else {
+        showDialog("Request not sent", "Sahayak could not accept this request, so no partner has been requested. Check the details and try again.");
+      }
     } finally {
+      setRetrying(null);
       setSending(false);
     }
   };
@@ -548,6 +564,17 @@ export default function OwnerHelpFlowScreen() {
 
               <Text style={styles.priceNote}>Final price is confirmed when the job is completed.</Text>
               <View style={{ marginTop: Spacing.md }}>
+                {retrying ? (
+                  <View style={styles.retryBox} accessibilityLiveRegion="polite">
+                    <Ionicons name="cellular-outline" size={20} color={Colors.warning} />
+                    <Text style={styles.retryText}>
+                      No signal. Sending again automatically (try {retrying.attempt}, up to {Math.max(0, Math.ceil(retrying.secondsLeft / 60))} more min).
+                    </Text>
+                    <Pressable onPress={() => { stopRetry.current = true; }} accessibilityRole="button" accessibilityLabel="Stop sending" style={styles.retryStop}>
+                      <Text style={styles.retryStopText}>Stop</Text>
+                    </Pressable>
+                  </View>
+                ) : null}
                 <Button label="Request help now" onPress={send} loading={sending} disabled={!canSend} icon={<Ionicons name="medkit-outline" size={22} color="#fff" />} />
                 {!canSend && !sending ? (
                   <Text style={styles.needs}>
@@ -627,7 +654,7 @@ export default function OwnerHelpFlowScreen() {
                 <View style={styles.codeBox} accessible accessibilityLabel={`Your start code is ${job.start_code?.split("").join(" ")}`}>
                   <Text style={styles.codeLabel}>Your start code</Text>
                   <Text style={styles.code}>{job.start_code}</Text>
-                  <Text style={styles.codeHelp}>Tell this to your partner only after they reach your vehicle. Work cannot start without it.</Text>
+                  <Text style={styles.codeHelp}>Say it to your partner face to face, at your vehicle. Never share it on a call or message. Work cannot start without it.</Text>
                 </View>
               ) : null}
 
@@ -645,6 +672,10 @@ export default function OwnerHelpFlowScreen() {
               </View>
 
               {pollFailed ? <Text style={styles.warn}>Connection is unstable. Showing the last update.</Text> : null}
+
+              <View style={{ marginTop: Spacing.base }}>
+                <OwnerJobSafeguards jobId={job.id} />
+              </View>
 
               <View style={{ marginTop: Spacing.base }}>
                 <SafetyActions jobId={job?.id} shareToken={job?.share_token} />
@@ -828,4 +859,8 @@ const styles = StyleSheet.create({
   starBtn: { width: 52, height: 52, alignItems: "center", justifyContent: "center" },
   thanks: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, marginTop: Spacing.sm },
   thanksText: { fontSize: Typography.fontSize.base, fontFamily: Typography.fontFamily.semiBold, color: Colors.success },
+  retryBox: { flexDirection: "row", alignItems: "center", gap: Spacing.sm, backgroundColor: Colors.warningLight, borderRadius: Radius.md, padding: Spacing.md, marginBottom: Spacing.sm },
+  retryText: { flex: 1, fontFamily: Typography.fontFamily.medium, fontSize: 15, color: Colors.textPrimary },
+  retryStop: { minHeight: 48, minWidth: 48, alignItems: "center", justifyContent: "center", paddingHorizontal: Spacing.sm },
+  retryStopText: { fontFamily: Typography.fontFamily.semiBold, fontSize: 15, color: Colors.error },
 });

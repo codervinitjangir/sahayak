@@ -212,3 +212,51 @@ async def partner_duty_counts(db: AsyncSession) -> tuple[int, int]:
     )
     on_duty, total = result.one()
     return int(on_duty or 0), int(total or 0)
+
+
+# --- ADR-043: leakage and fraud signals ---------------------------------------------
+
+CANCELLED_BY_PARTNER_PREFIX = "Cancelled by partner"
+UNVERIFIED_START_NOTE = "Start location not verified (no recent GPS fix)"
+OWNER_SWAP_PREFIX = "Owner asked for another partner"
+
+
+async def partner_risk_counts(db: AsyncSession, since: datetime) -> list[tuple[uuid.UUID, str, int, int, int]]:
+    """Per partner since `since`: (id, name, cancels after work started,
+    starts with no GPS fix, times an owner swapped them out for being late).
+
+    "Cancelled after work started" is a partner cancellation on a job whose
+    history already has 'in_progress': the start code was entered, so both
+    were at the vehicle. Repeated, that is how "cancel in the app, pay me
+    cash" looks from the data we hold.
+    """
+    h = JobStatusHistory
+    started = select(h.job_id).where(h.status == "in_progress")
+    accepted = (
+        select(JobAssignment.job_id, JobAssignment.partner_id)
+        .where(JobAssignment.accepted_at.is_not(None))
+        .subquery()
+    )
+    cancel_after_start = func.count(func.distinct(h.job_id)).filter(
+        h.status == "cancelled", h.note.like(f"{CANCELLED_BY_PARTNER_PREFIX}%"), h.job_id.in_(started))
+    unverified = func.count(func.distinct(h.job_id)).filter(
+        h.status == "in_progress", h.note == UNVERIFIED_START_NOTE)
+    swapped = func.count(func.distinct(h.job_id)).filter(
+        h.status == "matching", h.note.like(f"{OWNER_SWAP_PREFIX}%"))
+    result = await db.execute(
+        select(Partner.id, Partner.name, cancel_after_start, unverified, swapped)
+        .select_from(h)
+        .join(accepted, accepted.c.job_id == h.job_id)
+        .join(Partner, Partner.id == accepted.c.partner_id)
+        .where(h.changed_at >= since)
+        .group_by(Partner.id, Partner.name)
+    )
+    return [(r[0], r[1], int(r[2] or 0), int(r[3] or 0), int(r[4] or 0)) for r in result.all()]
+
+
+async def open_off_app_reports(db: AsyncSession) -> int:
+    from app.models.dispute import JobDispute
+    result = await db.execute(
+        select(func.count()).select_from(JobDispute)
+        .where(JobDispute.reason == "off_app_payment", JobDispute.status == "open"))
+    return int(result.scalar_one() or 0)

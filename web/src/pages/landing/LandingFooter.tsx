@@ -92,6 +92,7 @@ export const LandingFooter: React.FC = () => {
             <li><a href="mailto:support@sahayak.app">Help &amp; Support</a></li>
             <li><Link to="/privacy">Privacy Policy</Link></li>
             <li><Link to="/terms">Terms of Service</Link></li>
+            <li><Link to="/delete-account">Delete your account</Link></li>
           </ul>
         </div>
       </div>

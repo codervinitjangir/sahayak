@@ -655,6 +655,35 @@ async def link_user_auth(
     return user
 
 
+async def auth_user_still_used(db: AsyncSession, auth_user_id) -> bool:
+    """True if any owner, partner or staff row still points at this login.
+
+    ADR-034 lets one phone hold an owner and a partner profile on one Supabase
+    account. Deleting one profile must not delete the login the other still
+    signs in with (ADR-045).
+    """
+    if auth_user_id is None:
+        return False
+    from sqlalchemy import select, union_all
+    from app.models.admin import Admin
+    from app.models.partner import Partner
+    from app.models.user import User
+    q = union_all(
+        select(User.id).where(User.auth_user_id == auth_user_id),
+        select(Partner.id).where(Partner.auth_user_id == auth_user_id),
+        select(Admin.id).where(Admin.auth_user_id == auth_user_id),
+    ).limit(1)
+    return (await db.execute(q)).first() is not None
+
+
+async def delete_login_if_unused(db: AsyncSession, auth_user_id) -> bool:
+    """Delete the Supabase login unless another profile still uses it."""
+    if await auth_user_still_used(db, auth_user_id):
+        log_event("supabase_user_delete_skipped", reason="other_profile_uses_login", outcome="skipped")
+        return False
+    return await delete_supabase_user(auth_user_id)
+
+
 async def delete_supabase_user(auth_user_id) -> bool:
     """Delete a Supabase Auth account with the server's secret key. Best-effort.
 

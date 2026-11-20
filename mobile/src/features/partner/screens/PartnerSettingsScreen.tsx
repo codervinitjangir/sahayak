@@ -1,7 +1,7 @@
 // Partner settings: alerts, navigation app, helpline, legal and sign out,
 // kept off the Account tab so it stays clean.
 import React, { useEffect, useState } from "react";
-import { View, Text, ScrollView, StyleSheet, Linking } from "react-native";
+import { View, Text, ScrollView, StyleSheet, Linking, Share } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { Colors, Spacing, Typography } from "../../../constants/theme";
 import ScreenHero from "../../../components/ui/ScreenHero";
@@ -15,6 +15,11 @@ import { NAV_APP_LABEL, getNavApp, setNavApp as saveNavApp, type NavApp } from "
 import { SUPPORT_PHONE_DISPLAY, SUPPORT_PHONE_TEL } from "../../../constants/support";
 import { WEB_URL } from "../../../constants";
 import ProfileSwitchCard from "../../profile/ProfileSwitchCard";
+import { partnerApi } from "../../../services/api/partner";
+
+/** Copy shared with the test: what deleting a partner account does (ADR-045). */
+export const PARTNER_DELETE_COPY =
+  "Your name, phone, services, documents and job alerts are erased and you are signed out. Past jobs stay on record without your details. If this number also has an owner profile, that profile stays. This cannot be undone.";
 
 export default function PartnerSettingsScreen() {
   const navigation = useNavigation();
@@ -35,6 +40,38 @@ export default function PartnerSettingsScreen() {
     showDialog("Sign out?", isOnline ? "You are on duty. Signing out does not take you off duty; go off duty first." : "You will need to verify your number again to sign back in.", [
       { text: "Stay signed in", style: "cancel" },
       { text: "Sign out", style: "destructive", onPress: logout },
+    ]);
+
+  const exportData = async () => {
+    try {
+      const data = await partnerApi.exportMe();
+      await Share.share({ title: "My Sahayak partner data", message: JSON.stringify(data, null, 2) });
+    } catch {
+      showDialog("Could not export", "Check your connection and try again.");
+    }
+  };
+
+  const confirmDelete = () =>
+    showDialog("Delete your partner account?", PARTNER_DELETE_COPY, [
+      { text: "Keep my account", style: "cancel" },
+      {
+        text: "Delete account",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await partnerApi.deleteMe();
+            logout();
+          } catch (err: any) {
+            const code = err?.response?.data?.error?.code;
+            showDialog(
+              "Could not delete",
+              code === "ACCOUNT_HAS_ACTIVE_JOB"
+                ? "Finish your active job and answer any open offer first."
+                : "Check your connection and try again."
+            );
+          }
+        },
+      },
     ]);
 
   return (
@@ -76,6 +113,14 @@ export default function PartnerSettingsScreen() {
                 <ListRow icon="lock-closed-outline" title="Partner privacy policy" onPress={() => void Linking.openURL(`${WEB_URL}/privacy`)} last />
               </>
             ) : null}
+          </Card>
+        </View>
+
+        <View>
+          <SectionHeader title="Your account" />
+          <Card noPad>
+            <ListRow icon="download-outline" title="Download my data" subtitle="Everything Sahayak stores about you, as a file" onPress={() => void exportData()} />
+            <ListRow icon="trash-outline" title="Delete partner account" subtitle="Erase your partner details and sign out" onPress={confirmDelete} last />
           </Card>
         </View>
 

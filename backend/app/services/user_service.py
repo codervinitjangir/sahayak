@@ -377,4 +377,5 @@ async def delete_me(db: AsyncSession, user_id, auth_user_id) -> None:
         raise InternalError("Could not delete your account") from exc
 
     log_event("user_account_deleted", user_id=str(user_pk), outcome="success")
-    await auth_service.delete_supabase_user(auth_user_id)
+    # ADR-045: the same login may still hold a partner profile (ADR-034).
+    await auth_service.delete_login_if_unused(db, auth_user_id)

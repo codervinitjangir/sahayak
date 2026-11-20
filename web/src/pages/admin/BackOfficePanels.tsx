@@ -138,6 +138,11 @@ export const AlertsStrip: React.FC = () => {
               Requests: {a.job_ids.map((id) => id.slice(0, 8)).join(', ')}
             </span>
           )}
+          {(a.partner_ids?.length ?? 0) > 0 && (
+            <span className="block mt-0.5 text-xs font-normal break-words">
+              Partners to review (Partners tab): {a.partner_ids!.map((id) => id.slice(0, 8)).join(', ')}
+            </span>
+          )}
         </div>
       ))}
       <p className="text-xs text-[#475569]">
@@ -422,6 +427,8 @@ const ACTION_LABELS: Record<string, string> = {
   partner_rejected: 'Rejected a partner',
   partner_suspended: 'Suspended a partner',
   partner_pending: 'Moved a partner back to pending',
+  job_photo_viewed: 'Viewed a job photo',
+  dispute_resolved: 'Resolved a report',
 };
 
 export const AuditPanel: React.FC = () => {

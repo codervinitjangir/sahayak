@@ -68,7 +68,7 @@ Today the payment lifecycle is wired with full regression coverage:
 | B | In-App UPI & Cash Payment at completion | [x] Done, fixed 2026-11-14 | `POST /payments`, `GET /payments/job/{id}`, `POST /payments/{id}/confirm`. Amount is server-side; only the assigned partner or an admin confirms (ADR-022). The UPI ID `sahayak.dispatch@upi` is a placeholder |
 | C | Partner payouts & settlement schedule | [ ] Blocked: money-holding decision + CA sign-off (G3) | Settle to partners' bank accounts or UPI net of platform commission |
 | D | Downloadable receipts & GST tax invoices | [~] Receipt API done 2026-11-14 (ADR-027); no UI yet; GST invoice needs a GSTIN | Detailed invoice breakdown with service fee, partner details, and payment ref |
-| E | Refunds & dispute management | [~] API done 2026-11-14 (ADR-027): owner report, admin queue, recorded refund; no UI yet | Owner "report a problem" on paid jobs with admin resolution queue |
+| E | Refunds & dispute management | [~] API done 2026-11-14 (ADR-027); UI done 2026-11-21: owner report on mobile and web (also on cancelled jobs, ADR-043), staff Reports tab. Refunds that move money wait on G3 | Owner "report a problem" on paid jobs with admin resolution queue |
 
 ---
 

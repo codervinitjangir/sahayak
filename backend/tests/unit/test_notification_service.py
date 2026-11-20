@@ -217,6 +217,15 @@ def test_every_message_is_reachable():
         # ADR-030: emitted by notify_reassignment, not by a status change.
         "job_reassigned_by_support",
         "job_reassigning",
+        # ADR-039 / ADR-041: emitted by job_safeguard_service through notify_event.
+        "price_revision_requested",
+        "price_revision_approved",
+        "price_revision_rejected",
+        "job_reassigned_by_owner",
+        "job_reassigning_by_owner",
+        # ADR-038 amendment: emitted by the retention sweep.
+        "document_expiring",
+        "document_expired",
     }
     assert set(NOTIFICATION_EVENTS) == reachable
 

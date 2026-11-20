@@ -13,6 +13,7 @@ import {
   ClipboardList,
   Users,
   ScrollText,
+  Flag,
 } from 'lucide-react';
 
 import { ApiError } from '../../services/api';
@@ -29,15 +30,17 @@ import { DispatchPanel } from './DispatchPanel';
 import { MatchingPanel } from './MatchingPanel';
 import { PartnersPanel } from './PartnersPanel';
 import { AuditPanel, CataloguePanel, JobsBoardPanel, OwnersPanel, StaffPanel } from './BackOfficePanels';
+import { DisputesPanel } from './DisputesPanel';
 import '../partner/partner.css';
 
-type TabId = 'overview' | 'dispatch' | 'matching' | 'jobs' | 'partners' | 'owners' | 'catalogue' | 'staff' | 'audit';
+type TabId = 'overview' | 'dispatch' | 'matching' | 'jobs' | 'disputes' | 'partners' | 'owners' | 'catalogue' | 'staff' | 'audit';
 
 const TABS: { id: TabId; label: string; blurb: string; Icon: React.ElementType }[] = [
   { id: 'overview', label: 'Overview', blurb: 'Jobs, completion and partner supply', Icon: BarChart3 },
   { id: 'dispatch', label: 'Dispatch', blurb: 'Offers, acceptance and latency', Icon: Zap },
   { id: 'matching', label: 'Matching', blurb: 'Weighted engine vs pure-nearest', Icon: Compass },
   { id: 'jobs', label: 'Jobs', blurb: 'Live board, staff cancel', Icon: ClipboardList },
+  { id: 'disputes', label: 'Reports', blurb: 'Owner problem reports', Icon: Flag },
   { id: 'partners', label: 'Partners', blurb: 'Mechanic verification & KYC approval', Icon: ShieldCheck },
   { id: 'owners', label: 'Owners', blurb: 'Search, suspend, reinstate', Icon: Users },
   { id: 'catalogue', label: 'Pricing', blurb: 'Service base prices', Icon: ClipboardList },
@@ -46,9 +49,10 @@ const TABS: { id: TabId; label: string; blurb: string; Icon: React.ElementType }
 ];
 
 // Tabs that are operations, not time-windowed reports.
-const OPS_TABS: TabId[] = ['jobs', 'partners', 'owners', 'catalogue', 'staff', 'audit'];
+const OPS_TABS: TabId[] = ['jobs', 'disputes', 'partners', 'owners', 'catalogue', 'staff', 'audit'];
 const OPS_COPY: Record<string, { tag: string; title: string; blurb: string }> = {
   jobs: { tag: 'Live Ops', title: 'Live jobs board', blurb: 'Every job still in motion, with who to call. Cancelling here notifies both sides and is recorded in the audit log.' },
+  disputes: { tag: 'Support', title: 'Problem reports', blurb: 'What owners reported after a job, with the price history and tow photos. Resolving, rejecting or recording a refund is audited.' },
   partners: { tag: 'Ops Verification Queue', title: 'Partner Verification & KYC', blurb: 'Review mechanic profiles, inspect workshop credentials and tools, and approve or reject partners on phone or desktop.' },
   owners: { tag: 'Accounts', title: 'Vehicle owners', blurb: 'Search owners and suspend or reinstate an account. Suspension is audited and blocks every request the owner makes.' },
   catalogue: { tag: 'Catalogue', title: 'Service pricing', blurb: 'The base price each new request is estimated at. Every change needs a reason and is recorded in the audit log.' },
@@ -260,6 +264,8 @@ export const AdminConsole: React.FC = () => {
           <CataloguePanel />
         ) : active === 'staff' ? (
           <StaffPanel />
+        ) : active === 'disputes' ? (
+          <DisputesPanel />
         ) : active === 'audit' ? (
           <AuditPanel />
         ) : query.isError ? (

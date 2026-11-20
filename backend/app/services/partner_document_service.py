@@ -38,6 +38,9 @@ BASE_DOCUMENTS = ("driving_licence", "photo_id")
 TOWING_DOCUMENTS = ("tow_vehicle_rc", "tow_equipment_photo")
 RETENTION_AFTER_REJECTION = timedelta(days=90)
 ABANDONED_UPLOAD_AFTER = timedelta(days=1)
+# Remind 14 days ahead, at most once every 20 days per partner.
+EXPIRY_REMINDER_BEFORE = timedelta(days=14)
+EXPIRY_REMINDER_EVERY = timedelta(days=20)
 MAX_BYTES = 5 * 1024 * 1024
 _EXT = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "application/pdf": "pdf"}
 
@@ -240,7 +243,16 @@ async def sweep_retention(db: AsyncSession, now: Optional[datetime] = None) -> t
     if ids:
         await storage.delete_objects(paths)
         await repo.delete_rows(db, ids)
-    expired = await repo.mark_expired(db, now.date())
+    expired_partners = await repo.mark_expired(db, now.date())
+    expired = len(expired_partners)
+    # ADR-038 amendment (2026-11-21): tell the partner before and when a document lapses.
+    from app.services import notification_service
+    for partner_id in set(expired_partners):
+        await notification_service.notify_partner(db, partner_id, "document_expired")
+    due_soon = await repo.partners_to_remind(
+        db, now.date(), now.date() + EXPIRY_REMINDER_BEFORE, now - EXPIRY_REMINDER_EVERY)
+    for partner_id in due_soon:
+        await notification_service.notify_partner(db, partner_id, "document_expiring")
     await db.commit()
     if ids or expired:
         log_event("document_retention_sweep", deleted=len(ids), expired=expired, outcome="success")

@@ -26,12 +26,31 @@ async def _owned_job(db: AsyncSession, job_id: uuid.UUID, identity: Identity):
     return job
 
 
+# ADR-043: a cancelled job is reportable only if a partner had accepted it, and
+# only for what can happen on a cancelled job. "Cancel in the app and pay me cash"
+# ends as a cancelled job, so refusing reports on cancelled jobs hid exactly the
+# leakage the reason exists to catch.
+CANCELLED_JOB_REASONS = frozenset({"off_app_payment", "partner_behaviour", "damage", "other"})
+
+
+async def _assert_disputable(db: AsyncSession, job, reason: str) -> None:
+    if job.status == "completed":
+        return
+    if job.status == "cancelled" and reason in CANCELLED_JOB_REASONS:
+        assignment = await job_repository.get_responsible_assignment(db, job.id)
+        if assignment is not None and assignment.accepted_at is not None:
+            return
+    raise ConflictError(
+        ErrorCode.JOB_NOT_DISPUTABLE,
+        "Only a completed job, or a cancelled job a partner had accepted, can be reported",
+    )
+
+
 async def open_dispute(
     db: AsyncSession, job_id: uuid.UUID, payload: DisputeCreate, identity: Identity
 ) -> DisputeResponse:
     job = await _owned_job(db, job_id, identity)
-    if job.status != "completed":
-        raise ConflictError(ErrorCode.JOB_NOT_DISPUTABLE, "Only a completed job can be disputed")
+    await _assert_disputable(db, job, payload.reason)
     try:
         row = await dispute_repository.create_dispute(
             db, job_id=job.id, user_id=identity.local_id,

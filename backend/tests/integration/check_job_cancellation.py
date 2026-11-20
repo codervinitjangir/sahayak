@@ -127,6 +127,21 @@ def one(sql: str, params=None):
     result = rows(sql, params)
     return result[0] if result else None
 
+def owner_approves(job_id: str, price) -> None:
+    """ADR-039: a final price above estimate + 10% needs the owner's approval.
+
+    Recorded directly as an approved revision so this harness keeps testing what
+    it tests. check_job_lifecycle drives the real propose/approve endpoints.
+    The row is removed with the job (ON DELETE CASCADE).
+    """
+    conn.cursor().execute(
+        "INSERT INTO job_price_revisions (job_id, partner_id, proposed_amount, reason, status, decided_at) "
+        "SELECT a.job_id, a.partner_id, %(p)s, 'harness: approved by owner', 'approved', now() "
+        "FROM job_assignments a WHERE a.job_id = %(i)s AND a.status = 'accepted' LIMIT 1",
+        {"i": job_id, "p": price},
+    )
+
+
 
 def job_row(job_id: str) -> dict:
     return one(
@@ -584,6 +599,7 @@ async def main() -> None:
         section("7. A finished job cannot be cancelled")
         # ------------------------------------------------------------------
         prot_token = partners[worker_prot]["token"]
+        owner_approves(job_prot, 940)
         for target, body in (("partner_en_route", {}), ("in_progress", {}),
                              ("completed", {"price_final": 940})):
             if target == "in_progress":  # POST /start only, with the owner's code

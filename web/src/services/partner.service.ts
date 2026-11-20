@@ -73,6 +73,16 @@ export interface PartnerReview {
 }
 
 export const partnerService = {
+  /** DELETE /partners/me (ADR-045). 409 ACCOUNT_HAS_ACTIVE_JOB while a job or offer is open. */
+  async deleteMe(): Promise<void> {
+    await apiClient<{ deleted: boolean }>('/partners/me', { method: 'DELETE' });
+  },
+
+  /** GET /partners/me/export: everything Sahayak stores about the partner. */
+  async exportMe(): Promise<Record<string, unknown>> {
+    return (await apiClient<Record<string, unknown>>('/partners/me/export', { method: 'GET' })).data;
+  },
+
   /**
    * Returns the first 'offered' assignment for this partner, or null if idle.
    *

@@ -1,6 +1,12 @@
 import { apiClient } from "./client";
 
-export type DisputeReason = "overcharged" | "service_not_done" | "partner_behaviour" | "damage" | "other";
+export type DisputeReason =
+  | "overcharged"
+  | "service_not_done"
+  | "partner_behaviour"
+  | "damage"
+  | "off_app_payment"
+  | "other";
 export type DisputeStatus = "open" | "resolved" | "rejected" | "refunded";
 
 export interface Dispute {
@@ -19,11 +25,15 @@ export const DISPUTE_REASONS: { value: DisputeReason; label: string }[] = [
   { value: "service_not_done", label: "The job was not done" },
   { value: "partner_behaviour", label: "Partner behaviour" },
   { value: "damage", label: "Damage to my vehicle" },
+  { value: "off_app_payment", label: "Asked to pay outside the app" },
   { value: "other", label: "Something else" },
 ];
 
+/** ADR-043: what a cancelled job (that a partner had accepted) may be reported for. */
+export const CANCELLED_JOB_REASONS: DisputeReason[] = ["off_app_payment", "partner_behaviour", "damage", "other"];
+
 export const disputesApi = {
-  /** Owner only. 409 JOB_NOT_DISPUTABLE before completion, 409 DISPUTE_ALREADY_OPEN for a second open report. */
+  /** Owner only. 409 JOB_NOT_DISPUTABLE unless completed, or cancelled after a partner accepted (ADR-043); 409 DISPUTE_ALREADY_OPEN for a second open report. */
   open: (jobId: string, reason: DisputeReason, description?: string) =>
     apiClient.post<Dispute>(`/jobs/${jobId}/disputes`, { reason, description: description || undefined }).then((r) => r.data),
 

@@ -118,7 +118,7 @@ const MobileTabBar: React.FC = () => (
 const AppContent: React.FC = () => {
   const location = useLocation();
   const isLanding = location.pathname === '/';
-  const isLogin = location.pathname === '/login' || location.pathname === '/terms' || location.pathname === '/privacy';
+  const isLogin = location.pathname === '/login' || location.pathname === '/terms' || location.pathname === '/privacy' || location.pathname === '/delete-account';
   const isPartnerPage = location.pathname.startsWith('/partner') || location.pathname.startsWith('/admin');
 
   if (isLanding || isLogin || isPartnerPage) {

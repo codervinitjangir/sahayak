@@ -85,6 +85,11 @@ class Settings(BaseSettings):
     # (CORS is a browser rule).
     CORS_ALLOWED_ORIGINS: str = "*"
 
+    # /docs, /redoc and /openapi.json. On for local development; set
+    # API_DOCS_ENABLED=false in production so the full route map and every
+    # schema are not handed to anyone who asks (launch-readiness, 2026-11-21).
+    API_DOCS_ENABLED: bool = True
+
     @property
     def cors_origins(self) -> list[str]:
         origins = [o.strip().rstrip("/") for o in self.CORS_ALLOWED_ORIGINS.split(",") if o.strip()]
@@ -102,6 +107,12 @@ class Settings(BaseSettings):
     # several processes safe. DISPATCH_WORKER_ENABLED=false turns it off.
     DISPATCH_WORKER_ENABLED: bool = True
     DISPATCH_WORKER_INTERVAL_S: int = 15
+
+    # Critical admin alerts sent to a staff channel (ADR-047): a Slack, Google
+    # Chat or Discord incoming-webhook URL. Blank = off. A still-active alert is
+    # repeated every STAFF_ALERT_REPEAT_MIN minutes. Rides on the dispatch worker.
+    STAFF_ALERT_WEBHOOK_URL: str = ""
+    STAFF_ALERT_REPEAT_MIN: int = 60
 
     @property
     def SUPABASE_JWT_ISSUER(self) -> str:

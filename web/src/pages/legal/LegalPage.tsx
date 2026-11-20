@@ -2,7 +2,38 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { Logo } from '../../components/Logo';
 
-const UPDATED = '13 November 2026';
+const UPDATED = '21 November 2026';
+
+/**
+ * Consumer Protection (E-Commerce) Rules, 2020, rule 4: the platform must show the
+ * grievance officer's name, designation and contact details. The name is a person
+ * the company appoints (R1 in docs/REMAINING-WORK.md): replace it before launch.
+ */
+/**
+ * Itemised notice (DPDP Act 2023, Rules 2025 rule 3): each item of personal data
+ * with its purpose. Keep in step with the code; retention values come from
+ * ADR-025, ADR-038, ADR-042 and ADR-045.
+ */
+export const PRIVACY_ITEMS: { item: string; why: string; kept: string }[] = [
+  { item: 'Mobile number', why: 'Sign-in with a one-time code; so the assigned partner or owner can call you', kept: 'Until you delete your account' },
+  { item: 'Name, and email if you add one', why: 'Shown to the other side of an accepted job; receipts', kept: 'Until you delete your account' },
+  { item: 'Vehicles (type, make, model, registration number)', why: 'Telling the partner what to expect', kept: 'Until you delete the vehicle or your account' },
+  { item: 'Pickup location, service, notes, status history', why: 'Matching a nearby partner and showing progress', kept: 'With the job record; your notes and address are erased when you delete your account' },
+  { item: 'Partner live location', why: 'Matching and tracking while on duty; checking the start code is entered at the vehicle', kept: 'Only the latest position, never a history; removed when you delete your account' },
+  { item: 'Partner documents (licence, photo ID, tow papers)', why: 'Verifying who is offered jobs', kept: 'While you are a partner; deleted 90 days after a rejection, and when you delete your account' },
+  { item: 'Tow photos (pickup and drop)', why: 'Settling damage disputes', kept: 'With the job record' },
+  { item: 'Ratings and problem reports', why: 'Quality, matching and resolving complaints', kept: 'With the job record; your written comments are erased when you delete your account' },
+  { item: 'Device push token', why: 'Sending job alerts to your phone', kept: 'Until you sign out or delete your account' },
+  { item: 'Error reports from the app', why: 'Finding and fixing crashes', kept: 'In server logs, which are rotated by our hosting provider' },
+];
+
+export const GRIEVANCE_OFFICER = {
+  name: 'Grievance Officer',
+  designation: 'Sahayak',
+  email: 'support@sahayak.app',
+  phone: '+91 92505 43490',
+  tel: 'tel:+919250543490',
+};
 
 interface Section {
   title: string;
@@ -19,6 +50,7 @@ const Shell: React.FC<{ title: string; intro: string; sections: Section[] }> = (
         <nav aria-label="Legal" className="flex gap-5 text-sm font-medium text-ink-soft">
           <Link to="/terms" className="hover:text-ink">Terms</Link>
           <Link to="/privacy" className="hover:text-ink">Privacy</Link>
+          <Link to="/delete-account" className="hover:text-ink">Delete account</Link>
         </nav>
       </div>
     </header>
@@ -47,6 +79,15 @@ export const TermsPage: React.FC = () => (
           <p>
             Sahayak is not an emergency service. If anyone is in danger, call <a className="font-semibold text-emergency-700 underline" href="tel:112">112</a> before
             anything else.
+          </p>
+        ),
+      },
+      {
+        title: 'Who can use Sahayak',
+        body: (
+          <p>
+            You must be 18 or older to use Sahayak, as an owner or as a partner. We do not knowingly collect information
+            about children.
           </p>
         ),
       },
@@ -116,6 +157,30 @@ export const TermsPage: React.FC = () => (
         ),
       },
       {
+        title: 'Complaints and grievance officer',
+        body: (
+          <>
+            <p>
+              If something went wrong with a job, use <strong>Report a problem</strong> on that job in the app. You can also
+              write to our grievance officer:
+            </p>
+            <p>
+              {GRIEVANCE_OFFICER.name}, {GRIEVANCE_OFFICER.designation}
+              <br />
+              <a className="font-semibold text-[#111111] underline" href={`mailto:${GRIEVANCE_OFFICER.email}`}>
+                {GRIEVANCE_OFFICER.email}
+              </a>
+              {' '}· <a className="font-semibold text-[#111111] underline" href={GRIEVANCE_OFFICER.tel}>{GRIEVANCE_OFFICER.phone}</a>
+            </p>
+            <p>
+              We acknowledge every complaint within 48 hours and resolve it within one month of receiving it, as the
+              Consumer Protection (E-Commerce) Rules, 2020 require. If you are not satisfied, you can approach the National
+              Consumer Helpline (1915) or your district consumer commission.
+            </p>
+          </>
+        ),
+      },
+      {
         title: 'Support and contact',
         body: (
           <p>
@@ -139,24 +204,34 @@ export const PrivacyPage: React.FC = () => (
     intro="This page explains what Sahayak collects, why, and who can see it."
     sections={[
       {
-        title: 'What we collect',
+        title: 'What we collect, why, and for how long',
         body: (
-          <ul className="list-disc pl-5 space-y-1.5">
-            <li>Your mobile number, to sign you in with a one-time code.</li>
-            <li>Your name, and an email address if you choose to add one.</li>
-            <li>Your vehicles: type, make, model, year and registration number.</li>
-            <li>For each request: the pickup location you set, the service, any notes, its status history and any rating or comment.</li>
-            <li>For partners: your services, your verification status, and your location while you are on duty.</li>
-          </ul>
-        ),
-      },
-      {
-        title: 'Why we collect it',
-        body: (
-          <p>
-            To match a request with a nearby partner, to show you what is happening, to keep a record of what happened
-            on each request, and to keep the service safe and accurate. We do not sell your information.
-          </p>
+          <>
+            <p>
+              Each item below is collected only for the purpose next to it. Nothing is sold, and nothing is used for
+              advertising.
+            </p>
+            <div className="overflow-x-auto">
+              <table className="mt-2 w-full text-sm border-collapse">
+                <thead>
+                  <tr className="text-left text-ink">
+                    <th scope="col" className="py-2 pr-3 border-b border-line">Information</th>
+                    <th scope="col" className="py-2 pr-3 border-b border-line">Why</th>
+                    <th scope="col" className="py-2 border-b border-line">How long</th>
+                  </tr>
+                </thead>
+                <tbody className="align-top">
+                  {PRIVACY_ITEMS.map((row) => (
+                    <tr key={row.item}>
+                      <td className="py-2 pr-3 border-b border-line font-medium text-ink">{row.item}</td>
+                      <td className="py-2 pr-3 border-b border-line">{row.why}</td>
+                      <td className="py-2 border-b border-line">{row.kept}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         ),
       },
       {
@@ -173,7 +248,8 @@ export const PrivacyPage: React.FC = () => (
             </li>
             <li>
               <strong>Sahayak&rsquo;s operations team</strong> can see requests, accounts and verification status in order to
-              run and support the service.
+              run and support the service. Partner documents and tow photos are opened only by named staff roles, and every
+              view is recorded.
             </li>
           </ul>
         ),
@@ -190,19 +266,91 @@ export const PrivacyPage: React.FC = () => (
         ),
       },
       {
-        title: 'Your choices and privacy queries',
+        title: 'Your rights',
+        body: (
+          <>
+            <ul className="list-disc pl-5 space-y-1.5">
+              <li><strong>See your information:</strong> download everything we hold about you from Settings, Download my data.</li>
+              <li><strong>Correct it:</strong> edit your name and email in the app; for anything else, write to us.</li>
+              <li>
+                <strong>Withdraw consent and delete it:</strong> delete your account yourself at any time; see{' '}
+                <Link className="font-semibold text-[#111111] underline" to="/delete-account">how to delete your account</Link>.
+              </li>
+              <li><strong>Choose what to share:</strong> turn location off in your device settings (you can still set a pin by hand); partners can go off duty at any time.</li>
+              <li><strong>Nominate someone</strong> to act for you if you cannot: write to us.</li>
+            </ul>
+            <p>
+              For any privacy question or complaint, write to{' '}
+              <a className="font-semibold text-[#111111] underline" href={`mailto:${GRIEVANCE_OFFICER.email}`}>{GRIEVANCE_OFFICER.email}</a>.
+              If you are not satisfied with our answer, you can complain to the Data Protection Board of India.
+            </p>
+          </>
+        ),
+      },
+    ]}
+  />
+);
+
+/**
+ * Public account-deletion page (ADR-045). Google Play asks for a web link that
+ * explains how to delete an account without reinstalling the app.
+ */
+export const AccountDeletionPage: React.FC = () => (
+  <Shell
+    title="Delete your Sahayak account"
+    intro="You can delete your account yourself, in the app or on the web, at any time. Nobody has to approve it."
+    sections={[
+      {
+        title: 'If you are a vehicle owner',
+        body: (
+          <ol className="list-decimal pl-5 space-y-1">
+            <li>In the Sahayak app: Profile, then Settings, then <strong>Delete account</strong>.</li>
+            <li>
+              On the web: <Link className="font-semibold text-[#111111] underline" to="/login">sign in</Link>, open your account,
+              and choose <strong>Delete account</strong>.
+            </li>
+          </ol>
+        ),
+      },
+      {
+        title: 'If you are a partner',
+        body: (
+          <ol className="list-decimal pl-5 space-y-1">
+            <li>In the Sahayak app: Account, then Settings, then <strong>Delete partner account</strong>.</li>
+            <li>On the web: sign in to the partner console, open Settings, and choose <strong>Delete partner account</strong>.</li>
+          </ol>
+        ),
+      },
+      {
+        title: 'What is deleted',
         body: (
           <p>
-            You can turn location access off in your device settings (you can still set a pin by hand), and partners can
-            go off duty at any time. To ask about your information, request correction or deletion, or contact our privacy
-            officer, email{' '}
-            <a className="font-semibold text-[#111111] underline" href="mailto:privacy@sahayak.app">
-              privacy@sahayak.app
+            Your name, phone number, email, vehicles, notifications and your sign-in. For partners also your services,
+            equipment, uploaded documents and job alerts, and anything you wrote in ratings. If the same number has both an
+            owner and a partner profile, deleting one keeps the other.
+          </p>
+        ),
+      },
+      {
+        title: 'What is kept, and why',
+        body: (
+          <p>
+            Past jobs, their payments and rating scores stay, without your name or number, because the person on the
+            other side of each job keeps their own history and payment records point at them. Photos taken during a tow
+            stay with the job so a problem report about it can still be settled. You cannot delete while a request or job
+            is in progress: finish or cancel it first.
+          </p>
+        ),
+      },
+      {
+        title: 'Cannot sign in?',
+        body: (
+          <p>
+            Email{' '}
+            <a className="font-semibold text-[#111111] underline" href={`mailto:${GRIEVANCE_OFFICER.email}?subject=Delete%20my%20account`}>
+              {GRIEVANCE_OFFICER.email}
             </a>{' '}
-            or{' '}
-            <a className="font-semibold text-[#111111] underline" href="mailto:support@sahayak.app">
-              support@sahayak.app
-            </a>.
+            with the phone number on the account. We confirm the number is yours before deleting.
           </p>
         ),
       },

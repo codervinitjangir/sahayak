@@ -14,7 +14,6 @@ own folders and is deleted at the end.
 import asyncio
 import sys
 import uuid
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 for _stream in (sys.stdout, sys.stderr):

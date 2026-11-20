@@ -18,6 +18,7 @@ import {
 
 import { usePartnerProfile } from '../../features/partners/partnerStore';
 import { PartnerTopBar } from './components/PartnerTopBar';
+import { DeletePartnerAccount, PartnerDataExport } from './components/DeletePartnerAccount';
 import {
   resetConsoleSettings,
   updateConsoleSettings,
@@ -320,6 +321,10 @@ export const ConsoleSettingsView: React.FC<{
             <div className="mt-2">
               <FactRow Icon={ShieldCheck} label="Partner ID" value={profile.id} />
               <FactRow Icon={Phone} label="Phone" value={profile.phone} />
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <PartnerDataExport />
+              <DeletePartnerAccount />
             </div>
           </section>
 

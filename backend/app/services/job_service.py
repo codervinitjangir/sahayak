@@ -679,19 +679,20 @@ FINAL_PRICE_FLOOR = Decimal("5000")
 FINAL_PRICE_ABSOLUTE_CAP = Decimal("50000")
 
 
+def final_price_ceiling(estimate) -> Decimal:
+    """The most a job may ever be billed, approved or not (also bounds ADR-039 revisions)."""
+    if estimate is None:
+        return FINAL_PRICE_ABSOLUTE_CAP
+    return min(FINAL_PRICE_ABSOLUTE_CAP, max(Decimal(estimate) * FINAL_PRICE_MULTIPLE, FINAL_PRICE_FLOOR))
+
+
 def _check_final_price_in_range(job, payload: JobStatusTransitionRequest) -> None:
     """Refuse an implausible final price before it becomes the owner's bill and
     the partner's earnings. Only applies to a completion; _check_body_applies
     has already guaranteed price_final is present there."""
     if payload.status != "completed" or payload.price_final is None:
         return
-    estimate = getattr(job, "price_estimate", None)
-    ceiling = FINAL_PRICE_ABSOLUTE_CAP
-    if estimate is not None:
-        ceiling = min(
-            FINAL_PRICE_ABSOLUTE_CAP,
-            max(Decimal(estimate) * FINAL_PRICE_MULTIPLE, FINAL_PRICE_FLOOR),
-        )
+    ceiling = final_price_ceiling(getattr(job, "price_estimate", None))
     if payload.price_final > ceiling:
         raise BadRequestError(
             ErrorCode.PRICE_FINAL_OUT_OF_RANGE,
@@ -729,6 +730,7 @@ async def transition_job_status(
     job_id: uuid.UUID,
     payload: JobStatusTransitionRequest,
     partner_id: uuid.UUID,
+    history_note: Optional[str] = None,
 ) -> JobStatusTransitionResponse:
     """Move a job through its remaining lifecycle on behalf of the assigned partner.
 
@@ -832,6 +834,10 @@ async def transition_job_status(
 
     _check_body_applies(payload)
     _check_final_price_in_range(job, payload)
+    if target == "completed":
+        # ADR-039 / ADR-042: the owner agreed to this price, and a tow has its photos.
+        from app.services import job_safeguard_service
+        await job_safeguard_service.check_completion(db, job, payload.price_final)
 
     # func.now() rather than a Python datetime so completed_at, cancelled_at and
     # the history row's changed_at all come off the database clock. Timestamps
@@ -860,7 +866,7 @@ async def transition_job_status(
             note=(
                 _cancellation_note("partner", payload.cancellation_reason)
                 if target == "cancelled"
-                else None
+                else history_note
             ),
         )
         # Same transaction as the status change and the history row, for the
@@ -961,8 +967,65 @@ async def start_job(
             "That start code does not match this job",
         )
 
+    note = await _check_partner_at_pickup(job, partner_id)
     payload = JobStatusTransitionRequest(status="in_progress")
-    return await transition_job_status(db, job_id, payload, partner_id)
+    return await transition_job_status(db, job_id, payload, partner_id, history_note=note)
+
+
+# ADR-040. The start code proves the owner handed it over; it does not prove the
+# partner was there (a code read out over the phone starts a job from anywhere,
+# which is how "started, never came" and remote cash deals look). A fresh fix
+# more than START_RADIUS_M from the pickup is refused. A missing or stale fix
+# is allowed, because GPS fails in basements and on highways, and the history
+# row says the start location was not verified.
+START_RADIUS_M = 1000
+START_FIX_MAX_AGE_S = 600
+
+
+def _distance_m(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
+    import math
+    r = 6371000.0
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dp, dl = p2 - p1, math.radians(lng2 - lng1)
+    a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
+    return 2 * r * math.asin(math.sqrt(a))
+
+
+async def _partner_fix(partner_id: uuid.UUID) -> tuple[Optional[float], Optional[float], Optional[float]]:
+    """(lat, lng, age_seconds) of the partner's last reported position, or Nones."""
+    try:
+        client = get_redis()
+        positions = await client.geopos(PARTNER_LOCATIONS_KEY, str(partner_id))
+        ts = await client.get(location_updated_at_key(partner_id))
+    except Exception:  # noqa: BLE001 - an unreadable fix is treated as no fix
+        return None, None, None
+    if not positions or positions[0] is None or not ts:
+        return None, None, None
+    try:
+        age = time.time() - float(ts)
+    except (TypeError, ValueError):
+        return None, None, None
+    lng, lat = positions[0]
+    return float(lat), float(lng), age
+
+
+async def _check_partner_at_pickup(job, partner_id: uuid.UUID) -> Optional[str]:
+    pickup_lat, pickup_lng = _pickup_coordinates(job)
+    if pickup_lat is None:
+        return None
+    lat, lng, age = await _partner_fix(partner_id)
+    if lat is None or age is None or age > START_FIX_MAX_AGE_S:
+        log_event("job_start_location_unverified", job_id=str(job.id), partner_id=str(partner_id))
+        return "Start location not verified (no recent GPS fix)"
+    distance = _distance_m(lat, lng, pickup_lat, pickup_lng)
+    if distance > START_RADIUS_M:
+        log_event("job_start_refused_far_from_pickup", level=logging.WARNING, job_id=str(job.id),
+                  partner_id=str(partner_id), distance_m=round(distance), outcome="rejected")
+        raise ConflictError(
+            ErrorCode.PARTNER_NOT_AT_PICKUP,
+            f"You are about {round(distance / 1000, 1)} km from the pickup. Start the job when you reach the vehicle.",
+        )
+    return None
 
 
 async def cancel_job_by_owner(

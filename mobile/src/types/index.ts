@@ -154,7 +154,7 @@ export type OwnerStackParamList = {
   OwnerHome?: undefined;
   OwnerSettings: undefined;
   Receipt: { jobId: string };
-  ReportProblem: { jobId: string; title?: string };
+  ReportProblem: { jobId: string; title?: string; cancelled?: boolean };
   BecomePartner?: undefined;
   OwnerFlow?: {
     initialStep?: FlowStep;

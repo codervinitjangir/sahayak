@@ -194,6 +194,14 @@ def stub_repos(monkeypatch):
         state["history"].append({"job_id": job_id, "status": status, "note": note})
         return None
 
+    # ADR-039/042 completion gate: tested in test_job_safeguards.py.
+    from app.services import job_safeguard_service
+
+    async def completion_allowed(_db, _job, _price):
+        return None
+
+    monkeypatch.setattr(job_safeguard_service, "check_completion", completion_allowed)
+
     repo = job_service.job_repository
     monkeypatch.setattr(repo, "get_job_by_id", get_job_by_id)
     monkeypatch.setattr(repo, "get_job_by_id_for_update", get_job_by_id_for_update)
