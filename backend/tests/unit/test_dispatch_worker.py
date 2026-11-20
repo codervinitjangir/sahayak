@@ -225,6 +225,10 @@ def _factory():
     return _Ctx()
 
 
+async def _no_orphans(_db, **_k):
+    return []
+
+
 def test_a_sweep_times_out_offers_before_widening_searches(monkeypatch):
     order, cutoffs = [], {}
     offers = [uuid.uuid4(), uuid.uuid4()]
@@ -249,6 +253,7 @@ def test_a_sweep_times_out_offers_before_widening_searches(monkeypatch):
 
     monkeypatch.setattr(dispatch_repository, "get_expired_offer_ids", expired)
     monkeypatch.setattr(dispatch_repository, "get_searchable_job_ids", searchable)
+    monkeypatch.setattr(dispatch_repository, "get_orphaned_requested_job_ids", _no_orphans)
     monkeypatch.setattr(dispatch_service, "expire_offer", expire)
     monkeypatch.setattr(dispatch_service, "widen_search_for_job", widen)
 
@@ -281,6 +286,7 @@ def test_one_failing_item_does_not_stop_the_sweep(monkeypatch):
 
     monkeypatch.setattr(dispatch_repository, "get_expired_offer_ids", expired)
     monkeypatch.setattr(dispatch_repository, "get_searchable_job_ids", searchable)
+    monkeypatch.setattr(dispatch_repository, "get_orphaned_requested_job_ids", _no_orphans)
     monkeypatch.setattr(dispatch_service, "expire_offer", expire)
 
     res = asyncio.run(dispatch_worker.sweep_once(_factory, now=NOW))

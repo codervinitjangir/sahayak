@@ -212,6 +212,7 @@ def test_every_message_is_reachable():
         "job_cancelled_by_owner",
         "job_cancelled_by_partner",
         "job_cancelled_by_support",  # actor_role="admin", ADR-024
+        "job_expired",  # actor_role="system", ADR-036
         "job_offered",
         # ADR-030: emitted by notify_reassignment, not by a status change.
         "job_reassigned_by_support",

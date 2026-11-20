@@ -919,9 +919,12 @@ async def main() -> None:                          # noqa: C901 - one linear scr
               f"missing {sorted(expected - written)}, extra {sorted(written - expected)}")
         # job_cancelled_by_support (ADR-024, staff cancel) is check_admin_ops.py's.
         # The two reassign events (ADR-030) are check_admin_ops.py's as well.
-        check("the rest are job_no_match_found and the three staff events, and nothing here claimed them",
+        # job_expired (ADR-036, the worker cancelling a never-dispatched job) is
+        # test_abandoned_jobs.py's.
+        check("the rest are job_no_match_found, the three staff events and job_expired, and nothing here claimed them",
               set(NOTIFICATION_EVENTS) - written == {"job_no_match_found", "job_cancelled_by_support",
-                                                     "job_reassigned_by_support", "job_reassigning"},
+                                                     "job_reassigned_by_support", "job_reassigning",
+                                                     "job_expired"},
               f"{sorted(set(NOTIFICATION_EVENTS) - written)}")
 
         channels = {row["channel"] for row in rows(

@@ -59,7 +59,8 @@ from app.services import push_service
 
 RecipientRole = Literal["user", "partner"]
 # Who can cause a change. "admin" is never a recipient: staff read the board.
-ActorRole = Literal["user", "partner", "admin"]
+# "system" is the dispatch worker acting on a job nobody will move (ADR-036).
+ActorRole = Literal["user", "partner", "admin", "system"]
 
 # The channel every row this codebase writes carries. 'push' and 'sms' exist in
 # the constraint for a delivery worker that does not exist yet; writing either
@@ -101,6 +102,8 @@ NOTIFICATION_EVENTS: dict[str, str] = {
     "job_cancelled_by_partner": "Your partner cancelled this job. We are finding you another.",
     # Staff cancelled it (ADR-024). Both sides hear, since neither of them acted.
     "job_cancelled_by_support": "This job was cancelled by Sahayak support.",
+    # ADR-036: the worker cancelled a request that was never dispatched.
+    "job_expired": "Your request could not be started. Please request help again.",
     "job_no_match_found": "We could not find an available partner for your request.",
     # ADR-030. Neither is a job status change, so neither is in EVENT_FOR_STATUS.
     "job_reassigned_by_support": "Sahayak support moved this job to another partner.",
@@ -145,6 +148,8 @@ def event_for(status: str, *, actor_role: Optional[ActorRole]) -> Optional[str]:
     if status == "cancelled":
         if actor_role == "admin":
             return "job_cancelled_by_support"
+        if actor_role == "system":
+            return "job_expired"
         return (
             "job_cancelled_by_owner"
             if actor_role == "user"

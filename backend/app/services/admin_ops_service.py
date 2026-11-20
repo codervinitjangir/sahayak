@@ -31,6 +31,7 @@ from app.services.auth_service import Identity
 from app.services.job_service import TERMINAL_ASSIGNMENT_STATUS, TERMINAL_JOB_STATUSES
 from app.utils.errors import BadRequestError, ConflictError, ErrorCode, InternalError, NotFoundError
 from app.utils.logging import log_event
+from app.utils.scoring import NO_MATCH_LIVE_FOR_S
 
 ALL_JOB_STATUSES = admin_ops_repository.LIVE_JOB_STATUSES + ("completed", "cancelled")
 
@@ -38,9 +39,14 @@ ALL_JOB_STATUSES = admin_ops_repository.LIVE_JOB_STATUSES + ("completed", "cance
 async def list_jobs(
     db: AsyncSession, *, status: Optional[str], q: Optional[str], limit: int, offset: int
 ) -> AdminJobListResponse:
-    """The live board. `status` is one job status, "live" (default) or "all"."""
+    """The live board. `status` is one job status, "live" (default) or "all".
+
+    "live" leaves out no_match_found jobs raised more than NO_MATCH_LIVE_FOR_S
+    ago (ADR-036); filtering on no_match_found itself still shows them all."""
+    live_cutoff = None
     if status in (None, "", "live"):
         statuses = admin_ops_repository.LIVE_JOB_STATUSES
+        live_cutoff = datetime.now(timezone.utc) - timedelta(seconds=NO_MATCH_LIVE_FOR_S)
     elif status == "all":
         statuses = ALL_JOB_STATUSES
     elif status in ALL_JOB_STATUSES:
@@ -49,7 +55,7 @@ async def list_jobs(
         raise BadRequestError("VALIDATION_ERROR", f"Unknown status filter '{status}'")
 
     rows, total = await admin_ops_repository.list_jobs(
-        db, statuses=statuses, q=q, limit=limit, offset=offset
+        db, statuses=statuses, q=q, limit=limit, offset=offset, no_match_after=live_cutoff
     )
     partners = await admin_ops_repository.partners_for_jobs(db, [job.id for job, *_ in rows])
     items = []
@@ -238,6 +244,11 @@ LOW_PARTNERS_ON_DUTY = 3
 _MAX_ALERT_JOB_IDS = 20
 
 
+def _search_long_over(status: str, requested_at: Optional[datetime], now: datetime) -> bool:
+    return (status == "no_match_found" and requested_at is not None
+            and now - requested_at > timedelta(seconds=NO_MATCH_LIVE_FOR_S))
+
+
 def evaluate_alerts(
     *,
     now: datetime,
@@ -248,6 +259,8 @@ def evaluate_alerts(
 ) -> AdminAlertsResponse:
     """Pure: turn the three reads into alerts. Tested without a database."""
     alerts: list[AdminAlert] = []
+    # ADR-036: a search that ended long ago is history, not a live job.
+    live_jobs = [j for j in live_jobs if not _search_long_over(j[1], j[2], now)]
 
     stuck: list[tuple[datetime, uuid.UUID]] = []
     for job_id, status, requested_at, last_change in live_jobs:

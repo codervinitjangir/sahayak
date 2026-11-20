@@ -489,6 +489,23 @@ async def get_searchable_job_ids(
     return [row[0] for row in result.all()]
 
 
+async def get_orphaned_requested_job_ids(
+    db: AsyncSession, *, requested_before: datetime, limit: int = 50
+) -> list[uuid.UUID]:
+    """Ids of jobs still 'requested' that were raised before `requested_before`.
+
+    The worker's third work list (ADR-036). A candidate list like the other two:
+    every id is re-checked under the job's row lock before it is cancelled.
+    """
+    result = await db.execute(
+        select(Job.id)
+        .where(Job.status == "requested", Job.requested_at < requested_before)
+        .order_by(Job.requested_at)
+        .limit(limit)
+    )
+    return [row[0] for row in result.all()]
+
+
 async def mark_assignment_rejected(
     db: AsyncSession, assignment: JobAssignment, rejection_reason: Optional[str]
 ) -> JobAssignment:

@@ -21,6 +21,7 @@ const META: Record<string, NotificationMeta> = {
   job_cancelled_by_owner: { title: "Job cancelled by owner", icon: "close-circle", tone: "danger" },
   job_cancelled_by_partner: { title: "Partner cancelled", icon: "refresh-circle", tone: "warning" },
   job_cancelled_by_support: { title: "Cancelled by Sahayak", icon: "close-circle", tone: "danger" },
+  job_expired: { title: "Request expired", icon: "time", tone: "warning" },
   job_no_match_found: { title: "No partner found", icon: "alert-circle", tone: "warning" },
   job_reassigned_by_support: { title: "Job moved", icon: "swap-horizontal", tone: "warning" },
   job_reassigning: { title: "Finding another partner", icon: "search", tone: "info" },

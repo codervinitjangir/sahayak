@@ -55,6 +55,15 @@ MAX_SEARCH_RADIUS_M: float = SEARCH_TIERS[-1][1]
 # up to one worker interval after this; expiry is a write, not a clock check.
 OFFER_TTL_S: int = 60
 
+# Abandoned jobs (ADR-036). A job still 'requested' this long after it was
+# raised was never dispatched (dispatch runs inside the creating request, in
+# milliseconds), so the worker cancels it and tells the owner.
+ORPHAN_REQUESTED_S: int = 300
+# A 'no_match_found' job stops counting as live on the admin board and in the
+# stuck-jobs alert this long after it was raised. Its status is not rewritten:
+# it is an outcome the analytics count (ADR-021).
+NO_MATCH_LIVE_FOR_S: int = 3600
+
 
 def search_radius_m(elapsed_s: float) -> float:
     """The radius a search should use for a job this old.

@@ -116,6 +116,7 @@ PUSH_TITLES: dict[str, str] = {
     "job_cancelled_by_owner": "Job cancelled by owner",
     "job_cancelled_by_partner": "Partner cancelled",
     "job_cancelled_by_support": "Cancelled by Sahayak",
+    "job_expired": "Request expired",
     "job_no_match_found": "No partner found",
     "job_reassigned_by_support": "Job moved",
     "job_reassigning": "Finding another partner",

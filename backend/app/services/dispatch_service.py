@@ -47,6 +47,7 @@ from dataclasses import dataclass
 from typing import Optional, Sequence
 
 import redis.exceptions as redis_exceptions
+from sqlalchemy import func
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -73,6 +74,7 @@ from datetime import datetime, timedelta, timezone
 from app.utils.scoring import (
     MAX_RADIUS_M,
     OFFER_TTL_S,
+    ORPHAN_REQUESTED_S,
     SEARCH_WINDOW_S,
     Candidate,
     baseline_pick,
@@ -943,6 +945,60 @@ async def expire_offer(
         outcome="success",
     )
     return await _offer_next(db, job)
+
+
+EXPIRED_REQUEST_REASON = "Expired: the search never started"
+
+
+async def expire_orphaned_request(
+    db: AsyncSession, job_id: uuid.UUID, now: Optional[datetime] = None
+) -> bool:
+    """Cancel a job that was raised but never dispatched (ADR-036).
+
+    dispatch_job runs inside the request that creates the job, so a job still
+    'requested' after ORPHAN_REQUESTED_S means that process died in between.
+    Nothing else will ever move it, and the owner's app would show "searching"
+    forever. Locked first and re-checked under the lock (status still
+    'requested', still old enough); anything else is left alone. The cancel,
+    its history row and the owner's notification commit together. No
+    assignment exists for a job that was never dispatched, so none is closed.
+
+    Returns True when the job was cancelled.
+    """
+    now = now or datetime.now(timezone.utc)
+    job = await job_repository.get_job_by_id_for_update(db, job_id)
+    orphaned = (
+        job is not None
+        and job.status == STATUS_REQUESTED
+        and job.requested_at is not None
+        and (now - job.requested_at).total_seconds() >= ORPHAN_REQUESTED_S
+    )
+    if not orphaned:
+        job_status = job.status if job is not None else "missing"
+        await db.rollback()
+        log_event("request_expiry_skipped", job_id=str(job_id), job_status=job_status, outcome="skipped")
+        return False
+
+    try:
+        await job_repository.update_job_fields(
+            db, job, status="cancelled", cancelled_at=func.now(),
+            cancellation_reason=EXPIRED_REQUEST_REASON,
+        )
+        await job_repository.create_status_history_row(
+            db, job_id=job_id, status="cancelled", note=EXPIRED_REQUEST_REASON
+        )
+        await notification_service.notify_job_status_change(
+            db, job=job, status="cancelled", actor_role="system",
+        )
+        await db.commit()
+    except SQLAlchemyError as exc:
+        await db.rollback()
+        log_event("request_expired", level=logging.ERROR, job_id=str(job_id),
+                  error_type=type(exc).__name__, outcome="failure")
+        raise InternalError("Could not expire this request") from exc
+
+    log_event("request_expired", job_id=str(job_id), actor_role="system", outcome="success")
+    return True
 
 
 async def _offer_next(db: AsyncSession, job: Job) -> Optional[JobAssignment]:

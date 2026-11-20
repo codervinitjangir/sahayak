@@ -41,7 +41,7 @@ from app.config.database import AsyncSessionLocal
 from app.repositories import dispatch_repository
 from app.services import dispatch_service
 from app.utils.logging import log_event
-from app.utils.scoring import OFFER_TTL_S, SEARCH_WINDOW_S
+from app.utils.scoring import OFFER_TTL_S, ORPHAN_REQUESTED_S, SEARCH_WINDOW_S
 
 
 @dataclass
@@ -52,6 +52,7 @@ class SweepResult:
     reoffered: int = 0
     jobs_searched: int = 0
     jobs_rescued: int = 0
+    requests_expired: int = 0
     errors: list[str] = field(default_factory=list)
 
 
@@ -112,13 +113,28 @@ async def sweep_once(session_factory=AsyncSessionLocal, now: Optional[datetime] 
         if status is not None and status.assignment is not None:
             result.jobs_rescued += 1
 
-    if offer_ids or job_ids or result.errors:
+    # Third (ADR-036): a job still 'requested' long after it was raised was
+    # never dispatched; nothing else will move it, so it is cancelled.
+    async with session_factory() as db:
+        orphan_ids = await dispatch_repository.get_orphaned_requested_job_ids(
+            db, requested_before=now - timedelta(seconds=ORPHAN_REQUESTED_S)
+        )
+
+    async def expire_request(db, job_id):
+        return await dispatch_service.expire_orphaned_request(db, job_id, now=now)
+
+    for done in await _each(session_factory, orphan_ids, expire_request, "request", result):
+        if done:
+            result.requests_expired += 1
+
+    if offer_ids or job_ids or orphan_ids or result.errors:
         log_event(
             "dispatch_worker_sweep",
             offers_checked=result.offers_checked,
             reoffered=result.reoffered,
             jobs_searched=result.jobs_searched,
             jobs_rescued=result.jobs_rescued,
+            requests_expired=result.requests_expired,
             error_count=len(result.errors),
             outcome="success" if not result.errors else "partial",
         )

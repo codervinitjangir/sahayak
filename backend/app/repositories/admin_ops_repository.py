@@ -43,6 +43,7 @@ async def list_jobs(
     q: Optional[str],
     limit: int,
     offset: int,
+    no_match_after: Optional[datetime] = None,
 ) -> tuple[list[tuple[Job, Optional[str], Optional[str], Optional[str]]], int]:
     """Jobs newest first, with owner name, owner phone and service name.
 
@@ -55,6 +56,9 @@ async def list_jobs(
         .outerjoin(Service, Service.id == Job.service_id)
         .where(Job.status.in_(list(statuses)))
     )
+    if no_match_after is not None:
+        # ADR-036: an ended search drops off the live board after a while.
+        base = base.where(or_(Job.status != "no_match_found", Job.requested_at > no_match_after))
     cond = _search(q, User.name, User.phone, Job.vehicle_number, Job.pickup_address_text)
     if cond is not None:
         base = base.where(cond)
