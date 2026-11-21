@@ -93,7 +93,7 @@ export default function PartnerServicesScreen() {
                       </View>
                     )}
                   </View>
-                  <Text style={styles.price}>{s.base_price != null ? `From ₹${s.base_price}` : "Standard"}</Text>
+                  <Text style={styles.price}>{s.base_price != null ? `From ₹${Math.round(Number(s.base_price)).toLocaleString("en-IN")}` : "Standard"}</Text>
                 </View>
               ))}
             </View>

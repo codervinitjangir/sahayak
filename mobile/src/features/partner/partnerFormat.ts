@@ -12,6 +12,9 @@ const SERVICE_TYPE_BY_CODE: Record<string, ServiceType> = {
   flat_tyre: "tyre",
   battery_jumpstart: "battery",
   minor_repair: "mechanic",
+  exterior_wash: "wash",
+  interior_exterior_wash: "wash",
+  deep_clean: "wash",
 };
 
 export const serviceTypeFor = (code?: string | null): ServiceType =>

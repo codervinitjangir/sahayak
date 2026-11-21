@@ -216,7 +216,8 @@ export type ServiceType =
   | "battery"
   | "tyre"
   | "lockout"
-  | "mechanic";
+  | "mechanic"
+  | "wash";
 
 export const ServiceConfig: Record<
   ServiceType,
@@ -227,6 +228,7 @@ export const ServiceConfig: Record<
   tyre: { label: "Flat tyre", icon: "disc-outline", color: "#111111", bg: "#E4E6EA" },
   lockout: { label: "Lockout", icon: "key-outline", color: "#7C3AED", bg: "#EDE9FE" },
   mechanic: { label: "Repair", icon: "construct-outline", color: "#15803D", bg: "#DCFCE7" },
+  wash: { label: "Car wash", icon: "water-outline", color: "#0369A1", bg: "#E0F2FE" },
 };
 
 // ─── Status labels (icon + word + colour, never colour alone) ─────────────────

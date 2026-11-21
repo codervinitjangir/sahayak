@@ -443,6 +443,39 @@ async def main() -> None:
         check("a partner who did not take the job gets 404 JOB_NOT_FOUND",
               r.status_code == 404 and code_of(r) == "JOB_NOT_FOUND", f"HTTP {r.status_code} {code_of(r)}")
 
+        # ADR-057: the owner's live location, accepted partner only.
+        r = await c.put(f"/api/v1/jobs/{job_a}/owner-location", json={"lat": 12.9717, "lng": 77.5947, "accuracy_m": 9},
+                        headers=hdr(owner_token))
+        check("the owner shares a live fix on an assigned job", r.status_code == 200, f"HTTP {r.status_code} {code_of(r)}")
+        r = await c.get(f"/api/v1/jobs/{job_a}/owner-location", headers=hdr(token))
+        live = data_of(r) or {}
+        check("the accepted partner reads it", r.status_code == 200 and live.get("sharing") and live.get("lat") == 12.9717,
+              f"HTTP {r.status_code} {live}")
+        r = await c.get(f"/api/v1/jobs/{job_a}/owner-location", headers=hdr(partners[other]["token"]))
+        check("another partner gets 404 JOB_NOT_FOUND for the owner's location",
+              r.status_code == 404 and code_of(r) == "JOB_NOT_FOUND", f"HTTP {r.status_code} {code_of(r)}")
+        r = await c.put(f"/api/v1/jobs/{job_a}/owner-location", json={"lat": 12.9, "lng": 77.5},
+                        headers=hdr(token))
+        check("a partner cannot write the owner's location", r.status_code in (401, 403, 404), f"HTTP {r.status_code}")
+
+        # ADR-058: chat between the owner and the accepted partner.
+        r = await c.post(f"/api/v1/jobs/{job_a}/messages", json={"body": "I am near the gate"}, headers=hdr(owner_token))
+        check("the owner sends a message", r.status_code == 201 and (data_of(r) or {}).get("mine") is True,
+              f"HTTP {r.status_code} {code_of(r)}")
+        r = await c.post(f"/api/v1/jobs/{job_a}/messages", json={"body": "On my way"}, headers=hdr(token))
+        check("the accepted partner replies", r.status_code == 201, f"HTTP {r.status_code} {code_of(r)}")
+        r = await c.get(f"/api/v1/jobs/{job_a}/messages", headers=hdr(token))
+        thread = (data_of(r) or {}).get("items", [])
+        check("both see the thread in order with the right 'mine' flags",
+              [(m["sender"], m["mine"]) for m in thread] == [("owner", False), ("partner", True)], str(thread))
+        pushed = one("SELECT count(*) AS n FROM notifications WHERE job_id = %(j)s AND event = 'new_message'", {"j": job_a})["n"]
+        check("each side got one new_message notification", pushed == 2, f"n={pushed}")
+        r = await c.get(f"/api/v1/jobs/{job_a}/messages", headers=hdr(partners[other]["token"]))
+        check("another partner gets 404 for the thread", r.status_code == 404 and code_of(r) == "JOB_NOT_FOUND",
+              f"HTTP {r.status_code} {code_of(r)}")
+        r = await c.post(f"/api/v1/jobs/{job_a}/messages", json={"body": "   "}, headers=hdr(owner_token))
+        check("a blank message is refused", r.status_code in (400, 422), f"HTTP {r.status_code}")
+
         r = await c.post(f"/api/v1/jobs/{job_a}/status",
                          json={"status": "partner_en_route"}, headers=hdr(token))
         check("assigned → partner_en_route accepted", r.status_code == 200,
@@ -832,6 +865,15 @@ async def main() -> None:
               "an unexpected price field appeared in the catalogue")
         # Pinned against the drift this endpoint exists to end: the catalogue the
         # API serves has to be the catalogue the database holds.
+        # ADR-056: car wash is in the catalogue as booking only, and "now" is refused.
+        wash = next((x for x in cat["items"] if x["code"] == "exterior_wash"), None)
+        check("car wash is listed as booking_only", bool(wash and wash.get("booking_only")), str(wash))
+        veh = one("SELECT vehicle_id FROM jobs WHERE id = %(j)s", {"j": job_a})["vehicle_id"]
+        r = await c.post("/api/v1/jobs", json={"vehicle_id": str(veh), "service_code": "exterior_wash",
+                                               "pickup_lat": 12.9716, "pickup_lng": 77.5946,
+                                               "issue_description": JOB_TAG + " wash now"}, headers=hdr(owner_token))
+        check("a car wash 'now' is 400 BOOKING_REQUIRED", r.status_code == 400 and code_of(r) == "BOOKING_REQUIRED",
+              f"HTTP {r.status_code} {code_of(r)}")
         db_codes = {r["code"] for r in rows("SELECT code FROM services")}
         check("the response matches the services table exactly", codes == db_codes,
               f"api-only={codes - db_codes} db-only={db_codes - codes}")

@@ -46,7 +46,8 @@ export type ServiceType =
   | "battery"
   | "tyre"
   | "lockout"
-  | "mechanic";
+  | "mechanic"
+  | "wash";
 
 export interface SubService {
   id: string;

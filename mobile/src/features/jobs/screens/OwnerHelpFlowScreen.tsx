@@ -32,6 +32,8 @@ import { useJobStore } from "../../../store/jobStore";
 import AddVehicleModal from "../../account/AddVehicleModal";
 import { QK } from "../../shared/ownerData";
 import SlotPicker from "../components/SlotPicker";
+import JobChatModal from "../contact/JobChatModal";
+import { isActiveStatus, useJobChat, useShareOwnerLocation } from "../contact/useJobContact";
 import ServiceTiles from "../components/ServiceTiles";
 import IssuePhotoPicker from "../photos/IssuePhotoPicker";
 import { OwnerIssuePhotos } from "../photos/JobPhotoStrip";
@@ -55,6 +57,9 @@ const CODE_GROUP: Record<string, ServiceType> = {
   battery_jumpstart: "battery",
   flat_tyre: "tyre",
   minor_repair: "mechanic",
+  exterior_wash: "wash",
+  interior_exterior_wash: "wash",
+  deep_clean: "wash",
 };
 
 const newIdempotencyKey = () => {
@@ -127,7 +132,7 @@ export default function OwnerHelpFlowScreen() {
   const [vehicleId, setVehicleId] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
   // ADR-050: book a time instead of help now.
-  const [bookLater, setBookLater] = useState(Boolean(route.params?.bookLater));
+  const [bookLater, setBookLater] = useState(Boolean(route.params?.bookLater) || preferredType === "wash");
   const [slot, setSlot] = useState<ScheduleSlot | null>(null);
   const [leadMin, setLeadMin] = useState<number | null>(null);
   // ADR-055: photos of the problem stay on the phone until the request exists.
@@ -505,6 +510,11 @@ export default function OwnerHelpFlowScreen() {
   const eta = assignment?.estimated_arrival_min;
   const showCode = Boolean(job?.start_code) && (job?.status === "assigned" || job?.status === "partner_en_route");
   const step = job ? progressIndex(job.status) : 0;
+  // ADR-057/058: share the owner's live location with the accepted partner, and chat.
+  const contactActive = phase === "matched" && isActiveStatus(job?.status);
+  const sharingLive = useShareOwnerLocation(job?.id, contactActive);
+  const [chatOpen, setChatOpen] = useState(false);
+  const chat = useJobChat(job?.id, phase === "matched" && !!assignment, chatOpen);
 
   return (
     <View style={styles.root}>
@@ -585,7 +595,7 @@ export default function OwnerHelpFlowScreen() {
                 ) : catalog.length === 0 ? (
                   <EmptyState icon="construct-outline" title="No services available" message="Please try again in a little while." />
                 ) : (
-                  <ServiceTiles services={catalog} groupOf={(c) => CODE_GROUP[c]} value={serviceCode} onChange={setServiceCode} />
+                  <ServiceTiles services={bookLater ? catalog : catalog.filter((s) => !s.booking_only)} groupOf={(c) => CODE_GROUP[c]} value={serviceCode} onChange={setServiceCode} />
                 )}
 
                 {/* When (ADR-050), booking only */}
@@ -763,6 +773,24 @@ export default function OwnerHelpFlowScreen() {
           {/* ───────── MATCHED ───────── */}
           {phase === "matched" && job && (
             <ScrollView style={{ maxHeight: sheetMax }} showsVerticalScrollIndicator={false}>
+              <JobChatModal
+                visible={chatOpen}
+                onClose={() => setChatOpen(false)}
+                title={partnerName ?? "Your partner"}
+                as="owner"
+                items={chat.items}
+                canSend={chat.canSend}
+                error={chat.error}
+                onSend={chat.send}
+              />
+              {contactActive ? (
+                <View style={styles.shareRow} accessibilityLiveRegion="polite">
+                  <Ionicons name={sharingLive ? "navigate" : "navigate-outline"} size={16} color={sharingLive ? Colors.success : Colors.textMuted} />
+                  <Text style={styles.shareText}>
+                    {sharingLive ? "Your live location is shared with your partner" : "Keep this screen open to share your live location"}
+                  </Text>
+                </View>
+              ) : null}
               <View style={styles.matchedHead}>
                 <StatusChip status={job.status} />
                 {eta != null && job.status !== "in_progress" ? <Text style={styles.eta}>About {eta} min</Text> : null}
@@ -782,6 +810,17 @@ export default function OwnerHelpFlowScreen() {
                       : "New partner · Verified by Sahayak"}
                   </Text>
                 </View>
+                {assignment && contactActive ? (
+                  <Pressable
+                    onPress={() => setChatOpen(true)}
+                    accessibilityRole="button"
+                    accessibilityLabel={chat.unread ? `Message ${partnerName ?? "your partner"}, ${chat.unread} new` : `Message ${partnerName ?? "your partner"}`}
+                    style={[styles.callBtn, styles.chatBtn]}
+                  >
+                    <Ionicons name="chatbubble-ellipses" size={22} color={Colors.brand700} />
+                    {chat.unread ? <View style={styles.unreadDot} /> : null}
+                  </Pressable>
+                ) : null}
                 {partnerPhone ? (
                   <Pressable
                     onPress={() => void Linking.openURL(`tel:${partnerPhone}`)}
@@ -989,6 +1028,10 @@ const styles = StyleSheet.create({
   avatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: Colors.brand700Muted, alignItems: "center", justifyContent: "center" },
   avatarText: { fontSize: Typography.fontSize.xl, fontFamily: Typography.fontFamily.bold, color: Colors.brand700 },
   partnerName: { fontSize: Typography.fontSize.lg, fontFamily: Typography.fontFamily.bold, color: Colors.textPrimary },
+  chatBtn: { backgroundColor: Colors.brand700Muted, borderWidth: 1, borderColor: Colors.border, marginRight: Spacing.sm },
+  unreadDot: { position: "absolute", top: 2, right: 2, width: 12, height: 12, borderRadius: 6, backgroundColor: Colors.error, borderWidth: 2, borderColor: "#fff" },
+  shareRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: Spacing.sm },
+  shareText: { flex: 1, fontSize: Typography.fontSize.sm, color: Colors.textSecondary, fontFamily: Typography.fontFamily.medium },
   callBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: Colors.brand700, alignItems: "center", justifyContent: "center" },
   codeBox: { marginTop: Spacing.md, padding: Spacing.base, borderRadius: Radius.lg, borderWidth: 2, borderColor: Colors.brand700, backgroundColor: Colors.surfaceWhite },
   codeLabel: { fontSize: Typography.fontSize.xs, fontFamily: Typography.fontFamily.semiBold, color: Colors.textMuted, textTransform: "uppercase", letterSpacing: 0.5 },

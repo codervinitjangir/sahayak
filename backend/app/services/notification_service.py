@@ -117,6 +117,8 @@ NOTIFICATION_EVENTS: dict[str, str] = {
     "job_reassigning_by_owner": "We are finding you another partner.",
     # ADR-050: a booked slot is coming up and dispatch has started.
     "scheduled_job_starting": "Your booked slot is coming up. We are finding you a partner now.",
+    # ADR-058: chat. The text never includes the message; it may be private.
+    "new_message": "You have a new message about your job.",
     # ADR-038 amendment: partner document expiry. Not tied to a job.
     "document_expiring": "A document you uploaded expires within two weeks. Upload a new one from Verification.",
     "document_expired": "A document you uploaded has expired. Upload a new one from Verification to keep your profile verified.",

@@ -1784,3 +1784,58 @@ The endpoints now take `get_current_identity` instead of `require_user`. The sid
 **Rejected.** A separate table and bucket: two copies of the same upload, confirm and view code. Showing photos with the offer: better for the partner's decision, but it releases owner data before acceptance.
 
 **Tests.** 12 unit in `test_job_safeguards.py` (statuses, 404 for another owner, limits, a partner's tow photo cannot be confirmed as the owner's, an offered partner gets 404, retention order and retry). Live `check_job_lifecycle.py` (97 checks) uploads a real file to the bucket. It checks that an unassigned partner gets 404 and the assigned partner downloads the same bytes, that a new photo is refused once work starts, and that the run deletes its files.
+
+---
+
+# ADR-056: Car wash, booking only
+
+**Date.** 2026-11-21. **Status.** Accepted.
+
+**Context.** The product owner asked for car washing that owners schedule. A wash is never an emergency, so it should not tie up a roadside partner "now".
+
+**Decision.**
+- New category `washing` with three services (alembic/0020): `exterior_wash` ₹299, `interior_exterior_wash` ₹549 and `deep_clean` ₹999. These are **placeholder prices** chosen by engineering; the product owner has not set them yet. Staff can change them (ADR-028).
+- `services.booking_only` (default false). `POST /jobs` refuses a booking-only service without `scheduled_for`: 400 `BOOKING_REQUIRED`. Booking otherwise follows ADR-050 (two-hour slots, released to dispatch near the slot).
+- Partners add washing from the existing Services picker. No new partner flow is needed, because it reads the catalogue.
+- Mobile has a Home "Book a car wash" strip that opens the booking flow with wash preselected. Wash tiles are hidden in the urgent flow. The catalogue response carries `booking_only`.
+
+**Not done.** Web still hardcodes its service lists, so web owners cannot book a wash yet. There are no wash-specific fields (water and power at the site, vehicle size).
+
+**Tests.** Unit `test_a_booking_only_service_is_refused_without_a_slot`; live `check_job_lifecycle.py` section 7c.
+
+---
+
+# ADR-057: The owner's live location, shared with the accepted partner
+
+**Date.** 2026-11-21. **Status.** Accepted. Extends ADR-017 and ADR-049.
+
+**Context.** The partner saw only the pickup pin. Owners often walk to a safer spot or a landmark, so the product owner asked for live location on both sides, as in ride-hailing apps.
+
+**Decision.**
+- `PUT /jobs/{id}/owner-location` (owner only) stores the fix in Redis at `job:{id}:owner_location`, with a TTL of 120 s (principle 2, never Postgres). It is allowed only while the job is `assigned`, `partner_en_route` or `in_progress`; otherwise 409 `JOB_NOT_ACTIVE`.
+- `GET /jobs/{id}/owner-location`: owner or **accepted** partner. An offered or other partner gets 404 (ADR-017). Once the job ends it returns `sharing: false`, even if the key is still warm.
+- Mobile owner app: while the tracking screen is open and the job is active, it sends a fix at most every 15 s, foreground only, using the permission already granted. It shows "Your live location is shared with your partner". The partner map shows the owner's live pin instead of the pickup when there is a fresh fix, with "Owner live · updated N s ago".
+
+**Rejected.** Background owner location: a background permission and Play review for little gain, because an owner waiting for help keeps the app open.
+
+**Tests.** 3 unit tests in `test_job_contact.py`; live checks in `check_job_lifecycle.py` (another partner gets 404; a partner cannot write).
+
+---
+
+# ADR-058: In-app chat between the owner and the accepted partner (no masked calling)
+
+**Date.** 2026-11-21. **Status.** Accepted.
+
+**Context.** Masked calling (Exotel and similar) costs money per minute. The product owner chose in-app messages only, because they cost nothing per use. The partner app's "message" button used to open SMS to the owner's real number.
+
+**Decision.**
+- New table `job_messages` (alembic/0021, RLS on, cascade on job delete). Each body is 1 to 500 characters, trimmed.
+- `GET /jobs/{id}/messages` and `POST /jobs/{id}/messages`: owner or accepted partner, anyone else gets 404. Sending is allowed only on an active job (409 `JOB_NOT_ACTIVE`); afterwards the thread stays readable (`can_send: false`) for disputes.
+- Each message notifies the other side with the `new_message` event. The notification text never contains the message body. A burst from the same sender within 2 minutes notifies only once.
+- Clients poll every 4 s while the chat is open and every 15 s while it is closed, with an unread dot. There are quick replies ("On my way", "I have reached", and so on). The partner's SMS button is replaced by the in-app chat.
+
+**Rejected.** WebSockets or Supabase Realtime: polling is enough at this scale and works through the same auth and envelope. Masked calling: cost, per the product owner.
+
+**Residual risk.** No moderation or report button inside the chat yet; disputes (ADR-043) can cite the thread. The 4 s poll costs one request per open chat every 4 s.
+
+**Tests.** 2 unit tests in `test_job_contact.py`; live checks in `check_job_lifecycle.py` (order, mine flags, one notification each, 404 for another partner, blank message refused); mobile `job-contact.test.ts`.

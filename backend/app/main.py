@@ -14,6 +14,7 @@ from app.api.health import router as health_router
 from app.api.job_assignments import router as job_assignments_router
 from app.api.jobs import router as jobs_router
 from app.api.job_safeguards import router as job_safeguards_router
+from app.api.job_contact import router as job_contact_router
 from app.api.client_errors import router as client_errors_router
 from app.api.feature_interest import router as feature_interest_router
 from app.api.notifications import router as notifications_router
@@ -112,6 +113,7 @@ app.include_router(auth_router)
 # Include the jobs router (POST /api/v1/jobs, GET /api/v1/jobs/{job_id})
 app.include_router(jobs_router)
 app.include_router(job_safeguards_router)
+app.include_router(job_contact_router)
 
 # Include the partners router (registration, availability, location, coverage)
 app.include_router(partners_router)

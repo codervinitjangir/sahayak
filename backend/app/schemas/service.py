@@ -57,6 +57,7 @@ class ServiceCatalogItem(BaseModel):
     id: int
     code: str = Field(..., description="The value `service_code` takes in POST /jobs.")
     name: str
+    booking_only: bool = Field(False, description="ADR-056: true for car wash; POST /jobs needs scheduled_for.")
     requires_vehicle_equipment: bool = Field(
         False,
         description=(

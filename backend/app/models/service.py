@@ -36,6 +36,8 @@ class Service(Base):
     # What POST /jobs writes to jobs.price_estimate. Staff-editable (ADR-028);
     # NULL falls back to job_service.SERVICE_BASE_PRICES.
     base_price: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)
+    # ADR-056: a booking-only service (car wash) is refused without scheduled_for.
+    booking_only: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="false")
 
     # Relationships
     category: Mapped[Optional["ServiceCategory"]] = relationship(

@@ -223,6 +223,8 @@ def test_every_message_is_reachable():
         "price_revision_rejected",
         "job_reassigned_by_owner",
         "job_reassigning_by_owner",
+        # ADR-058: emitted by job_contact_service.send_message.
+        "new_message",
         # ADR-038 amendment: emitted by the retention sweep.
         "document_expiring",
         "document_expired",

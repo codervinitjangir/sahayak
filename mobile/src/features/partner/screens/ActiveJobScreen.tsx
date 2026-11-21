@@ -18,6 +18,8 @@ import type { RouteProp } from "@react-navigation/native";
 import { Colors, Typography, Spacing, Radius, Shadows } from "../../../constants/theme";
 import Button from "../../../components/ui/Button";
 import RealMap from "../../../components/map/RealMap";
+import JobChatModal from "../../jobs/contact/JobChatModal";
+import { freshness, isActiveStatus, useJobChat, useOwnerLiveLocation } from "../../jobs/contact/useJobContact";
 import { jobsApi } from "../../../services/api/jobs";
 import type { BackendJob } from "../../../services/api/jobs";
 import type { PartnerStackParamList } from "../../../types";
@@ -197,6 +199,16 @@ export default function ActiveJobScreen() {
 
   const meta = serviceMetaFor(job?.service_code);
 
+  // ADR-057/058: the owner's live pin and in-app chat, accepted job only.
+  const jobActive = isActiveStatus(job?.status);
+  const ownerLive = useOwnerLiveLocation(job?.id, jobActive);
+  const ownerPin =
+    ownerLive?.sharing && ownerLive.lat != null && ownerLive.lng != null
+      ? { latitude: ownerLive.lat, longitude: ownerLive.lng }
+      : null;
+  const [chatOpen, setChatOpen] = useState(false);
+  const chat = useJobChat(job?.id, !!job?.id, chatOpen);
+
   const handleNavigate = () => {
     if (!pickup) {
       showDialog(
@@ -334,7 +346,13 @@ export default function ActiveJobScreen() {
     }
     return (
       <View style={StyleSheet.absoluteFill}>
-        <RealMap userLocation={pickup} partnerLocation={partnerLocation} showRoute={!!partnerLocation} />
+        <RealMap userLocation={ownerPin ?? pickup} partnerLocation={partnerLocation} showRoute={!!partnerLocation} />
+        {ownerPin ? (
+          <View style={styles.livePill} pointerEvents="none" accessibilityLiveRegion="polite">
+            <View style={styles.liveDot} />
+            <Text style={styles.livePillText}>Owner live · {freshness(ownerLive?.updated_at)}</Text>
+          </View>
+        ) : null}
         <View style={styles.mapOverlay} pointerEvents="box-none">
           <Pressable
             onPress={() => nav.goBack()}
@@ -488,11 +506,12 @@ export default function ActiveJobScreen() {
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.circleActionBtn}
-                onPress={() => void Linking.openURL(`sms:${job.owner_phone}`)}
+                onPress={() => setChatOpen(true)}
                 accessibilityRole="button"
-                accessibilityLabel="Message customer"
+                accessibilityLabel={chat.unread ? `Chat with customer, ${chat.unread} new` : "Chat with customer"}
               >
                 <Ionicons name="chatbubble-ellipses" size={17} color={Colors.textPrimary} />
+                {chat.unread ? <View style={styles.unreadDot} /> : null}
               </TouchableOpacity>
             </View>
           ) : null}
@@ -637,6 +656,16 @@ export default function ActiveJobScreen() {
             </View>
 
             <PartnerJobSafeguards jobId={job.id} />
+            <JobChatModal
+              visible={chatOpen}
+              onClose={() => setChatOpen(false)}
+              title={job.owner_name ?? "Customer"}
+              as="partner"
+              items={chat.items}
+              canSend={chat.canSend}
+              error={chat.error}
+              onSend={chat.send}
+            />
 
             <Text style={styles.amountLabel}>Final amount charged</Text>
             <View style={styles.amountRow}>
@@ -1008,4 +1037,8 @@ const styles = StyleSheet.create({
   },
 
   enRouteBtnsRow: { flexDirection: "row", gap: Spacing.sm, marginTop: 4 },
+  livePill: { position: "absolute", top: 110, alignSelf: "center", flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, backgroundColor: "rgba(17,17,17,0.85)" },
+  liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#22C55E" },
+  livePillText: { color: "#fff", fontSize: 13, fontFamily: Typography.fontFamily.semiBold },
+  unreadDot: { position: "absolute", top: 4, right: 4, width: 10, height: 10, borderRadius: 5, backgroundColor: Colors.error, borderWidth: 2, borderColor: "#fff" },
 });

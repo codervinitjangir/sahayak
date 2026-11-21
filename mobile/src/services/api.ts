@@ -34,6 +34,7 @@ export const SEEDED_SUB_SERVICES: Record<ServiceType, SubService[]> = {
   lockout: [
     { id: "loc_01", name: "Emergency Vehicle Lockout Assist", estimatedPrice: 499 },
   ],
+  wash: [],
   mechanic: [
     { id: "mec_01", name: "On-Site Minor Mechanical Repair", estimatedPrice: 599 },
     { id: "mec_02", name: "Engine Breakdown Diagnosis", estimatedPrice: 599 },
