@@ -16,6 +16,7 @@ type IconName = keyof typeof Ionicons.glyphMap;
 
 // ─── Job status chip (icon + word + colour; never colour alone) ───────────────
 export type BackendJobStatus =
+  | "scheduled"
   | "requested"
   | "matching"
   | "assigned"
@@ -28,6 +29,7 @@ export type BackendJobStatus =
 export const TERMINAL_STATUSES: BackendJobStatus[] = ["completed", "cancelled", "no_match_found"];
 
 const STATUS_CHIP: Record<BackendJobStatus, { label: string; icon: IconName; color: string; bg: string }> = {
+  scheduled: { label: "Booked", icon: "calendar-outline", color: Colors.info, bg: Colors.infoLight },
   requested: { label: "Requested", icon: "time-outline", color: Colors.textSecondary, bg: "#F1F5F9" },
   matching: { label: "Finding a partner", icon: "radio-outline", color: Colors.warning, bg: Colors.warningLight },
   assigned: { label: "Partner assigned", icon: "person-circle-outline", color: Colors.brand700Dark, bg: Colors.brand700Light },

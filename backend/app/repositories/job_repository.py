@@ -52,6 +52,9 @@ async def create_job_row(
     price_estimate: Optional[Decimal] = None,
     start_code: Optional[str] = None,
     idempotency_key: Optional[str] = None,
+    scheduled_for=None,
+    slot_end=None,
+    care_membership_id=None,
 ) -> Job:
     """Stage a new jobs row and flush it so its generated id is available.
 
@@ -70,6 +73,9 @@ async def create_job_row(
         price_estimate=price_estimate,
         start_code=start_code,
         idempotency_key=idempotency_key,
+        scheduled_for=scheduled_for,
+        slot_end=slot_end,
+        care_membership_id=care_membership_id,
     )
     db.add(job)
     await db.flush()
@@ -364,8 +370,11 @@ async def get_open_assignments(
 # generic setter is that it would otherwise write *any* attribute, including
 # user_id or pickup_location, so the allowlist is what stops it becoming a back
 # door the next time someone reaches for a convenient writer.
+# ADR-050 adds the slot (reschedule) and requested_at, which is reset once, when
+# a booking is released to matching (schedule_service.release_scheduled_job).
 _MUTABLE_LIFECYCLE_FIELDS = frozenset(
-    {"status", "price_final", "completed_at", "cancelled_at", "cancellation_reason"}
+    {"status", "price_final", "completed_at", "cancelled_at", "cancellation_reason",
+     "scheduled_for", "slot_end", "requested_at"}
 )
 
 
@@ -505,3 +514,12 @@ async def list_jobs_for_partner(
         .offset(offset)
     )
     return result.all()
+
+
+async def count_scheduled_for_user(db: AsyncSession, user_id: uuid.UUID) -> int:
+    """ADR-050: bookings still waiting for their slot."""
+    result = await db.execute(
+        select(func.count()).select_from(Job).where(Job.user_id == user_id, Job.status == "scheduled")
+    )
+    return int(result.scalar_one())
+

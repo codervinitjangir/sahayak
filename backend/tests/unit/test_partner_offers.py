@@ -66,6 +66,8 @@ class FakeRow:
             "requested_at": NOW - timedelta(minutes=2),
             "service_code": "flat_tyre",
             "service_name": "Flat tyre",
+            "scheduled_for": None,
+            "slot_end": None,
         }
         defaults.update(kwargs)
         for key, value in defaults.items():

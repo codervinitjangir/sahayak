@@ -400,6 +400,8 @@ export interface PartnerOffer {
   /** Straight-line metres from the partner's last fix to the pickup. */
   distanceAtOfferM: number;
   pickupAddressText: string;
+  /** ADR-050: "Sun 23 Nov, 10:00-12:00" for a booked job; absent for help now. */
+  slot?: string;
   vehicleNumber: string;
   issueDescription?: string;
   /** ISO timestamp. The countdown derives from this; it is never stored ticking. */

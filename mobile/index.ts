@@ -1,6 +1,8 @@
 import 'react-native-gesture-handler';
 import './src/utils/webAlert';
 import { registerRootComponent } from 'expo';
+// ADR-049: the job-location task must be defined at load time.
+import './src/features/partner/jobLocationTracking';
 
 import App from './App';
 

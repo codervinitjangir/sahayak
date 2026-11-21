@@ -1620,3 +1620,108 @@ The endpoints now take `get_current_identity` instead of `require_user`. The sid
 
 **Tests.** 5 unit in `test_partner_export_and_staff_alerts.py` (sent once, warnings never, cleared, retry after failure, no ids in the text, off without a URL and rate-limited); live section 2b of `check_partner_deletion.py` runs the check against the real tables with the post stubbed.
 
+
+---
+
+# ADR-048: Zone supply gaps on the staff board
+
+**Date.** 2026-11-21. **Status.** Accepted.
+
+**Context.** `/admin/alerts` said *that* jobs were finding nobody, not *where*. Staff recruiting partners need the area.
+
+**Decision.** `admin_ops_service.zone_alert` groups the last 24 hours of job pickups (bookings excluded, ADR-050) into grid cells of 0.05° (about 5.5 km). For each cell it counts requests and `no_match_found` jobs, and asks Redis how many on-duty partners are within the dispatch radius (`MAX_RADIUS_M`) of the cell centre (`GEOSEARCH`, at most 50 cells looked up). The alert `ZONE_SUPPLY_GAP` lists up to 20 cells, worst first, as `zones: [{latitude, longitude, requests, no_match, partners_nearby}]`. It is **critical** when any cell has 2 or more no-match jobs, otherwise a warning. With nobody on duty at all, the existing `NO_PARTNERS_ON_DUTY` alert already says it, and the zone alert is skipped. The web board shows each zone with a Google Maps link. Being critical, it also reaches the staff webhook (ADR-047), which carries counts only.
+
+**Rejected.** H3 or geohash libraries: one more dependency for a grid the size of a city. PostGIS clustering (`ST_ClusterDBSCAN`): heavier, and its clusters move from run to run, so staff could not compare two days.
+
+**Residual risk.** A cell's centre can sit on one edge of a city, so partners just outside the radius count as "none nearby". A Redis outage makes `partners_nearby` unknown (logged as `zone_coverage_unavailable`); the zones are still listed.
+
+**Tests.** 6 unit in `test_zone_supply.py`; live section 1a of `check_admin_ops.py` (asyncpg path, `/admin/alerts` 200).
+
+---
+
+# ADR-049: Partner location during an accepted job uses an Android foreground service
+
+**Date.** 2026-11-21. **Status.** Accepted. **Not yet run on a device.**
+
+**Context.** A partner on the way to a job usually opens Google Maps for directions. Our app goes to the background and `watchPositionAsync` stops, so the owner's map freezes.
+
+**Decision.** `mobile/src/features/partner/jobLocationTracking.ts` uses `Location.startLocationUpdatesAsync` with an Android **foreground service** (persistent notification "Sharing your location for this job"). It starts only while the app is open, when a job is `assigned`, `partner_en_route` or `in_progress`, and stops when the job ends, when no job is active, and at sign-out. Fixes are sent at most once every 20 s, or sooner after 75 m of movement (never closer than 5 s). If the service cannot start, it falls back to the old foreground watch, and the screen shows which mode is on.
+
+**Why this scope.** Under Android rules, a location foreground service started while the app is visible counts as *while-in-use* access. So the app does **not** ask for `ACCESS_BACKGROUND_LOCATION` (`isAndroidBackgroundLocationEnabled: false`) and needs no background-location declaration on Play. It does need the Play Console **foreground service declaration** for `FOREGROUND_SERVICE_LOCATION`, with a short video of the job flow. On iOS the background indicator is shown while sharing.
+
+**Rejected.** Always-on background location for on-duty partners: far more battery and privacy cost, Play's strictest review, and dispatch only needs fresh positions of partners who open the app (ADR-032 stale-location rule). A third-party SDK (for example Transistorsoft): a paid licence for what Expo's module does.
+
+**Residual risk.** OEM battery savers (Xiaomi, Oppo, Vivo) may still kill the service. This needs a real-phone test before launch. The APK must be rebuilt, because `expo-task-manager` is native.
+
+**Tests.** 8 in `mobile/tests/job-location-tracking.test.ts` (throttle, start, fallback, stop).
+
+---
+
+# ADR-050: Scheduled jobs (book a two-hour slot)
+
+**Date.** 2026-11-21. **Status.** Accepted.
+
+**Context.** A routine service ("battery check tomorrow morning") does not need someone right now. Treating it as an emergency ties up a partner and fails at night.
+
+**Decision.** An owner can book a two-hour slot in India time:
+- **Window.** Slots run 08:00 to 20:00, start at least 2 hours ahead, and are at most 7 days ahead.
+- **Limit.** At most 3 upcoming bookings per owner (`409 TOO_MANY_SCHEDULED_JOBS`).
+- **Booking.** `GET /jobs/schedule-slots` lists the slots. `POST /jobs` takes `scheduled_for` (`400 SLOT_NOT_AVAILABLE` if it is not one of them). The job is created in a new status, **`scheduled`**, with `scheduled_for` and `slot_end` (alembic/0016), and nothing is dispatched.
+- **Release.** The dispatch worker releases a booking **45 minutes before the slot**. Under the row lock it becomes `requested` with `requested_at = now`, so the offer timeout, search window and analytics clocks start then, and normal matching runs.
+- **Missed slot.** If the slot has already passed (the worker was down), the job is cancelled with a reason instead of being dispatched.
+- **Move and cancel.** `PATCH /jobs/{id}/schedule` moves a booking while it is still `scheduled` (`409 JOB_NOT_SCHEDULED` after release). Cancelling is free.
+- **Partners.** Offers show the slot.
+- **Clocks and counts.** The stuck-job alert and the late-partner safeguard start counting at the slot, not at acceptance. Bookings are left out of no-match rates and zone demand (ADR-048).
+
+**Rejected.** A separate `bookings` table: two lifecycles for one job, with history split. Dispatching at booking time and holding the partner: no partner can promise a slot days ahead. Any-minute times: a two-hour window is what the owner can plan around and what a partner can keep.
+
+**Residual risk.** Release depends on the worker running. A missed slot is cancelled and the owner is told, which is honest but poor service, so the uptime monitor (ADR-037) matters more now. Slots ignore partner supply, so a booked time can still find nobody.
+
+**Tests.** 10 unit in `test_scheduled_jobs.py`; live `check_scheduled_jobs.py` (26, range `+91900000083x`). The harness found a real bug: `update_job_fields` refused the slot columns.
+
+---
+
+# ADR-051: Sahayak Care memberships, granted by staff, no payments yet
+
+**Date.** 2026-11-21. **Status.** Accepted.
+
+**Context.** Roadside cover in India is sold as a yearly plan: CPP Road Assist at ₹699 or ₹999 a year, Yamaha at ₹975 for 5 years, and bank cards that bundle about 4 call-outs a year. The product wants the same, but payments (G3) are not live, so nothing can be charged.
+
+**Decision.** Build the entitlement now and add billing later.
+- **Tables (alembic/0017).** `care_plans` holds a code, name, number of call-outs and term in days. One plan is seeded: "Sahayak Care", 4 call-outs over 365 days. There is **no price column** until billing exists. `care_memberships` holds the owner, the plan, `callouts_allowed` (copied from the plan when granted), start and end, who granted it and why, and who revoked it and why. `jobs.care_membership_id` records the membership a job used.
+- **Used call-outs are counted, never stored** (principle 1): linked jobs that are open or completed. A cancelled or `no_match_found` job gives its call-out back with no bookkeeping.
+- **Concurrency.** `create_job` locks the membership row (`FOR UPDATE`) before counting, inside the job's own transaction, so two jobs raised at once cannot both take the last call-out.
+- **Staff only, audited.** `POST /admin/users/{id}/care` grants (reason required) and `POST /admin/users/{id}/care/revoke` ends it. The role area `care` is super admin and ops, and the audit actions are `care_granted` and `care_revoked`. Only one membership can be in force at a time (`409 CARE_ALREADY_ACTIVE`, `409 CARE_NOT_ACTIVE`, `400 CARE_PLAN_NOT_FOUND`). Revoking ends it now; jobs already raised stay covered.
+- **Owner.** `GET /users/me/care` returns the membership in force (or null), the plans, and `pricing_note`. Jobs carry `care_covered`, shown to the owner only. The data export lists memberships.
+- **The honest part.** Covered **does not change the price yet**. Every client shows the server's `pricing_note` next to the card. Non-members see nothing, because there is nothing to buy.
+
+**Rejected.** A stored `callouts_used` counter: it drifts on every cancel path. Letting owners subscribe themselves: there is no payment to take. Counting only completed jobs: then two open jobs could both see a call-out as "left".
+
+**Residual risk.** When billing arrives (G3), the price of a covered job must be decided: zero, a cap, or "call-out free, parts paid". That product decision is open. Until then staff can grant memberships freely, but every grant is in the audit log.
+
+**Tests.** 15 unit in `test_care.py`. Live `check_care.py` (26, range `+91900000079x`). Its lock check was shown failing with the lock removed (25/26: the second session took the same call-out) and passing with it.
+
+---
+
+# ADR-052: Translation groundwork with i18next, English only
+
+**Date.** 2026-11-21. **Status.** Accepted.
+
+**Context.** Hindi and other Indian languages are on the roadmap. Hard-coded strings would mean touching every screen later.
+
+**Decision.** Both clients use **i18next + react-i18next**. Expo's localization guide lists react-i18next, and web and mobile then share one library and one key format.
+- **Setup.** Each client has `src/i18n/index.ts`, which initialises on import, synchronously and in English only, and `src/i18n/locales/en.json`.
+- **Typed keys.** Keys are typed through `CustomTypeOptions`, so a missing key fails `tsc`.
+- **Imports.** Components import `useTranslation` from the local module, so tests and screens never meet an uninitialised instance.
+- **Errors.** `bookingError(code)` maps booking error codes to words.
+- **Scope.** There is **no visible change**. The booking flow (the "when" step, the slot picker, move and cancel) and Sahayak Care are extracted. Other screens move over the next time they are touched.
+- **Guard.** A test fails if a screen uses a missing key or the catalogue holds an unused one.
+
+**Not yet.**
+- Device-language detection: `expo-localization` is native and needs a rebuild.
+- Hindi copy: it needs a translator, not machine output.
+- Month and plural formatting: before a language with other plural rules ships, check `Intl.PluralRules` on a real Android phone (Hermes) and add `@formatjs/intl-pluralrules` if it is missing.
+
+**Rejected.** A home-made `t()` table: the same work today, and no plurals, interpolation or tooling later (Crowdin and other tools read i18next JSON). react-intl: ICU syntax is heavier for translators, and its React Native setup is less simple than react-i18next's.
+
+**Tests.** `mobile/tests/i18n.test.ts` and `web/tests/components/i18n.test.ts` (initialised, no missing or unused keys, error mapping).

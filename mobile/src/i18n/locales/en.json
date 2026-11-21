@@ -1,0 +1,43 @@
+{
+  "booking": {
+    "when": "When?",
+    "now": "Now",
+    "bookATime": "Book a time",
+    "bookSlot": "Book {{slot}}",
+    "bookThisTime": "Book this time",
+    "requestNow": "Request help now",
+    "day": "Day",
+    "time": "Time",
+    "slotsFailed": "We could not load the available times.",
+    "noneNow": "No times can be booked right now. Request help now instead.",
+    "leadNote": "We start finding a partner {{min}} minutes before your slot. You can move or cancel the booking for free until then.",
+    "pickNew": "Pick a new time",
+    "move": "Move booking",
+    "keep": "Keep current time",
+    "moveOther": "Move to another time",
+    "cancel": "Cancel booking",
+    "moved": "Booking moved",
+    "movedBody": "Your booking is now for {{slot}}.",
+    "moveFailed": "Could not move the booking. Try again.",
+    "cancelTitle": "Cancel this booking?",
+    "cancelBody": "{{slot}}. Cancelling is free.",
+    "keepBooking": "Keep booking",
+    "yesCancel": "Yes, cancel",
+    "cancelFailed": "Could not cancel the booking. Try again.",
+    "booked": "Booked",
+    "bookedBody": "{{slot}}. We will start finding a partner shortly before. Move or cancel it from Activity.",
+    "notBooked": "Not booked",
+    "errors": {
+      "JOB_NOT_SCHEDULED": "Matching has already started for this booking, so it can no longer be moved. You can still cancel it.",
+      "SLOT_NOT_AVAILABLE": "That time can no longer be booked. Pick another one.",
+      "TOO_MANY_SCHEDULED_JOBS": "You already have three upcoming bookings. Cancel one or wait until one has happened."
+    }
+  },
+  "care": {
+    "coveredUntil": "Covered until {{date}}",
+    "calloutsLeft": "{{left}} of {{allowed}} covered call-outs left",
+    "jobLabel": "Sahayak Care",
+    "jobValue": "Covered call-out",
+    "a11y": "{{plan}}. Covered until {{date}}. {{callouts}}."
+  }
+}

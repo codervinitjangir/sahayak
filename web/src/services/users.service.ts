@@ -1,4 +1,5 @@
 import { apiClient } from './api';
+import type { MyCare } from '../features/care/care';
 import { UserRegistrationResponse, CreateUserPayload } from '../types/users';
 
 /** GET/PATCH /users/me (G8). */
@@ -18,6 +19,11 @@ export const usersService = {
   /** Send email: null to clear it. 400 USER_ALREADY_EXISTS if the email is taken. */
   async updateMe(body: { name?: string; email?: string | null }): Promise<OwnerProfile> {
     return (await apiClient<OwnerProfile>('/users/me', { method: 'PATCH', body: JSON.stringify(body) })).data;
+  },
+
+  /** Sahayak Care membership in force, if any (ADR-051). */
+  async getMyCare(): Promise<MyCare> {
+    return (await apiClient<MyCare>('/users/me/care', { method: 'GET' })).data;
   },
 
   /** Everything Sahayak stores about the owner (G10). */

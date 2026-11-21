@@ -9,7 +9,7 @@ describe("coming soon lists", () => {
   });
 
   it("owner list carries no B2B card", () => {
-    expect(OWNER_COMING_SOON.map((s) => s.id)).toEqual(["scheduled", "doorstep", "pickup-drop"]);
+    expect(OWNER_COMING_SOON.map((s) => s.id)).toEqual(["doorstep", "pickup-drop"]);
     expect(OWNER_COMING_SOON.some((s) => /business/i.test(s.title))).toBe(false);
   });
 

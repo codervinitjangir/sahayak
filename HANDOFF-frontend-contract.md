@@ -2518,3 +2518,27 @@ Web and mobile already use all of this.
 
 Route fixtures re-exported for web and mobile (88 routes).
 
+
+## 27. Zone gaps, job location, scheduled jobs, Sahayak Care, translation files (ADR-048 to ADR-052, 2026-11-21)
+
+**Zone gaps (ADR-048).** `GET /admin/alerts` can include `ZONE_SUPPLY_GAP` with `zones: [{latitude, longitude, requests, no_match, partners_nearby}]` (`partners_nearby` may be null when Redis is down). The web board lists each zone with a Maps link. Job status `scheduled` is now in `ALL_JOB_STATUSES`.
+
+**Job location (ADR-049, mobile only).** Partner app shares location through a foreground service during an accepted job. No API change; `POST /partners/me/location` as before.
+
+**Scheduled jobs (ADR-050).**
+- `GET /api/v1/jobs/schedule-slots` (owner): `{slots: [{start, end, label}], release_lead_min}`. Times are UTC ISO; labels are India time.
+- `POST /api/v1/jobs` accepts optional `scheduled_for` (a slot `start`). The job comes back with `status: "scheduled"` and no dispatch. Errors: `400 SLOT_NOT_AVAILABLE`, `409 TOO_MANY_SCHEDULED_JOBS` (3 upcoming).
+- `PATCH /api/v1/jobs/{id}/schedule` `{scheduled_for}` moves it while still scheduled; `409 JOB_NOT_SCHEDULED` after release. Cancel uses the usual `POST /jobs/{id}/cancel`.
+- New fields `scheduled_for`, `slot_end` on job create, detail, history and partner offers (`job.scheduled_for`, `job.slot_end`). Status `scheduled` shows as "Booked" and is not a live request.
+
+**Sahayak Care (ADR-051).**
+- `GET /api/v1/users/me/care` (owner): `{membership: {...} | null, plans: [{code, name, callouts, term_days}], pricing_note}`. Membership fields: `id, plan_code, plan_name, starts_at, ends_at, callouts_allowed, callouts_used, callouts_left, active, revoked_at, revoke_reason`.
+- Jobs carry `care_covered` (bool, owner only; false for partners).
+- Staff: `GET /admin/users/{id}/care` (any staff), `POST /admin/users/{id}/care` `{plan_code?, reason}` (201) and `POST /admin/users/{id}/care/revoke` `{reason}` (ops and super admin). Errors `400 CARE_PLAN_NOT_FOUND`, `409 CARE_ALREADY_ACTIVE`, `409 CARE_NOT_ACTIVE`. `GET /admin/users` items have `care_until`. Audit actions `care_granted`, `care_revoked`.
+- Show `pricing_note` wherever "covered" appears: the price does not change until billing (G3). Non-members see no Care card.
+
+**Translation files (ADR-052).** `web/src/i18n` and `mobile/src/i18n` (i18next, English only). New copy goes into `locales/en.json` and is read with `useTranslation()` from the local module; `bookingError(code)` maps booking error codes. The catalogue test fails on missing or unused keys.
+
+**Privacy notice.** `PRIVACY_ITEMS` now lists the booked time, location during an accepted job while another app is open, and the Care membership.
+
+Route fixtures re-exported for web and mobile (94 routes).

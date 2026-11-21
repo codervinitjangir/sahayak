@@ -1,4 +1,5 @@
 export type JobStatus =
+  | 'scheduled'
   | 'requested'
   | 'matching'
   | 'assigned'
@@ -134,6 +135,11 @@ export interface Job {
   completed_at?: string;
   cancelled_at?: string;
   cancellation_reason?: string;
+  /** ADR-050: a booked slot. */
+  scheduled_for?: string | null;
+  slot_end?: string | null;
+  /** ADR-051: the job used a Sahayak Care call-out. */
+  care_covered?: boolean;
   current_assignment?: JobAssignment;
   timeline?: JobTimelineEvent[] | Partial<Record<JobStatus, string>>;
   partner?: {
@@ -155,6 +161,8 @@ export interface CreateJobPayload {
   drop_lng?: number;
   issue_description?: string;
   issue_photo_urls?: string[];
+  /** ADR-050: the start of a slot from GET /jobs/schedule-slots. */
+  scheduled_for?: string;
   /** @deprecated Kept for backward compatibility */
   service_id?: number;
   /** @deprecated Kept for backward compatibility */

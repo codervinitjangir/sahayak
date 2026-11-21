@@ -68,10 +68,20 @@ class Job(Base):
         DateTime(timezone=True), nullable=True
     )
     cancellation_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # ADR-050: a booked slot. Both set or both null; 'scheduled' jobs always have one.
+    scheduled_for: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    slot_end: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # ADR-051: the Sahayak Care membership this job used a call-out of, if any.
+    care_membership_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("care_memberships.id", ondelete="SET NULL"), nullable=True)
+
+    @property
+    def care_covered(self) -> bool:
+        return self.care_membership_id is not None
 
     __table_args__ = (
         CheckConstraint(
-            "status IN ('requested','matching','assigned','partner_en_route',"
+            "status IN ('scheduled','requested','matching','assigned','partner_en_route',"
             "'in_progress','completed','cancelled','no_match_found')",
             name="check_job_status"
         ),

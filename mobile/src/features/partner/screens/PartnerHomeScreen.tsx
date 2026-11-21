@@ -24,6 +24,8 @@ import TabBar, { TAB_BAR_SPACE, type TabDef } from "../../../components/ui/TabBa
 import { EmptyState, ErrorState, ListRow, SectionHeader, Skeleton, StatusChip } from "../../../components/ui/kit";
 import { useAuthStore } from "../../../store/authStore";
 import { useJobStore } from "../../../store/jobStore";
+import { stopJobTracking } from "../jobLocationTracking";
+import { slotLabel } from "../../jobs/schedule";
 import { jobsApi } from "../../../services/api/jobs";
 import type { BackendJob, BackendPartnerOfferItem } from "../../../services/api/jobs";
 import {
@@ -125,7 +127,12 @@ export default function PartnerHomeScreen() {
       run("earnings", async () => setEarnings(await partnerApi.getEarnings())),
       run("your services", async () => setServices((await partnerApi.getServices()).services ?? [])),
       run("job history", async () => setJobs((await jobsApi.fetchMyJobs(30, 0)).items ?? [])),
-      run("your active job", async () => setActiveJob(await partnerApi.getActiveJob())),
+      run("your active job", async () => {
+        const active = await partnerApi.getActiveJob();
+        setActiveJob(active);
+        // ADR-049: a job that ended while the partner was elsewhere stops sharing.
+        if (!active) void stopJobTracking();
+      }),
     ]);
     setFailed(bad);
     setLoading(false);
@@ -424,6 +431,9 @@ export default function PartnerHomeScreen() {
                           <Text style={styles.offerTitle} numberOfLines={1}>{o.job.service_name ?? "Roadside job"}</Text>
                           <OfferTimer offer={o} />
                         </View>
+                        {o.job.scheduled_for ? (
+                          <Text style={styles.slotText}>Booked: arrive {slotLabel(o.job.scheduled_for, o.job.slot_end)}</Text>
+                        ) : null}
                         <Text style={styles.muted} numberOfLines={2}>{o.job.pickup_address_text ?? "Pickup location"}</Text>
                         <View style={styles.offerMeta}>
                           {dist ? <Text style={styles.metaText}>{dist} away</Text> : null}
@@ -561,6 +571,7 @@ function Stat({ label, value, sub }: { label: string; value: string; sub?: strin
 }
 
 const styles = StyleSheet.create({
+  slotText: { marginTop: 2, fontSize: Typography.fontSize.sm, fontFamily: Typography.fontFamily.semiBold, color: Colors.info },
   root: { flex: 1, backgroundColor: Colors.surface },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: Spacing.screenHorizontal, minHeight: 56, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.border },
   brand: { flexDirection: "row", alignItems: "center", gap: 10 },

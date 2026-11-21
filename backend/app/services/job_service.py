@@ -299,6 +299,21 @@ async def create_job(
     pickup_location = _build_pickup_point(payload.pickup_lat, payload.pickup_lng)
     estimated_price = base_price_for(service) or DEFAULT_BASE_PRICE
 
+    # ADR-050: a booking waits as 'scheduled'; the worker releases it near the slot.
+    slot = None
+    if payload.scheduled_for is not None:
+        from app.services import schedule_service
+        slot = schedule_service.validate_slot(payload.scheduled_for, datetime.now(timezone.utc))
+        if await job_repository.count_scheduled_for_user(db, user_id) >= schedule_service.MAX_UPCOMING_PER_OWNER:
+            raise ConflictError(ErrorCode.TOO_MANY_SCHEDULED_JOBS,
+                                f"You can have at most {schedule_service.MAX_UPCOMING_PER_OWNER} upcoming bookings.")
+    initial_status = "scheduled" if slot else INITIAL_JOB_STATUS
+    # ADR-051: link a Sahayak Care call-out if one is left. Locks the membership
+    # row until the commit below, so concurrent jobs cannot share the last one.
+    from app.services import care_service
+    care_membership_id = await care_service.membership_for_new_job(db, user_id, datetime.now(timezone.utc))
+    initial_note = (f"Booked for {schedule_service.slot_label(*slot)}" if slot else "Job created")
+
     try:
         job = await job_repository.create_job_row(
             db,
@@ -306,19 +321,22 @@ async def create_job(
             vehicle_id=vehicle.id,
             vehicle_number=vehicle.vehicle_number,
             service_id=service.id,
-            status=INITIAL_JOB_STATUS,
+            status=initial_status,
             pickup_location=pickup_location,
             pickup_address_text=payload.pickup_address_text,
             issue_description=payload.issue_description,
             price_estimate=estimated_price,
             start_code=_generate_start_code(),
             idempotency_key=idempotency_key,
+            scheduled_for=slot[0] if slot else None,
+            slot_end=slot[1] if slot else None,
+            care_membership_id=care_membership_id,
         )
         await job_repository.create_status_history_row(
             db,
             job_id=job.id,
-            status=INITIAL_JOB_STATUS,
-            note="Job created",
+            status=initial_status,
+            note=initial_note,
         )
         await db.commit()
     except IntegrityError as exc:
@@ -378,6 +396,8 @@ async def create_job(
         duration_ms=round((time.perf_counter() - started) * 1000, 2),
     )
 
+    if job.status == "scheduled":
+        return job        # ADR-050: no dispatch until the slot is near
     await _try_dispatch(db, job)
     return job
 
@@ -608,6 +628,9 @@ async def get_job_with_status(
         price_final=job.price_final,
         requested_at=job.requested_at,
         completed_at=job.completed_at,
+        scheduled_for=getattr(job, "scheduled_for", None),
+        slot_end=getattr(job, "slot_end", None),
+        care_covered=is_owner and getattr(job, "care_membership_id", None) is not None,
         owner_name=owner.name if owner else None,
         owner_phone=owner.phone if owner else None,
         # Owner-only by construction. A partner proves the code by submitting
@@ -1285,6 +1308,9 @@ async def list_jobs(
             completed_at=job.completed_at,
             cancelled_at=job.cancelled_at,
             cancellation_reason=job.cancellation_reason,
+            scheduled_for=getattr(job, "scheduled_for", None),
+            slot_end=getattr(job, "slot_end", None),
+            care_covered=identity.role == "user" and getattr(job, "care_membership_id", None) is not None,
             # The partner for an owner, the owner for a partner — the repository
             # returns whichever is the other side, so this reads the same for both.
             counterpart_name=counterpart.name if counterpart else None,

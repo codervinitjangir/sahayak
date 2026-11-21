@@ -73,7 +73,8 @@ from app.schemas.admin_ops import (
     AdminUserListResponse,
     AdminUserSuspensionRequest,
 )
-from app.services import admin_analytics_service, admin_ops_service, partner_document_service
+from app.services import admin_analytics_service, admin_ops_service, care_service, partner_document_service
+from app.schemas.care import AdminCareGrantRequest, AdminCareRevokeRequest, AdminUserCareResponse
 from app.services.auth_service import Identity
 from app.utils.auth import require_admin, require_staff
 from app.utils.errors import ConflictError, NotFoundError
@@ -480,6 +481,51 @@ async def admin_set_user_suspension(
     """A suspended owner's every request answers 403 ACCOUNT_SUSPENDED."""
     return envelope(await admin_ops_service.set_user_suspension(
         db, user_id, suspended=payload.suspended, reason=payload.reason, identity=identity))
+
+
+@admin_ops_router.get(
+    "/users/{user_id}/care",
+    response_model=ApiResponse[AdminUserCareResponse],
+    summary="An owner's Sahayak Care memberships (ADR-051)",
+)
+async def admin_get_user_care(
+    user_id: uuid.UUID,
+    identity: Identity = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[AdminUserCareResponse]:
+    return envelope(await care_service.user_care_for_staff(db, user_id))
+
+
+@admin_ops_router.post(
+    "/users/{user_id}/care",
+    response_model=ApiResponse[AdminUserCareResponse],
+    status_code=status.HTTP_201_CREATED,
+    summary="Give an owner Sahayak Care (audited, no payment)",
+)
+async def admin_grant_user_care(
+    user_id: uuid.UUID,
+    payload: AdminCareGrantRequest,
+    identity: Identity = Depends(require_staff("care")),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[AdminUserCareResponse]:
+    """409 CARE_ALREADY_ACTIVE if one is in force; 400 CARE_PLAN_NOT_FOUND."""
+    return envelope(await care_service.grant(
+        db, user_id, plan_code=payload.plan_code, reason=payload.reason, identity=identity))
+
+
+@admin_ops_router.post(
+    "/users/{user_id}/care/revoke",
+    response_model=ApiResponse[AdminUserCareResponse],
+    summary="End an owner's Sahayak Care now (audited)",
+)
+async def admin_revoke_user_care(
+    user_id: uuid.UUID,
+    payload: AdminCareRevokeRequest,
+    identity: Identity = Depends(require_staff("care")),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[AdminUserCareResponse]:
+    """409 CARE_NOT_ACTIVE if nothing is in force. Linked jobs stay covered."""
+    return envelope(await care_service.revoke(db, user_id, reason=payload.reason, identity=identity))
 
 
 @admin_ops_router.get(

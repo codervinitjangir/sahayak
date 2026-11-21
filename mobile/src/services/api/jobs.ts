@@ -18,6 +18,7 @@ export interface BackendJob {
   service_code?: string | null;
   service_name?: string | null;
   status:
+    | "scheduled"
     | "requested"
     | "matching"
     | "assigned"
@@ -42,6 +43,11 @@ export interface BackendJob {
   cancelled_at?: string | null;
   completed_at?: string | null;
   cancellation_reason?: string | null;
+  /** ADR-050: a booked slot (start and end). */
+  scheduled_for?: string | null;
+  slot_end?: string | null;
+  /** ADR-051: the job used a Sahayak Care call-out. */
+  care_covered?: boolean;
   /** Owner-only. Partners prove the code through POST /jobs/{id}/start. */
   start_code?: string | null;
   /** Owner-only. Required as ?t= on the public /track link. */
@@ -63,6 +69,11 @@ export interface BackendPartnerOfferJob {
   issue_description: string | null;
   price_estimate: number | null;
   requested_at: string;
+  /** ADR-050: a booked job; arrive inside this window. */
+  scheduled_for?: string | null;
+  slot_end?: string | null;
+  /** ADR-051: the job used a Sahayak Care call-out. */
+  care_covered?: boolean;
 }
 
 export interface BackendPartnerOfferItem {
@@ -115,6 +126,8 @@ export interface CreateJobPayload {
   pickup_lng: number;
   pickup_address_text: string;
   issue_description?: string;
+  /** ADR-050: the start of a slot from getScheduleSlots(); omit for help now. */
+  scheduled_for?: string;
 }
 
 // ─── Job API calls ────────────────────────────────────────────────────────────
@@ -138,6 +151,16 @@ export const jobsApi = {
         headers: idempotencyKey ? { "Idempotency-Key": idempotencyKey } : undefined,
       })
       .then((r) => r.data),
+
+  /** Bookable slots (GET /api/v1/jobs/schedule-slots, ADR-050) */
+  getScheduleSlots: () =>
+    apiClient
+      .get<{ slots: import("../../features/jobs/schedule").ScheduleSlot[]; release_lead_min: number }>("/jobs/schedule-slots")
+      .then((r) => r.data),
+
+  /** Move a booking to another slot (PATCH /api/v1/jobs/{jobId}/schedule, ADR-050) */
+  reschedule: (jobId: string, scheduledFor: string) =>
+    apiClient.patch<BackendJob>(`/jobs/${jobId}/schedule`, { scheduled_for: scheduledFor }).then((r) => r.data),
 
   /** Get job by ID with assignment, partner details and timeline (GET /api/v1/jobs/{jobId}) */
   getJob: (jobId: string) =>

@@ -26,6 +26,9 @@ export function useJob(jobId: string | undefined) {
     // has reached a terminal state.
     refetchInterval: (query) => {
       switch (query.state.data?.status) {
+        case 'scheduled':
+          // ADR-050: released to matching shortly before the slot; check once a minute.
+          return 60000;
         case 'requested':
         case 'matching':
           return 4000;

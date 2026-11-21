@@ -65,7 +65,8 @@ export type JobStatus =
   | "in_progress"
   | "complete"
   | "cancelled"
-  | "no_match_found";
+  | "no_match_found"
+  | "scheduled";
 
 export interface Job {
   id: string;
@@ -162,6 +163,8 @@ export type OwnerStackParamList = {
     pickupAddress?: string;
     /** Resume tracking an existing request (e.g. after the app was closed). */
     jobId?: string;
+    /** ADR-050: open with "Book a time" selected. */
+    bookLater?: boolean;
   };
 };
 

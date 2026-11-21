@@ -1,4 +1,5 @@
 import { apiClient, createIdempotencyKey } from './api';
+import type { ScheduleSlot } from '../features/jobs/schedule';
 import {
   Job,
   CreateJobPayload,
@@ -79,6 +80,7 @@ export const jobsService = {
     if (typeof payload.drop_lat === 'number') body.drop_lat = payload.drop_lat;
     if (typeof payload.drop_lng === 'number') body.drop_lng = payload.drop_lng;
     if (payload.issue_description) body.issue_description = payload.issue_description;
+    if (payload.scheduled_for) body.scheduled_for = payload.scheduled_for;
     if (payload.issue_photo_urls && payload.issue_photo_urls.length > 0) {
       body.issue_photo_urls = payload.issue_photo_urls;
     }
@@ -89,6 +91,21 @@ export const jobsService = {
       idempotencyKey: idempotencyKey || createIdempotencyKey(),
     });
 
+    return res.data;
+  },
+
+  /** Bookable slots (ADR-050). */
+  async getScheduleSlots(): Promise<{ slots: ScheduleSlot[]; release_lead_min: number }> {
+    const res = await apiClient<{ slots: ScheduleSlot[]; release_lead_min: number }>('/jobs/schedule-slots', { method: 'GET' });
+    return res.data;
+  },
+
+  /** Move a booking to another slot while it is still 'scheduled' (ADR-050). */
+  async reschedule(jobId: string, scheduledFor: string): Promise<Job> {
+    const res = await apiClient<Job>(`/jobs/${jobId}/schedule`, {
+      method: 'PATCH',
+      body: JSON.stringify({ scheduled_for: scheduledFor }),
+    });
     return res.data;
   },
 

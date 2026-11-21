@@ -31,6 +31,10 @@ import { vehiclesApi, type MobileVehicle } from "../../../services/api/vehicles"
 import { useJobStore } from "../../../store/jobStore";
 import AddVehicleModal from "../../account/AddVehicleModal";
 import { QK } from "../../shared/ownerData";
+import SlotPicker from "../components/SlotPicker";
+import i18n, { bookingError } from "../../../i18n";
+import { codeOf } from "../components/BookingActions";
+import { slotLabel, type ScheduleSlot } from "../schedule";
 
 type Nav = NativeStackNavigationProp<OwnerStackParamList, "OwnerFlow">;
 type Phase = "details" | "searching" | "matched" | "done";
@@ -118,6 +122,9 @@ export default function OwnerHelpFlowScreen() {
   const [serviceCode, setServiceCode] = useState<string | null>(null);
   const [vehicleId, setVehicleId] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
+  // ADR-050: book a time instead of help now.
+  const [bookLater, setBookLater] = useState(Boolean(route.params?.bookLater));
+  const [slot, setSlot] = useState<ScheduleSlot | null>(null);
   const [sending, setSending] = useState(false);
   // G11: resending the same request while there is no signal.
   const [retrying, setRetrying] = useState<{ attempt: number; secondsLeft: number } | null>(null);
@@ -319,7 +326,7 @@ export default function OwnerHelpFlowScreen() {
   }, [job?.status, jobId]);
 
   // ── Actions ──
-  const canSend = Boolean(pickup && serviceCode && vehicleId) && !sending;
+  const canSend = Boolean(pickup && serviceCode && vehicleId && (!bookLater || slot)) && !sending;
 
   const send = async () => {
     if (!pickup || !serviceCode || !vehicleId) return;
@@ -334,6 +341,7 @@ export default function OwnerHelpFlowScreen() {
           pickup_lng: pickup.longitude,
           pickup_address_text: landmark.trim() || addressLabel || "Pinned location",
           issue_description: notes.trim() || undefined,
+          scheduled_for: bookLater && slot ? slot.start : undefined,
         },
         idempotencyKey.current
       ), {
@@ -342,13 +350,29 @@ export default function OwnerHelpFlowScreen() {
       });
       if (!created?.id) throw new Error("no id");
       idempotencyKey.current = newIdempotencyKey();
+      if (created.status === "scheduled") {
+        // ADR-050: nothing to track yet. Confirm and go back; Activity holds the booking.
+        void qc.invalidateQueries({ queryKey: QK.jobs });
+        showDialog(
+          i18n.t("booking.booked"),
+          i18n.t("booking.bookedBody", { slot: slotLabel(created.scheduled_for, created.slot_end) }),
+        );
+        setBookLater(false);
+        setSlot(null);
+        if (nav.canGoBack()) nav.goBack();
+        return;
+      }
       setStartCode("");
       setJobId(created.id);
       setJob(created);
       setPhase("searching");
       void qc.invalidateQueries({ queryKey: QK.jobs });
     } catch (err) {
-      if (err instanceof RetryStopped) {
+      const booking = bookingError(codeOf(err));
+      if (booking) {
+        // ADR-050: a refused booking says why (slot gone, three upcoming already).
+        showDialog(i18n.t("booking.notBooked"), booking);
+      } else if (err instanceof RetryStopped) {
         showDialog("Request not sent", "You stopped sending. No partner has been requested. If you need help now, call 112.");
       } else if (isNoSignal(err)) {
         showDialog("No signal", "We kept trying for three minutes but could not reach Sahayak. No partner has been requested. Move to better signal and try again, or call 112.");
@@ -550,8 +574,16 @@ export default function OwnerHelpFlowScreen() {
                 </View>
               )}
 
+              {/* When (ADR-050) */}
+              <Text style={[styles.label, { marginTop: Spacing.lg }]}>4. {i18n.t("booking.when")}</Text>
+              <View style={styles.chips}>
+                <Chip icon="flash-outline" label={i18n.t("booking.now")} selected={!bookLater} onPress={() => { setBookLater(false); setSlot(null); }} />
+                <Chip icon="calendar-outline" label={i18n.t("booking.bookATime")} selected={bookLater} onPress={() => setBookLater(true)} />
+              </View>
+              {bookLater ? <View style={{ marginTop: Spacing.sm }}><SlotPicker value={slot?.start ?? null} onChange={setSlot} /></View> : null}
+
               {/* 4. Notes */}
-              <Text style={[styles.label, { marginTop: Spacing.lg }]}>4. Anything we should know? (optional)</Text>
+              <Text style={[styles.label, { marginTop: Spacing.lg }]}>5. Anything we should know? (optional)</Text>
               <TextInput
                 value={notes}
                 onChangeText={setNotes}
@@ -575,10 +607,16 @@ export default function OwnerHelpFlowScreen() {
                     </Pressable>
                   </View>
                 ) : null}
-                <Button label="Request help now" onPress={send} loading={sending} disabled={!canSend} icon={<Ionicons name="medkit-outline" size={22} color="#fff" />} />
+                <Button
+                  label={bookLater ? (slot ? i18n.t("booking.bookSlot", { slot: slot.label }) : i18n.t("booking.bookThisTime")) : i18n.t("booking.requestNow")}
+                  onPress={send}
+                  loading={sending}
+                  disabled={!canSend}
+                  icon={<Ionicons name={bookLater ? "calendar-outline" : "medkit-outline"} size={22} color="#fff" />}
+                />
                 {!canSend && !sending ? (
                   <Text style={styles.needs}>
-                    {!pickup ? "Set your pickup location" : !serviceCode ? "Choose what you need" : "Choose or add a vehicle"} to continue.
+                    {!pickup ? "Set your pickup location" : !serviceCode ? "Choose what you need" : !vehicleId ? "Choose or add a vehicle" : "Pick a time"} to continue.
                   </Text>
                 ) : null}
               </View>

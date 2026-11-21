@@ -249,6 +249,9 @@ class PartnerOfferJob(BaseModel):
     issue_description: Optional[str] = None
     price_estimate: Optional[Decimal] = None
     requested_at: datetime
+    # ADR-050: a booked job. Arrive inside this window, not straight away.
+    scheduled_for: Optional[datetime] = None
+    slot_end: Optional[datetime] = None
 
 
 class PartnerOfferItem(BaseModel):

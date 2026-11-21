@@ -110,6 +110,21 @@ export default function HomeTab({
         <View style={styles.stripGo}><Ionicons name="arrow-forward" size={20} color="#065F46" /></View>
       </Pressable>
 
+      {/* ADR-050: book a time instead of help now */}
+      <Pressable
+        onPress={() => nav.navigate("OwnerFlow", { initialStep: "service_select", bookLater: true })}
+        accessibilityRole="button"
+        accessibilityLabel="Book a time for service"
+        style={({ pressed }) => [styles.strip, styles.bookStrip, pressed && { opacity: 0.9 }]}
+      >
+        <View style={styles.stripArt}><Ionicons name="calendar-outline" size={32} color={Colors.info} /></View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.stripKicker}>Not urgent?</Text>
+          <Text style={styles.stripTitle}>Book a time</Text>
+        </View>
+        <View style={styles.stripGo}><Ionicons name="arrow-forward" size={20} color="#065F46" /></View>
+      </Pressable>
+
       {/* Vehicles */}
       <View>
         <SectionHeader title="My vehicles" action="Add" onAction={onAddVehicle} />
@@ -219,6 +234,7 @@ const styles = StyleSheet.create({
   tileArt: { width: "100%", height: 84, borderRadius: Radius.lg, overflow: "hidden", alignItems: "center", justifyContent: "center" },
   tileLabel: { fontSize: Typography.fontSize.base, fontFamily: Typography.fontFamily.semiBold, color: Colors.textPrimary, textAlign: "center" },
   strip: { flexDirection: "row", alignItems: "center", gap: Spacing.md, padding: Spacing.md, borderRadius: Radius.xl, backgroundColor: "#047857" },
+  bookStrip: { backgroundColor: "#1E3A8A" },
   stripArt: { width: 72, height: 60, borderRadius: Radius.lg, overflow: "hidden", backgroundColor: "#ECFDF5", alignItems: "center", justifyContent: "center" },
   stripKicker: { color: "#A7F3D0", fontSize: Typography.fontSize.sm, fontFamily: Typography.fontFamily.medium },
   stripTitle: { color: "#fff", fontSize: Typography.fontSize["2xl"], fontFamily: Typography.fontFamily.bold },

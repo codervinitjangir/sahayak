@@ -24,6 +24,8 @@ import { StarRating } from '../../components/ui/StarRating';
 import { SafetyStrip } from '../../components/SafetyStrip';
 import { OwnerSafeguards } from '../../components/JobSafeguards';
 import { ReportProblem } from '../../components/ReportProblem';
+import { BookingCard } from '../../components/Booking';
+import { CoveredBadge } from '../../components/CareCard';
 import { jobsService } from '../../services/jobs.service';
 import { paymentsService } from '../../services/payments.service';
 import { Job, JobStatus, JobTimelineEvent, SearchStatus } from '../../types/jobs';
@@ -261,6 +263,16 @@ export const JobTrackingPage: React.FC = () => {
 
         {/* Dynamic Status Progress Description */}
         <div className="p-4 rounded-control bg-slate-50 border border-line space-y-2">
+          {job.care_covered && <CoveredBadge />}
+          {job.status === 'scheduled' && (
+            <BookingCard
+              jobId={job.id}
+              scheduledFor={job.scheduled_for}
+              slotEnd={job.slot_end}
+              onCancel={() => setConfirmCancelOpen(true)}
+            />
+          )}
+
           {job.status === 'cancelled' && (
             <p className="text-sm text-ink-soft font-medium">
               This request was cancelled. Nothing is owed for it. You can start a new request from Home at any time.

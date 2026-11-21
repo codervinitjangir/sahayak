@@ -5,6 +5,7 @@
 // fallback job or made-up pickup when that payload is missing — a fabricated
 // address here would send a mechanic to the wrong street.
 import React, { useState, useEffect, useRef } from "react";
+import { slotLabel } from "../../jobs/schedule";
 import { View, Text, StyleSheet, ScrollView, Animated, StatusBar, Platform } from "react-native";
 import { showDialog } from "../../../components/ui/AppDialog";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -201,6 +202,14 @@ export default function IncomingOfferScreen() {
             </View>
           )}
         </View>
+
+        {/* ── Booked slot (ADR-050) ── */}
+        {job.scheduled_for ? (
+          <Card style={styles.card}>
+            <Text style={styles.cardLabel}>Booked job</Text>
+            <Text style={styles.pickupText}>Arrive {slotLabel(job.scheduled_for, job.slot_end)}</Text>
+          </Card>
+        ) : null}
 
         {/* ── Pickup ── */}
         <Card style={styles.card}>

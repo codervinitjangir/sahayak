@@ -1,4 +1,5 @@
 import { apiClient } from './api';
+import { slotLabel } from '../features/jobs/schedule';
 import { jobsService } from './jobs.service';
 import { getStoredPartnerProfile } from '../types/partner';
 import type { Job, JobStatus, JobStatusTransitionResponse } from '../types/jobs';
@@ -49,6 +50,9 @@ export interface PartnerOfferItem {
     issue_description: string | null;
     price_estimate: string | null; // Decimal string — parse before arithmetic
     requested_at: string;
+    /** ADR-050: a booked job; arrive inside this window. */
+    scheduled_for?: string | null;
+    slot_end?: string | null;
   };
 }
 
@@ -109,6 +113,7 @@ export const partnerService = {
       serviceName: item.job.service_name ?? '',
       distanceAtOfferM: parseFloat(item.distance_at_offer_m),
       pickupAddressText: item.job.pickup_address_text ?? '',
+      slot: slotLabel(item.job.scheduled_for, item.job.slot_end) || undefined,
       vehicleNumber: item.job.vehicle_number ?? '',
       issueDescription: item.job.issue_description ?? '',
       offeredAt: item.offered_at,

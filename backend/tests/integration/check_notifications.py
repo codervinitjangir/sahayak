@@ -923,13 +923,15 @@ async def main() -> None:                          # noqa: C901 - one linear scr
         # test_abandoned_jobs.py's.
         # The five safeguard events (ADR-039, ADR-041) are test_job_safeguards.py's;
         # check_job_lifecycle.py writes the two price ones live.
+        # scheduled_job_starting (ADR-050) is check_scheduled_jobs.py's.
         check("the rest are job_no_match_found, the staff, worker and safeguard events, and nothing here claimed them",
               set(NOTIFICATION_EVENTS) - written == {"job_no_match_found", "job_cancelled_by_support",
                                                      "job_reassigned_by_support", "job_reassigning",
                                                      "job_expired", "price_revision_requested",
                                                      "price_revision_approved", "price_revision_rejected",
                                                      "job_reassigned_by_owner", "job_reassigning_by_owner",
-                                                     "document_expiring", "document_expired"},
+                                                     "document_expiring", "document_expired",
+                                                     "scheduled_job_starting"},
               f"{sorted(set(NOTIFICATION_EVENTS) - written)}")
 
         channels = {row["channel"] for row in rows(

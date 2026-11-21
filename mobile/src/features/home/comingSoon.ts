@@ -1,4 +1,5 @@
-// Announced but not built yet (docs/FUTURE-ROADMAP.md, ADR-035). Keep the
+// Announced but not built yet (docs/FUTURE-ROADMAP.md, ADR-035). Scheduled service
+// shipped on 2026-11-21 (ADR-050) and left this list. Keep the
 // wording in step with web/src/components/ComingSoonServices.tsx.
 // B2B is deliberately not here: it stays in the roadmap until it has its own panel.
 import type { ComingSoonFeature } from "../../services/api/featureInterest";
@@ -12,14 +13,6 @@ export interface ComingSoonItem {
 }
 
 export const OWNER_COMING_SOON: readonly ComingSoonItem[] = [
-  {
-    id: "scheduled",
-    icon: "calendar-outline",
-    title: "Scheduled service",
-    blurb: "Book a time that suits you, like a Sunday morning.",
-    detail:
-      "Pick a date and a time slot instead of asking for help right now. Good for a puncture in your basement parking or a routine check.",
-  },
   {
     id: "doorstep",
     icon: "home-outline",

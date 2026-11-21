@@ -51,11 +51,11 @@ describe('ComingSoonServices', () => {
   });
 
   it('registers interest and then shows the confirmation', async () => {
-    const register = vi.spyOn(featureInterestService, 'register').mockResolvedValue(['doorstep', 'scheduled']);
+    const register = vi.spyOn(featureInterestService, 'register').mockResolvedValue(['doorstep', 'pickup-drop']);
     renderIt();
-    fireEvent.click(screen.getByRole('button', { name: /Scheduled service/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Pick-up & drop/ }));
     await clickNotify();
-    await waitFor(() => expect(register).toHaveBeenCalledWith('scheduled'));
+    await waitFor(() => expect(register).toHaveBeenCalledWith('pickup-drop'));
     expect(await screen.findByText(/We will tell you/)).toBeTruthy();
   });
 

@@ -13,7 +13,8 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.sahayak.app",
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "Sahayak uses your location to place your pickup pin and to match you with nearby partners."
+        "NSLocationWhenInUseUsageDescription": "Sahayak uses your location to place your pickup pin and to match you with nearby partners.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "During a job you accepted, Sahayak shares your position with the vehicle owner while you navigate, and stops when the job ends."
       }
     },
     "android": {
@@ -46,7 +47,10 @@
         "expo-location",
         {
           "locationWhenInUsePermission": "Sahayak uses your location to place your pickup pin and to match you with nearby partners.",
-          "isAndroidBackgroundLocationEnabled": false
+          "isAndroidBackgroundLocationEnabled": false,
+          "isAndroidForegroundServiceEnabled": true,
+          "isIosBackgroundLocationEnabled": true,
+          "locationAlwaysAndWhenInUsePermission": "During a job you accepted, Sahayak shares your position with the vehicle owner while you navigate, and stops when the job ends."
         }
       ],
       [

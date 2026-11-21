@@ -77,6 +77,10 @@ class JobResponse(JobBase):
     id: uuid.UUID
     user_id: Optional[uuid.UUID] = None
     status: str
+    scheduled_for: Optional[datetime] = None
+    slot_end: Optional[datetime] = None
+    # ADR-051: owner-facing. True when the job used a Sahayak Care call-out.
+    care_covered: bool = False
     price_final: Optional[Decimal] = None
     requested_at: datetime
     completed_at: Optional[datetime] = None
@@ -106,6 +110,24 @@ class JobCreateRequest(BaseModel):
     pickup_lng: float = Field(..., ge=-180.0, le=180.0)
     pickup_address_text: Optional[str] = None
     issue_description: Optional[str] = None
+    scheduled_for: Optional[datetime] = Field(
+        None, description="ADR-050: book a slot instead of asking for help now. The start of one of "
+                          "GET /jobs/schedule-slots, with a timezone. Omit for an emergency request.")
+
+
+class ScheduleSlot(BaseModel):
+    start: datetime
+    end: datetime
+    label: str = Field(..., description="'Sun 23 Nov, 10:00-12:00' in India time")
+
+
+class ScheduleSlotsResponse(BaseModel):
+    slots: List[ScheduleSlot]
+    release_lead_min: int = Field(..., description="Matching starts this many minutes before a slot.")
+
+
+class JobRescheduleRequest(BaseModel):
+    scheduled_for: datetime
 
 
 class CurrentAssignmentResponse(BaseModel):
@@ -162,6 +184,10 @@ class JobDetailResponse(BaseModel):
     price_final: Optional[Decimal] = None
     requested_at: datetime
     completed_at: Optional[datetime] = None
+    scheduled_for: Optional[datetime] = None
+    slot_end: Optional[datetime] = None
+    # ADR-051: owner-facing. True when the job used a Sahayak Care call-out.
+    care_covered: bool = False
     # The owner's contact details, for the assigned partner. Owner callers
     # already know them; bystanders get None.
     owner_name: Optional[str] = None
@@ -398,6 +424,7 @@ class JobHistoryItem(BaseModel):
 
     id: uuid.UUID
     status: Literal[
+        "scheduled",
         "requested",
         "matching",
         "assigned",
@@ -420,6 +447,10 @@ class JobHistoryItem(BaseModel):
     completed_at: Optional[datetime] = None
     cancelled_at: Optional[datetime] = None
     cancellation_reason: Optional[str] = None
+    scheduled_for: Optional[datetime] = None
+    slot_end: Optional[datetime] = None
+    # ADR-051: owner-facing. True when the job used a Sahayak Care call-out.
+    care_covered: bool = False
     counterpart_name: Optional[str] = Field(
         None,
         description=(

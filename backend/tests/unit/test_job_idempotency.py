@@ -69,6 +69,7 @@ class FakePayload:
     pickup_lng = 77.5946
     pickup_address_text = "MG Road"
     issue_description = "Flat tyre"
+    scheduled_for = None
 
 
 class FakeSession:
@@ -128,6 +129,12 @@ def wiring(monkeypatch):
         job_repository, "create_status_history_row", create_status_history_row
     )
     monkeypatch.setattr(job_service, "_try_dispatch", try_dispatch)
+
+    async def no_care(db, user_id, now):  # ADR-051: no membership in these tests
+        return None
+
+    from app.services import care_service
+    monkeypatch.setattr(care_service, "membership_for_new_job", no_care)
     return state
 
 

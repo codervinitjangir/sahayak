@@ -6,15 +6,18 @@ job_status_history: an action with no audit row is an action nobody can be
 asked about, and an audit row for an action that rolled back is a lie.
 """
 import logging
+import math
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Sequence
 
+from redis import exceptions as redis_exceptions
 from sqlalchemy import func
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.repositories import admin_ops_repository, job_repository, service_repository
+from app.config.redis_client import PARTNER_LOCATIONS_KEY, get_redis
+from app.repositories import admin_ops_repository, care_repository, job_repository, service_repository
 from app.schemas.admin_ops import (
     AdminAlert,
     AdminAlertsResponse,
@@ -25,15 +28,16 @@ from app.schemas.admin_ops import (
     AdminServiceItem,
     AdminUserItem,
     AdminUserListResponse,
+    AdminZoneGap,
 )
 from app.services import notification_service
 from app.services.auth_service import Identity
 from app.services.job_service import TERMINAL_ASSIGNMENT_STATUS, TERMINAL_JOB_STATUSES
 from app.utils.errors import BadRequestError, ConflictError, ErrorCode, InternalError, NotFoundError
 from app.utils.logging import log_event
-from app.utils.scoring import NO_MATCH_LIVE_FOR_S
+from app.utils.scoring import MAX_RADIUS_M, NO_MATCH_LIVE_FOR_S
 
-ALL_JOB_STATUSES = admin_ops_repository.LIVE_JOB_STATUSES + ("completed", "cancelled")
+ALL_JOB_STATUSES = admin_ops_repository.LIVE_JOB_STATUSES + ("completed", "cancelled", "scheduled")
 
 
 async def list_jobs(
@@ -141,12 +145,12 @@ async def cancel_job(
     )
 
 
-def _user_item(user, job_count: int) -> AdminUserItem:
+def _user_item(user, job_count: int, care_until: Optional[datetime] = None) -> AdminUserItem:
     return AdminUserItem(
         id=user.id, name=user.name, phone=user.phone, email=user.email,
         created_at=user.created_at, job_count=job_count,
         suspended_at=user.suspended_at, suspension_reason=user.suspension_reason,
-        has_login=user.auth_user_id is not None,
+        has_login=user.auth_user_id is not None, care_until=care_until,
     )
 
 
@@ -154,8 +158,9 @@ async def list_users(
     db: AsyncSession, *, q: Optional[str], limit: int, offset: int
 ) -> AdminUserListResponse:
     rows, total = await admin_ops_repository.list_users(db, q=q, limit=limit, offset=offset)
+    care = await care_repository.current_membership_ends(db, [u.id for u, _ in rows], datetime.now(timezone.utc))
     return AdminUserListResponse(
-        items=[_user_item(u, n) for u, n in rows], total=total, limit=limit, offset=offset
+        items=[_user_item(u, n, care.get(u.id)) for u, n in rows], total=total, limit=limit, offset=offset
     )
 
 
@@ -345,9 +350,98 @@ def evaluate_alerts(
     )
 
 
+# ADR-048. Areas are cells of a ZONE_DEG grid (0.05 deg is about 5.5 km north-south
+# in Bengaluru). Coverage is judged from the cell centre with the normal dispatch
+# radius, so "no partner in reach" means what it means to dispatch.
+ZONE_DEG = 0.05
+ZONE_CRITICAL_NO_MATCH = 2      # a repeat miss in one area within the window
+_MAX_ZONES = 20
+_MAX_ZONE_LOOKUPS = 50
+
+
+def _cell(lat: float, lng: float) -> tuple[int, int]:
+    return (math.floor(lat / ZONE_DEG), math.floor(lng / ZONE_DEG))
+
+
+def _centre(cell: tuple[int, int]) -> tuple[float, float]:
+    return (round((cell[0] + 0.5) * ZONE_DEG, 4), round((cell[1] + 0.5) * ZONE_DEG, 4))
+
+
+def group_demand(points: Sequence[tuple[str, float, float]]) -> dict[tuple[int, int], tuple[int, int]]:
+    """Pure: {cell: (requests, no_match)} from (status, lat, lng) rows."""
+    out: dict[tuple[int, int], list[int]] = {}
+    for status, lat, lng in points:
+        row = out.setdefault(_cell(lat, lng), [0, 0])
+        row[0] += 1
+        row[1] += status == "no_match_found"
+    return {k: (v[0], v[1]) for k, v in out.items()}
+
+
+def zone_gap_alert(
+    demand: dict[tuple[int, int], tuple[int, int]], coverage: dict[tuple[int, int], int]
+) -> Optional[AdminAlert]:
+    """Pure: one alert listing every cell with demand and nobody in reach.
+
+    A cell missing from `coverage` was not looked up (lookup cap) and is not judged."""
+    gaps = [(cell, req, nm) for cell, (req, nm) in demand.items() if coverage.get(cell, -1) == 0]
+    if not gaps:
+        return None
+    gaps.sort(key=lambda g: (-g[2], -g[1]))
+    critical = any(nm >= ZONE_CRITICAL_NO_MATCH for _, _, nm in gaps)
+    requests = sum(req for _, req, _ in gaps)
+    return AdminAlert(
+        code="ZONE_SUPPLY_GAP", severity="critical" if critical else "warning", count=len(gaps),
+        message=(f"{len(gaps)} area(s) had {requests} request(s) in the last {NO_MATCH_WINDOW_MINUTES} "
+                 "minutes and no verified partner on duty within reach. Ask partners nearby to go on duty."),
+        zones=[AdminZoneGap(latitude=_centre(c)[0], longitude=_centre(c)[1], requests=r, no_match=n)
+               for c, r, n in gaps[:_MAX_ZONES]],
+    )
+
+
+async def _zone_coverage(cells: Sequence[tuple[int, int]], on_duty: set) -> Optional[dict[tuple[int, int], int]]:
+    """On-duty partners within MAX_RADIUS_M of each cell centre, from the Redis
+    positions dispatch uses. None when Redis cannot be read: no alert is better
+    than a false "nobody nearby"."""
+    client = get_redis()
+    out: dict[tuple[int, int], int] = {}
+    try:
+        for cell in cells:
+            lat, lng = _centre(cell)
+            members = await client.geosearch(
+                PARTNER_LOCATIONS_KEY, longitude=lng, latitude=lat, radius=MAX_RADIUS_M, unit="m")
+            ids = set()
+            for m in members:
+                try:
+                    ids.add(uuid.UUID(m.decode() if isinstance(m, bytes) else m))
+                except (ValueError, AttributeError):
+                    continue
+            out[cell] = len(ids & on_duty)
+    except redis_exceptions.RedisError as exc:
+        log_event("zone_coverage_unavailable", level=logging.WARNING,
+                  error_type=type(exc).__name__, outcome="skipped")
+        return None
+    return out
+
+
+async def zone_alert(db: AsyncSession, now: datetime, partners_on_duty: int) -> Optional[AdminAlert]:
+    if partners_on_duty == 0:
+        return None     # NO_PARTNERS_ON_DUTY already says it for every area
+    points = await admin_ops_repository.demand_points_since(
+        db, now - timedelta(minutes=NO_MATCH_WINDOW_MINUTES))
+    demand = group_demand(points)
+    if not demand:
+        return None
+    busiest = sorted(demand, key=lambda c: (-demand[c][1], -demand[c][0]))[:_MAX_ZONE_LOOKUPS]
+    on_duty = await admin_ops_repository.on_duty_partner_ids(db)
+    coverage = await _zone_coverage(busiest, on_duty)
+    if coverage is None:
+        return None
+    return zone_gap_alert(demand, coverage)
+
+
 async def get_alerts(db: AsyncSession) -> AdminAlertsResponse:
-    """Read-only. "On duty" is the availability flag, not a live GPS fix: zone
-    coverage lives in Redis and is not judged here."""
+    """Read-only. "On duty" is the availability flag; zone coverage (ADR-048)
+    adds the Redis positions."""
     now = datetime.now(timezone.utc)
     live = await admin_ops_repository.live_jobs_with_status_age(
         db, statuses=admin_ops_repository.LIVE_JOB_STATUSES)
@@ -356,9 +450,13 @@ async def get_alerts(db: AsyncSession) -> AdminAlertsResponse:
     on_duty, verified = await admin_ops_repository.partner_duty_counts(db)
     risk = await admin_ops_repository.partner_risk_counts(db, now - timedelta(days=RISK_WINDOW_DAYS))
     off_app = await admin_ops_repository.open_off_app_reports(db)
-    return evaluate_alerts(now=now, live_jobs=live, window_counts=counts,
-                           partners_on_duty=on_duty, partners_verified=verified,
-                           partner_risk=risk, off_app_reports=off_app)
+    out = evaluate_alerts(now=now, live_jobs=live, window_counts=counts,
+                          partners_on_duty=on_duty, partners_verified=verified,
+                          partner_risk=risk, off_app_reports=off_app)
+    zone = await zone_alert(db, now, on_duty)
+    if zone is not None:
+        out.alerts.append(zone)
+    return out
 
 
 # ---------------------------------------------------------------------------

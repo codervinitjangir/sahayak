@@ -326,12 +326,18 @@ async def export_me(db: AsyncSession, user_id) -> dict:
              "price_final": _num(j.price_final), "requested_at": _iso(j.requested_at),
              "completed_at": _iso(j.completed_at), "cancelled_at": _iso(j.cancelled_at),
              "cancellation_reason": j.cancellation_reason, "timeline": history_by_job.get(j.id, []),
+             "care_covered": getattr(j, "care_membership_id", None) is not None,
              "payments": payments_by_job.get(j.id, []), "ratings": ratings_by_job.get(j.id, [])}
             for j in rows["jobs"]
         ],
         "notifications": [
             {"event": n.event, "message": n.message, "read": bool(n.is_read), "at": _iso(n.sent_at)}
             for n in rows["notifications"]
+        ],
+        "care_memberships": [
+            {"starts_at": _iso(m.starts_at), "ends_at": _iso(m.ends_at),
+             "callouts_allowed": m.callouts_allowed, "revoked_at": _iso(m.revoked_at)}
+            for m in rows.get("care_memberships", [])
         ],
     }
 

@@ -57,6 +57,11 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, className = ''
       icon: XCircle,
       classes: 'bg-red-50 text-red-800 border-red-300',
     },
+    scheduled: {
+      label: 'Booked',
+      icon: Clock,
+      classes: 'bg-sky-50 text-sky-900 border-sky-300',
+    },
     no_match_found: {
       label: 'No Partner Found',
       icon: AlertTriangle,

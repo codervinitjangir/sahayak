@@ -70,7 +70,10 @@ export function useNotifications(enabled: boolean) {
   });
 }
 
-export const isActiveStatus = (s: string) => !TERMINAL_STATUSES.includes(s as BackendJobStatus);
+/** A request in flight. An upcoming booking (ADR-050) is not one: nothing is happening yet. */
+export const isActiveStatus = (s: string) => s !== "scheduled" && !TERMINAL_STATUSES.includes(s as BackendJobStatus);
+/** Shown under Activity's "Active" filter: live requests and upcoming bookings. */
+export const isOpenStatus = (s: string) => s === "scheduled" || isActiveStatus(s);
 
 export function formatWhen(iso?: string | null): string {
   if (!iso) return "";

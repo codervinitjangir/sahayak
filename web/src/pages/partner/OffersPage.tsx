@@ -90,6 +90,12 @@ export const OffersPage: React.FC = () => {
               </div>
 
               <dl className="mt-4 space-y-3">
+                {offer.slot ? (
+                  <div className="rounded-control border border-sky-300 bg-sky-50 px-3 py-2">
+                    <dt className="text-xs font-bold uppercase tracking-wider text-sky-900">Booked job</dt>
+                    <dd className="text-base font-semibold text-sky-900">Arrive {offer.slot}</dd>
+                  </div>
+                ) : null}
                 <div className="flex items-start gap-3">
                   <MapPin className="w-4 h-4 mt-1 shrink-0 text-slate-400" aria-hidden="true" />
                   <div className="min-w-0">

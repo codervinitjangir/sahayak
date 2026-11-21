@@ -53,6 +53,7 @@ class SweepResult:
     jobs_searched: int = 0
     jobs_rescued: int = 0
     requests_expired: int = 0
+    scheduled_released: int = 0
     errors: list[str] = field(default_factory=list)
 
 
@@ -127,7 +128,20 @@ async def sweep_once(session_factory=AsyncSessionLocal, now: Optional[datetime] 
         if done:
             result.requests_expired += 1
 
-    if offer_ids or job_ids or orphan_ids or result.errors:
+    # ADR-050: bookings whose slot is near go to ordinary matching.
+    from app.services import schedule_service
+    async with session_factory() as db:
+        due_ids = await dispatch_repository.get_due_scheduled_job_ids(
+            db, starts_before=now + schedule_service.RELEASE_LEAD)
+
+    async def release(db, job_id):
+        return await schedule_service.release_scheduled_job(db, job_id, now=now)
+
+    for outcome in await _each(session_factory, due_ids, release, "scheduled", result):
+        if outcome is not None:
+            result.scheduled_released += 1
+
+    if offer_ids or job_ids or orphan_ids or due_ids or result.errors:
         log_event(
             "dispatch_worker_sweep",
             offers_checked=result.offers_checked,
@@ -135,6 +149,7 @@ async def sweep_once(session_factory=AsyncSessionLocal, now: Optional[datetime] 
             jobs_searched=result.jobs_searched,
             jobs_rescued=result.jobs_rescued,
             requests_expired=result.requests_expired,
+            scheduled_released=result.scheduled_released,
             error_count=len(result.errors),
             outcome="success" if not result.errors else "partial",
         )

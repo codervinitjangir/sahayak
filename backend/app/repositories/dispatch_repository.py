@@ -573,6 +573,8 @@ async def get_open_offers_for_partner(
             Job.issue_description,
             Job.price_estimate,
             Job.requested_at,
+            Job.scheduled_for,
+            Job.slot_end,
             Service.code.label("service_code"),
             Service.name.label("service_name"),
         )
@@ -591,3 +593,15 @@ async def get_open_offers_for_partner(
     )
     result = await db.execute(stmt)
     return result.all()
+
+
+async def get_due_scheduled_job_ids(db: AsyncSession, *, starts_before, limit: int = 200) -> list[uuid.UUID]:
+    """ADR-050: 'scheduled' jobs whose slot starts before `starts_before` (now + lead)."""
+    result = await db.execute(
+        select(Job.id)
+        .where(Job.status == "scheduled", Job.scheduled_for <= starts_before)
+        .order_by(Job.scheduled_for)
+        .limit(limit)
+    )
+    return [row[0] for row in result.all()]
+

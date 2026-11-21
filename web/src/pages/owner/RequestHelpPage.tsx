@@ -4,6 +4,9 @@ import { ArrowLeft, AlertCircle, LifeBuoy, RefreshCw } from 'lucide-react';
 import { useVehicles } from '../../features/vehicles/hooks';
 import { useServices, useCreateJob } from '../../features/jobs/hooks';
 import { ApiError, createIdempotencyKey } from '../../services/api';
+import { SlotPicker } from '../../components/Booking';
+import { bookingError, useTranslation } from '../../i18n';
+import type { ScheduleSlot } from '../../features/jobs/schedule';
 import { LocationPicker } from '../../components/LocationPicker';
 import { ServiceCard } from '../../components/ServiceCard';
 import { VehicleSelector } from '../../components/VehicleSelector';
@@ -68,6 +71,10 @@ export const RequestHelpPage: React.FC = () => {
   const [serviceCategoryFilter, setServiceCategoryFilter] = useState<CategoryFilter>('all');
   const [selectedVehicleId, setSelectedVehicleId] = useState<string>(vehicles[0]?.id || '');
   const [issueDescription, setIssueDescription] = useState('');
+  // ADR-050: book a time instead of help now.
+  const [bookLater, setBookLater] = useState(false);
+  const { t } = useTranslation();
+  const [slot, setSlot] = useState<ScheduleSlot | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [isAddVehicleOpen, setIsAddVehicleOpen] = useState(false);
 
@@ -101,6 +108,7 @@ export const RequestHelpPage: React.FC = () => {
           pickup_lng: location.lng,
           pickup_address_text: addressText,
           issue_description: issueDescription || undefined,
+          scheduled_for: bookLater && slot ? slot.start : undefined,
           // Retained for backward compatibility
           service_id: selectedServiceId ?? undefined,
           pickup: { ...location, address: addressText },
@@ -114,6 +122,11 @@ export const RequestHelpPage: React.FC = () => {
     } catch (err: unknown) {
       // A verified account with no profile yet is not an error to report, it is a
       // form to show: the token is good and registration is one POST away (ADR-011).
+      const booking = err instanceof ApiError ? bookingError(err.code) : undefined;
+      if (booking) {
+        setFormError(booking);
+        return;
+      }
       if (err instanceof ApiError && err.code === 'USER_NOT_REGISTERED') {
         setShowAuthModal(true);
         return;
@@ -143,6 +156,11 @@ export const RequestHelpPage: React.FC = () => {
           ? 'Please add a saved vehicle before requesting assistance.'
           : 'Please select which vehicle requires assistance.'
       );
+      return;
+    }
+
+    if (bookLater && !slot) {
+      setFormError(t('booking.pickTime'));
       return;
     }
 
@@ -323,9 +341,39 @@ export const RequestHelpPage: React.FC = () => {
           />
         </section>
 
-        {/* 4. Notes */}
+        {/* 4. When (ADR-050) */}
+        <section aria-labelledby="when-section-heading" className="space-y-4">
+          <StepHeading n={4} id="when-section-heading" required={false}>
+            {t('booking.when')}
+          </StepHeading>
+          <div role="radiogroup" aria-label={t('booking.when')} className="flex flex-wrap gap-2">
+            {[
+              { v: false, label: t('booking.now') },
+              { v: true, label: t('booking.bookATime') },
+            ].map((o) => (
+              <button
+                key={o.label}
+                type="button"
+                role="radio"
+                aria-checked={bookLater === o.v}
+                onClick={() => {
+                  setBookLater(o.v);
+                  if (!o.v) setSlot(null);
+                }}
+                className={`min-h-[44px] px-4 rounded-control border text-sm font-semibold ${
+                  bookLater === o.v ? 'bg-ink text-white border-ink' : 'bg-white border-line'
+                }`}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+          {bookLater ? <SlotPicker value={slot?.start ?? null} onChange={setSlot} /> : null}
+        </section>
+
+        {/* 5. Notes */}
         <section aria-labelledby="details-section-heading" className="space-y-4">
-          <StepHeading n={4} id="details-section-heading" required={false}>
+          <StepHeading n={5} id="details-section-heading" required={false}>
             Anything we should know?
           </StepHeading>
           <div>
@@ -356,7 +404,7 @@ export const RequestHelpPage: React.FC = () => {
             className="w-full text-lg font-semibold min-h-[56px]"
           >
             <LifeBuoy className="w-5 h-5" aria-hidden="true" />
-            <span>Request help now</span>
+            <span>{bookLater ? (slot ? t('booking.bookSlot', { slot: slot.label }) : t('booking.bookThisTime')) : t('booking.requestNow')}</span>
           </Button>
 
           <p className="text-xs text-center text-ink-muted">
