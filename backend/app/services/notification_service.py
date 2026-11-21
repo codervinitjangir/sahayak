@@ -507,6 +507,48 @@ async def mark_all_notifications_read(
     return MarkReadResponse(updated=updated, unread_count=0)
 
 
+async def dismiss_notification(
+    db: AsyncSession, identity: Identity, notification_id: uuid.UUID
+) -> MarkReadResponse:
+    """Clear one notification from the caller's panel (ADR-054).
+
+    Idempotent like mark-read: clearing a row already cleared is `updated: 0`
+    with a 200, so a retried swipe never shows an error. 404
+    NOTIFICATION_NOT_FOUND only when the id was never the caller's (principle 6).
+    """
+    recipient_type, recipient_id = _recipient_of(identity)
+    updated = await notification_repository.dismiss(
+        db, recipient_type=recipient_type, recipient_id=recipient_id,
+        notification_id=notification_id,
+    )
+    if updated == 0 and not await notification_repository.ever_existed_for_recipient(
+        db, notification_id=notification_id,
+        recipient_type=recipient_type, recipient_id=recipient_id,
+    ):
+        raise NotFoundError(ErrorCode.NOTIFICATION_NOT_FOUND, "Notification not found")
+    await db.commit()
+    count = await notification_repository.count_for_recipient(
+        db, recipient_type=recipient_type, recipient_id=recipient_id, unread_only=True
+    )
+    log_event("notification_dismissed", recipient_type=recipient_type,
+              updated=updated, outcome="success")
+    return MarkReadResponse(updated=updated, unread_count=count)
+
+
+async def clear_all_notifications(
+    db: AsyncSession, identity: Identity
+) -> MarkReadResponse:
+    """Clear the caller's whole panel (ADR-054). Nothing is left, so 0 unread."""
+    recipient_type, recipient_id = _recipient_of(identity)
+    updated = await notification_repository.dismiss(
+        db, recipient_type=recipient_type, recipient_id=recipient_id
+    )
+    await db.commit()
+    log_event("notifications_cleared", recipient_type=recipient_type,
+              updated=updated, outcome="success")
+    return MarkReadResponse(updated=updated, unread_count=0)
+
+
 async def notify_reassignment(
     db: AsyncSession, *, job, released_partner_ids: Iterable[uuid.UUID], tell_owner: bool
 ) -> int:

@@ -1,5 +1,20 @@
 import { useEffect, useState } from "react";
-import { Keyboard, Platform } from "react-native";
+import { Keyboard, Platform, TextInput } from "react-native";
+
+/**
+ * Is the keyboard still up? Used to drop a stale height.
+ *
+ * `Keyboard.isVisible()` alone cannot answer it: React Native returns the last
+ * show/hide *event* it saw (`!!this._currentlyShowing`), so when the hide event
+ * is the one that went missing it still says "visible" and the stale height is
+ * never cleared. That was the owner's request sheet floating a keyboard-height
+ * up after sending (the notes field unmounts with the keyboard open), fixed only
+ * by leaving and reopening the screen. A keyboard with no focused text field
+ * is gone in practice, so the focused-input check is the one that catches it.
+ */
+export function keyboardStillUp(eventSaysVisible: boolean, hasFocusedInput: boolean): boolean {
+  return eventSaysVisible && hasFocusedInput;
+}
 
 /**
  * Height of the on-screen keyboard, 0 when it is closed.
@@ -9,9 +24,8 @@ import { Keyboard, Platform } from "react-native";
  * callers lift themselves by this amount.
  *
  * `keyboardDidHide` is not always delivered on Android (back gesture, a
- * dismiss during a screen change). A stale height left the partner's job sheet
- * floating a keyboard-height above the bottom with the map showing beneath it,
- * so while the height is non-zero we also confirm the keyboard is still up.
+ * dismiss during a screen change, the focused field unmounting). While the
+ * height is non-zero we re-check every 300 ms with `keyboardStillUp`.
  */
 export function useKeyboardHeight(): number {
   const [height, setHeight] = useState(0);
@@ -30,8 +44,8 @@ export function useKeyboardHeight(): number {
   useEffect(() => {
     if (height === 0) return;
     const t = setInterval(() => {
-      if (!Keyboard.isVisible()) setHeight(0);
-    }, 400);
+      if (!keyboardStillUp(Keyboard.isVisible(), TextInput.State.currentlyFocusedInput() != null)) setHeight(0);
+    }, 300);
     return () => clearInterval(t);
   }, [height]);
 

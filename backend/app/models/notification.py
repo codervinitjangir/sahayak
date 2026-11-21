@@ -41,6 +41,8 @@ class Notification(Base):
     event: Mapped[str] = mapped_column(String(40), nullable=False)
     message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     is_read: Mapped[bool] = mapped_column(Boolean, default=False, nullable=True)
+    # ADR-054: cleared from the panel by its recipient. Kept, never shown again.
+    dismissed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     # Creation time, not delivery time. The column name predates the decision
     # that these rows are polled rather than sent.
     sent_at: Mapped[datetime] = mapped_column(

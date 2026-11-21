@@ -142,7 +142,7 @@ export default function PartnerHomeScreen() {
     void load();
   }, [load]);
 
-  // Returning from the services or reviews screen re-reads the server.
+  // Returning from the services screen re-reads the server.
   useEffect(() => nav.addListener("focus", () => void load()), [nav, load]);
 
   // Coming back to the app (from Maps, a call, the launcher) re-reads the
@@ -481,14 +481,8 @@ export default function PartnerHomeScreen() {
                 <Skeleton height={88} />
               ) : stats ? (
                 <View style={styles.statRow}>
-                  <Pressable
-                    style={{ flex: 1 }}
-                    onPress={() => nav.navigate("PartnerReviews")}
-                    accessibilityRole="button"
-                    accessibilityLabel="See all your reviews"
-                  >
-                    <Stat label="Rating" value={stats.rating_count > 0 ? Number(stats.rating_avg).toFixed(1) : "New"} sub={`${stats.rating_count} ${stats.rating_count === 1 ? "review" : "reviews"} ›`} />
-                  </Pressable>
+                  {/* ADR-053: the overall average only; single ratings and comments are never shown to partners. */}
+                  <Stat label="Rating" value={stats.rating_count > 0 ? Number(stats.rating_avg).toFixed(1) : "New"} sub={`${stats.rating_count} ${stats.rating_count === 1 ? "rating" : "ratings"}`} />
                   <Stat label="Acceptance" value={`${Math.round(Number(stats.acceptance_rate_pct))}%`} sub="of offers" />
                   <Stat label="Jobs" value={String(stats.lifetime_jobs)} sub="lifetime" />
                 </View>
@@ -525,7 +519,6 @@ export default function PartnerHomeScreen() {
               {[
                 { icon: "construct-outline", label: "Services", sub: `${services.length - pausedServices.length} of ${services.length} live`, bg: "#DBEAFE", fg: "#1D4ED8", go: () => nav.navigate("PartnerServices") },
                 { icon: "shield-checkmark-outline", label: "Verification", sub: verification ? verification.replace(/_/g, " ") : "Status", bg: "#EDE9FE", fg: "#6D28D9", go: () => nav.navigate("PartnerVerification") },
-                { icon: "star-outline", label: "Reviews", sub: stats ? `${stats.rating_count} total` : "See all", bg: "#FEF3C7", fg: "#B45309", go: () => nav.navigate("PartnerReviews") },
               ].map((a) => (
                 <Pressable key={a.label} onPress={a.go} accessibilityRole="button" accessibilityLabel={`${a.label}, ${a.sub}`} style={({ pressed }) => [styles.tile, pressed && { opacity: 0.8 }]}>
                   <View style={[styles.tileIcon, { backgroundColor: a.bg }]}><Ionicons name={a.icon as any} size={22} color={a.fg} /></View>

@@ -37,6 +37,12 @@ class PhotoUploadRequest(BaseModel):
     content_type: PhotoContentType
 
 
+class OwnerPhotoUploadRequest(BaseModel):
+    """ADR-055: the owner's photo of the problem. The stage is always 'issue'."""
+    model_config = ConfigDict(extra="forbid")
+    content_type: PhotoContentType
+
+
 class PhotoUploadTicket(BaseModel):
     photo_id: uuid.UUID
     upload_url: str
@@ -45,7 +51,7 @@ class PhotoUploadTicket(BaseModel):
 
 class JobPhotoItem(BaseModel):
     id: uuid.UUID
-    stage: PhotoStage
+    stage: Literal["pickup", "drop", "issue"]
     uploaded_at: Optional[datetime] = None
 
 

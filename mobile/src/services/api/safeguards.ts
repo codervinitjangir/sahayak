@@ -15,7 +15,7 @@ export interface PriceRevision {
 
 export interface JobPhoto {
   id: string;
-  stage: "pickup" | "drop";
+  stage: "pickup" | "drop" | "issue";
   uploaded_at?: string | null;
 }
 
@@ -64,6 +64,15 @@ export const safeguardsApi = {
 
   confirmPhoto: (jobId: string, photoId: string) =>
     apiClient.post<JobPhoto>(`/jobs/${jobId}/photos/${photoId}/confirm`, {}).then((r) => r.data),
+
+  /** Owner, ADR-055: a photo of the problem, up to 3, before work starts. */
+  startIssuePhoto: (jobId: string, contentType: "image/jpeg" | "image/png" | "image/webp") =>
+    apiClient
+      .post<PhotoUploadTicket>(`/jobs/${jobId}/issue-photos`, { content_type: contentType })
+      .then((r) => r.data),
+
+  confirmIssuePhoto: (jobId: string, photoId: string) =>
+    apiClient.post<JobPhoto>(`/jobs/${jobId}/issue-photos/${photoId}/confirm`, {}).then((r) => r.data),
 
   photoUrl: (jobId: string, photoId: string) =>
     apiClient.get<{ url: string; expires_in: number }>(`/jobs/${jobId}/photos/${photoId}/url`).then((r) => r.data),

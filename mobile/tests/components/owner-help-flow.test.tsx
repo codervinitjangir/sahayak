@@ -26,7 +26,7 @@ vi.mock("expo-location", () => loc);
 
 const createJob = vi.fn();
 vi.mock("../../src/services/api/jobs", () => ({
-  jobsApi: { createJob: (...a: any[]) => createJob(...a), getJob: vi.fn(() => new Promise(() => {})),
+  jobsApi: { createJob: (...a: any[]) => createJob(...a), getJob: vi.fn(() => new Promise(() => {})), getScheduleSlots: vi.fn(async () => ({ slots: [{ start: "2026-11-22T04:30:00Z", end: "2026-11-22T06:30:00Z", label: "x" }], release_lead_min: 45 })),
              retrySearch: vi.fn(), cancelJob: vi.fn(), getRatings: vi.fn(), submitRating: vi.fn() },
 }));
 vi.mock("../../src/services/api/services", () => ({
@@ -37,6 +37,12 @@ vi.mock("../../src/services/api/services", () => ({
 let garage: any[] = [];
 vi.mock("../../src/services/api/vehicles", () => ({ vehiclesApi: { fetchVehicles: async () => garage } }));
 const alert = vi.fn();
+// ADR-055 photos: the picker is native; the upload is checked through its module.
+vi.mock("expo-image-picker", () => ({}));
+vi.mock("../../src/features/jobs/photos/JobPhotoStrip", () => ({ default: () => null, OwnerIssuePhotos: () => null }));
+const uploadIssuePhotos = vi.fn(async () => ({ sent: 1, failed: 0 }));
+vi.mock("../../src/features/jobs/photos/issuePhotos", () => ({ MAX_ISSUE_PHOTOS: 3, uploadIssuePhotos: (...a: unknown[]) => uploadIssuePhotos(...(a as [])) }));
+
 // Screens report failures through the in-app dialog; capture its calls.
 vi.mock("../../src/components/ui/AppDialog", () => ({ showDialog: (...a: any[]) => alert(...a) }));
 
@@ -53,7 +59,7 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-const sendButton = () => screen.getByText("Request help now");
+const sendButton = () => screen.getByText("Get help now");
 
 describe("OwnerHelpFlowScreen", () => {
   it("sends one request with pin, service, vehicle and an idempotency key, then searches", async () => {
@@ -98,4 +104,27 @@ describe("OwnerHelpFlowScreen", () => {
     expect(alert.mock.calls[0][0]).toBe("Request not sent");
     expect(screen.queryByText("Finding a partner")).toBeNull();
   });
+
+  it("no photos means no upload call", async () => {
+    createJob.mockResolvedValue({ id: "j2", status: "matching" });
+    render(<OwnerHelpFlowScreen />);
+    await waitFor(() => expect(loc.reverseGeocodeAsync).toHaveBeenCalled());
+    await screen.findByText(/KA01AB1234/);
+    fireEvent.click(sendButton());
+    await screen.findByText("Finding a partner");
+    expect(uploadIssuePhotos).not.toHaveBeenCalled();
+  });
+
+  it("the two flows are different screens: booking leads with the time and will not send without one", async () => {
+    render(<OwnerHelpFlowScreen />);
+    await screen.findByText(/KA01AB1234/);
+    fireEvent.click(screen.getByText("Book later"));
+    await screen.findByText("Book a service");
+    expect(screen.getByText("Pick a time")).toBeTruthy();
+    fireEvent.click(screen.getByText("Pick a time"));
+    expect(createJob).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText("Help now"));
+    await screen.findByText("Roadside help");
+  });
 });
+

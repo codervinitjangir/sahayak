@@ -10,6 +10,7 @@ import { Colors, Radius, Spacing, Typography } from "../../../constants/theme";
 import Button from "../../../components/ui/Button";
 import { amountOf, safeguardsApi, type JobSafeguards } from "../../../services/api/safeguards";
 import { putFile, uploadContentType } from "../documents";
+import JobPhotoStrip from "../../jobs/photos/JobPhotoStrip";
 
 const inr = (v: number | null) => (v == null ? "—" : `₹${Math.round(v).toLocaleString("en-IN")}`);
 const errCode = (e: any): string | undefined => e?.response?.data?.error?.code;
@@ -119,6 +120,12 @@ export default function PartnerJobSafeguards({ jobId }: { jobId: string }) {
               />
             </View>
           ))}
+        </View>
+      ) : null}
+
+      {data.photos.some((p) => p.stage === "issue") ? (
+        <View style={styles.card}>
+          <JobPhotoStrip jobId={jobId} photos={data.photos} title="Photos from the owner" />
         </View>
       ) : null}
 

@@ -941,6 +941,45 @@ async def main() -> None:                          # noqa: C901 - one linear scr
         check("everything was written on the in_app channel and nothing claims "
               "a delivery that never happened", channels == {"in_app"}, f"{channels}")
 
+        # ------------------------------------------------------------------
+        section("14b. Clearing the panel (ADR-054)")
+        # ------------------------------------------------------------------
+        alpha_token = partners["alpha"]["token"]
+        before = await feed(c, owner_token, limit=100)
+        victim = before["items"][0]["id"]
+        r = await c.post(f"/api/v1/notifications/{victim}/dismiss", headers=hdr(alpha_token))
+        check("alpha clearing the owner's notification is 404",
+              r.status_code == 404 and code_of(r) == "NOTIFICATION_NOT_FOUND",
+              f"HTTP {r.status_code} {code_of(r)}")
+        r = await c.post(f"/api/v1/notifications/{victim}/dismiss", headers=hdr(owner_token))
+        check("the owner clears one: 200, updated 1",
+              r.status_code == 200 and (data_of(r) or {}).get("updated") == 1,
+              f"HTTP {r.status_code} {r.text[:200]}")
+        after = await feed(c, owner_token, limit=100)
+        check("it is gone from the feed and the total dropped by one",
+              victim not in [i["id"] for i in after["items"]]
+              and after["total"] == before["total"] - 1,
+              f"{before['total']} -> {after['total']}")
+        check("the row is kept, read, with dismissed_at set",
+              (lambda row: row and row["is_read"] is True and row["dismissed_at"] is not None)(
+                  one("SELECT is_read, dismissed_at FROM notifications WHERE id = %(i)s", {"i": victim})))
+        r = await c.post(f"/api/v1/notifications/{victim}/dismiss", headers=hdr(owner_token))
+        check("clearing it again is a 200 with updated 0",
+              r.status_code == 200 and (data_of(r) or {}).get("updated") == 0,
+              f"HTTP {r.status_code} {r.text[:200]}")
+        alpha_before = (await feed(c, alpha_token, limit=100))["total"]
+        r = await c.post("/api/v1/notifications/clear-all", headers=hdr(owner_token))
+        result = data_of(r) or {}
+        check("clear-all is 200, cleared the rest, and reports 0 unread",
+              r.status_code == 200 and result.get("updated") == after["total"]
+              and result.get("unread_count") == 0, f"HTTP {r.status_code} {result}")
+        empty = await feed(c, owner_token, limit=100)
+        check("the owner's feed is empty and the badge is 0",
+              empty["items"] == [] and empty["total"] == 0 and await badge(c, owner_token) == 0,
+              f"total={empty['total']}")
+        check("clear-all did not touch alpha's feed",
+              (await feed(c, alpha_token, limit=100))["total"] == alpha_before)
+
     # ----------------------------------------------------------------------
     section("15. Cleanup")
     # ----------------------------------------------------------------------

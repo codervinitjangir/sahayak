@@ -67,15 +67,6 @@ export interface AssignmentRespondResponse {
   next_assignment_id?: string | null;
 }
 
-export interface PartnerReview {
-  job_id: string;
-  service_name: string;
-  rating: number;
-  comment: string | null;
-  owner_display_name: string;
-  created_at: string;
-}
-
 export const partnerService = {
   /** DELETE /partners/me (ADR-045). 409 ACCOUNT_HAS_ACTIVE_JOB while a job or offer is open. */
   async deleteMe(): Promise<void> {
@@ -268,16 +259,6 @@ export const partnerService = {
     }>('/partners/me/services', { method: 'GET' });
     return res.data.services ?? [];
   },
-
-  /** Each owner rating behind the average, newest first. Owner = first name + initial. */
-  async getReviews(limit = 100, offset = 0): Promise<PartnerReview[]> {
-    const res = await apiClient<{ items: PartnerReview[] }>(
-      `/partners/me/reviews?limit=${limit}&offset=${offset}`,
-      { method: 'GET' }
-    );
-    return res.data.items ?? [];
-  },
-
   async getTrustStats(): Promise<PartnerTrustStats> {
     const res = await apiClient<{
       partner_id: string;

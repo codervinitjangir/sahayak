@@ -201,8 +201,8 @@ async def main():
         check("documents are listed without their storage path",
               ex.get("documents", [{}])[0].get("type") == "photo_id" and "qa-never-uploaded" not in r.text, r.text[:200])
         jobs = {j["job_id"]: j for j in ex.get("jobs", [])}
-        check("the completed job is there with both ratings",
-              done in jobs and {x["by"] for x in jobs[done]["ratings"]} == {"you", "owner"}, str(jobs.get(done))[:200])
+        check("the completed job has the partner's own rating and not the owner's (ADR-053)",
+              done in jobs and {x["by"] for x in jobs[done]["ratings"]} == {"you"}, str(jobs.get(done))[:200])
         check("the owner's number is not in the partner's export",
               PHONE_PREFIX + "0" not in r.text and "PDel QA owner" not in r.text)
         check("the alert notification is there", any(n["event"] == "document_expiring" for n in ex.get("notifications", [])))

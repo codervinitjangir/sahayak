@@ -86,4 +86,26 @@ export const notificationsService = {
     });
     return res.data;
   },
+
+  /**
+   * Clear one notification from the panel (ADR-054). Idempotent.
+   * Real path: POST /notifications/{id}/dismiss
+   */
+  async dismiss(id: string): Promise<MarkReadResponse> {
+    const res = await apiClient<MarkReadResponse>(`/notifications/${id}/dismiss`, {
+      method: 'POST',
+    });
+    return res.data;
+  },
+
+  /**
+   * Clear every notification from the panel (ADR-054).
+   * Real path: POST /notifications/clear-all
+   */
+  async clearAll(): Promise<MarkReadResponse> {
+    const res = await apiClient<MarkReadResponse>('/notifications/clear-all', {
+      method: 'POST',
+    });
+    return res.data;
+  },
 };

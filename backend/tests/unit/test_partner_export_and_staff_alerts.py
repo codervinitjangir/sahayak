@@ -57,7 +57,8 @@ async def test_partner_export_has_their_data_and_nothing_internal():
     job = out["jobs"][0]
     assert job["service"] == "battery_jumpstart" and job["price_final"] == 650.0
     assert job["payments"][0]["method"] == "cash"
-    assert {r["by"] for r in job["ratings"]} == {"owner", "you"}
+    # ADR-053: the owner's rating of the partner is never exported per job, only the average.
+    assert {r["by"] for r in job["ratings"]} == {"you"}
     assert out["price_requests"][0]["status"] == "approved"
     text = json.dumps(out)
     assert "partners/secret/path.png" not in text      # storage paths stay internal

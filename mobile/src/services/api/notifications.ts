@@ -61,4 +61,16 @@ export const notificationsApi = {
     apiClient
       .post<MobileMarkReadResponse>("/notifications/read-all")
       .then((r) => r.data),
+
+  /** Clear one notification from the panel (POST /api/v1/notifications/{id}/dismiss, ADR-054) */
+  dismiss: (notificationId: string) =>
+    apiClient
+      .post<MobileMarkReadResponse>(`/notifications/${notificationId}/dismiss`)
+      .then((r) => r.data),
+
+  /** Clear the whole panel (POST /api/v1/notifications/clear-all, ADR-054) */
+  clearAll: () =>
+    apiClient
+      .post<MobileMarkReadResponse>("/notifications/clear-all")
+      .then((r) => r.data),
 };

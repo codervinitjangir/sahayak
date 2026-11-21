@@ -62,11 +62,15 @@ export function useUnreadCount() {
   });
 }
 
-export function useNotifications(enabled: boolean) {
+/** The panel's list. Fetched as soon as the home screen mounts and kept warm,
+ * so opening the panel shows rows at once instead of a skeleton that swaps in
+ * mid-animation (ADR-054). Refreshed when the badge moves. */
+export function useNotifications(enabled: boolean = true) {
   return useQuery({
     queryKey: QK.notifications,
     queryFn: () => notificationsApi.listNotifications(30, 0),
     enabled,
+    staleTime: 30_000,
   });
 }
 

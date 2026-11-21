@@ -173,7 +173,6 @@ export type PartnerStackParamList = {
   IncomingOffer: { jobId: string; assignmentId?: string; offerData?: any };
   ActiveJob: { jobId: string };
   PartnerJobDone: { jobId: string };
-  PartnerReviews: undefined;
   PartnerServices: undefined;
   PartnerVerification: undefined;
   PartnerSettings: undefined;
