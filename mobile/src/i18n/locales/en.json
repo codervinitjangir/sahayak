@@ -1,11 +1,7 @@
 {
   "booking": {
     "when": "When?",
-    "now": "Now",
-    "bookATime": "Book a time",
-    "bookSlot": "Book {{slot}}",
-    "bookThisTime": "Book this time",
-    "requestNow": "Request help now",
+    "bookATime": "Book later",
     "day": "Day",
     "time": "Time",
     "slotsFailed": "We could not load the available times.",
@@ -31,7 +27,12 @@
       "JOB_NOT_SCHEDULED": "Matching has already started for this booking, so it can no longer be moved. You can still cancel it.",
       "SLOT_NOT_AVAILABLE": "That time can no longer be booked. Pick another one.",
       "TOO_MANY_SCHEDULED_JOBS": "You already have three upcoming bookings. Cancel one or wait until one has happened."
-    }
+    },
+    "title": "Book a service",
+    "subtitle": "Pick a two-hour slot. A verified partner comes to you.",
+    "helpNowLink": "Help now",
+    "confirm": "Confirm booking",
+    "pickATime": "Pick a time"
   },
   "care": {
     "coveredUntil": "Covered until {{date}}",

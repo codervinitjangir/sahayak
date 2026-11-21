@@ -5,6 +5,8 @@ The in-app notification feed.
   GET  /api/v1/notifications/unread-count
   POST /api/v1/notifications/{notification_id}/read
   POST /api/v1/notifications/read-all
+  POST /api/v1/notifications/{notification_id}/dismiss   (ADR-054)
+  POST /api/v1/notifications/clear-all                   (ADR-054)
 
 A flat resource rather than something nested under a job, unlike ratings. A
 rating has no identity apart from the job it is about; a notification does — the
@@ -188,3 +190,38 @@ async def mark_all_read(
     """
     result = await notification_service.mark_all_notifications_read(db, identity)
     return envelope(result)
+
+
+@router.post(
+    "/{notification_id}/dismiss",
+    response_model=ApiResponse[MarkReadResponse],
+    status_code=status.HTTP_200_OK,
+    summary="Clear one notification from the panel",
+)
+async def dismiss_notification(
+    notification_id: uuid.UUID,
+    identity: Identity = Depends(get_current_identity),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[MarkReadResponse]:
+    """Hide one notification for good (ADR-054). The row is kept as the record
+    of what was sent; it just never appears in the feed or the badge again.
+    Idempotent: a repeat is `updated: 0`. 404 when the id is not the caller's."""
+    result = await notification_service.dismiss_notification(db, identity, notification_id)
+    return envelope(result)
+
+
+@router.post(
+    "/clear-all",
+    response_model=ApiResponse[MarkReadResponse],
+    status_code=status.HTTP_200_OK,
+    summary="Clear every notification from the panel",
+)
+async def clear_all_notifications(
+    identity: Identity = Depends(get_current_identity),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[MarkReadResponse]:
+    """Empty the caller's panel (ADR-054). `unread_count` is always 0 after it.
+    Like read-all, it is not scoped to a page."""
+    result = await notification_service.clear_all_notifications(db, identity)
+    return envelope(result)
+

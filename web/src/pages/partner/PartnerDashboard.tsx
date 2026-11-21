@@ -29,7 +29,6 @@ import {
 import { useOfferCountdown } from '../../features/partners/offerCountdown';
 import { OfferCountdown } from '../../features/partners/OfferCountdownPill';
 import { jobsService } from '../../services/jobs.service';
-import { partnerService } from '../../services/partner.service';
 import {
   verificationBadgeLabel,
   capabilityLabel,
@@ -820,70 +819,14 @@ const FleetAndEquipmentCard: React.FC<{ profile: PartnerProfile }> = ({ profile 
 };
 
 /** Every owner rating behind the average: who, which job, stars, comment. */
-const ReviewsDialog: React.FC<{ onClose: () => void }> = ({ onClose }) => {
-  const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['partner', 'reviews'],
-    queryFn: () => partnerService.getReviews(),
-  });
-  React.useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
-  return (
-    <div className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={onClose}>
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label="Your reviews"
-        className="bg-white w-full sm:max-w-lg max-h-[85vh] rounded-t-2xl sm:rounded-2xl flex flex-col"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[#EEF2F6]">
-          <h2 className="font-semibold text-lg text-[#0F172A]">Your reviews</h2>
-          <button type="button" onClick={onClose} className="min-h-[44px] px-3 text-sm font-semibold text-[#475569]">Close</button>
-        </div>
-        <div className="overflow-y-auto p-5 space-y-3">
-          {isLoading && <p className="text-sm text-[#64748B]">Loading…</p>}
-          {isError && (
-            <p className="text-sm text-red-700">
-              Could not load reviews. <button className="underline" onClick={() => refetch()}>Try again</button>
-            </p>
-          )}
-          {data && data.length === 0 && <p className="text-sm text-[#64748B]">No reviews yet. Customers can rate you after a completed job.</p>}
-          {data?.map((r) => (
-            <article key={r.job_id} className="border border-[#EEF2F6] rounded-xl p-4">
-              <div className="flex items-center justify-between">
-                <span className="font-semibold text-[#0F172A]">{r.owner_display_name}</span>
-                <span className="text-xs text-[#64748B]">
-                  {new Date(r.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                </span>
-              </div>
-              <div className="text-amber-500 mt-1" aria-label={`${r.rating} out of 5 stars`}>
-                {'★'.repeat(r.rating)}<span className="text-slate-300">{'★'.repeat(5 - r.rating)}</span>
-              </div>
-              <div className="text-sm text-[#475569] mt-1">{r.service_name}</div>
-              {r.comment && <p className="text-sm text-[#0F172A] mt-2">“{r.comment}”</p>}
-            </article>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-};
-
-/* ── 6. Right Bottom: Partner Identity & Team Standing ────────────────────── */
-
 const PartnerStandingCard: React.FC<{ profile: PartnerProfile }> = ({ profile }) => {
   const { data: stats } = usePartnerTrustStats();
 
   const rating = stats?.ratingAvg ?? 0;
   const acceptance = stats?.acceptanceRatePct ?? 0;
-  const [showReviews, setShowReviews] = React.useState(false);
 
   return (
     <>
-    {showReviews && <ReviewsDialog onClose={() => setShowReviews(false)} />}
     <section
       aria-label="Partner Profile"
       className="bento-card p-5 flex flex-col justify-between h-[355px]"
@@ -910,13 +853,10 @@ const PartnerStandingCard: React.FC<{ profile: PartnerProfile }> = ({ profile })
             <div className="text-3xl font-semibold text-[#0F172A] tabular-nums leading-none">
               {rating > 0 ? rating.toFixed(1) : '—'}
             </div>
-            <button
-              type="button"
-              onClick={() => setShowReviews(true)}
-              className="text-xs text-brand-700 font-semibold mt-1.5 underline underline-offset-2 hover:text-brand-800"
-            >
-              {stats?.ratingCount ?? 0} {stats?.ratingCount === 1 ? 'review' : 'reviews'} · See all
-            </button>
+            {/* ADR-053: the overall average only; single ratings and comments are never shown to partners. */}
+            <div className="text-xs text-[#64748B] font-medium mt-1.5">
+              {stats?.ratingCount ?? 0} {stats?.ratingCount === 1 ? 'rating' : 'ratings'}
+            </div>
           </div>
           <div className="text-right">
             <div className="text-3xl font-semibold text-[#0F172A] tabular-nums leading-none">

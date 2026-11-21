@@ -36,7 +36,10 @@ class JobPhoto(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     job_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("jobs.id"), nullable=False)
-    partner_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("partners.id"), nullable=False)
+    # Exactly one uploader: the partner for 'pickup'/'drop', the owner for
+    # 'issue' (ADR-055, a CHECK in alembic/0019).
+    partner_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("partners.id"), nullable=True)
+    user_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     stage: Mapped[str] = mapped_column(String(10), nullable=False)
     content_type: Mapped[str] = mapped_column(String(40), nullable=False)
     file_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

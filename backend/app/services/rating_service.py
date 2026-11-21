@@ -290,12 +290,11 @@ async def get_job_ratings(
 
     Returns (job_status, ratings, can_rate).
 
-    Both parties see both ratings, including the one written about them. That is
-    a choice: a one-way mirror would need the rater hidden from the ratee, and
-    with exactly two participants per job hiding the name changes nothing — each
-    side already knows who the other is. Showing it keeps the mechanic's view of
-    a job the same as the owner's, which is what makes a disagreement about a job
-    a conversation about the same facts.
+    Each party sees only the rating it wrote (ADR-053). The rating written
+    about the caller is never returned: with two people per job and the partner
+    knowing the owner's address, a mechanic who can read "1 star, rude" the
+    minute it is written can retaliate. A partner sees only their overall
+    average (GET /partners/me/stats); staff still see every rating.
 
     `can_rate` is computed here rather than by the client so the rule that
     decides whether to show a rating form is the same rule that decides whether
@@ -312,8 +311,9 @@ async def get_job_ratings(
 
     rated_by, _ = await _resolve_participation(db, job, identity)
 
-    ratings = await rating_repository.get_ratings_for_job(db, job.id)
-    already_rated = any(row.rated_by == rated_by for row in ratings)
+    ratings = [row for row in await rating_repository.get_ratings_for_job(db, job.id)
+               if row.rated_by == rated_by]
+    already_rated = bool(ratings)
     can_rate = job.status == RATEABLE_JOB_STATUS and not already_rated
 
     return job.status, ratings, can_rate

@@ -630,17 +630,17 @@ async def main() -> None:                          # noqa: C901 - one linear scr
               aggregate_of("alpha") == ("5.0", 1), f"{aggregate_of('alpha')}")
 
         # ------------------------------------------------------------------
-        section("8. Both sides read the same job, and neither can rate again")
+        section("8. Each side reads only its own rating (ADR-053), and neither can rate again")
         # ------------------------------------------------------------------
-        for who, token in (("owner", owner_token), ("partner", partners["alpha"]["token"])):
+        for who, token, own in (("owner", owner_token, "user"), ("partner", partners["alpha"]["token"], "partner")):
             r = await read_ratings(c, job_done, token)
             body = data_of(r) or {}
             listed = body.get("ratings") or []
-            check(f"{who} sees both ratings",
-                  r.status_code == 200 and len(listed) == 2,
+            check(f"{who} sees exactly one rating",
+                  r.status_code == 200 and len(listed) == 1,
                   f"HTTP {r.status_code}, {len(listed)} item(s)")
-            check(f"{who} sees them in a stable order (partner, user)",
-                  [x.get("rated_by") for x in listed] == ["partner", "user"],
+            check(f"{who} sees only the one they wrote, never the one about them",
+                  [x.get("rated_by") for x in listed] == [own],
                   f"{[x.get('rated_by') for x in listed]}")
             check(f"{who} has can_rate false now", body.get("can_rate") is False,
                   str(body.get("can_rate")))

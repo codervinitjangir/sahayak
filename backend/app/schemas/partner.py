@@ -343,28 +343,6 @@ class PartnerMeResponse(BaseModel):
 
 
 
-class PartnerReviewItem(BaseModel):
-    """One owner's rating of this partner, as the partner sees it.
-
-    `owner_display_name` is first name plus last initial ("Mohana L."). No phone,
-    no id: the partner already met this person on the job, and a review list is
-    not a channel to re-contact them (ADR-017).
-    """
-
-    job_id: uuid.UUID
-    service_name: str
-    rating: int
-    comment: Optional[str] = None
-    owner_display_name: str
-    created_at: datetime
-
-
-class PartnerReviewsResponse(BaseModel):
-    items: List[PartnerReviewItem]
-    limit: int
-    offset: int
-
-
 class PartnerDeleteResponse(BaseModel):
     """ADR-045. DELETE /partners/me."""
     deleted: bool = True

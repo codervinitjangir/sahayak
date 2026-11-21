@@ -1725,3 +1725,62 @@ The endpoints now take `get_current_identity` instead of `require_user`. The sid
 **Rejected.** A home-made `t()` table: the same work today, and no plurals, interpolation or tooling later (Crowdin and other tools read i18next JSON). react-intl: ICU syntax is heavier for translators, and its React Native setup is less simple than react-i18next's.
 
 **Tests.** `mobile/tests/i18n.test.ts` and `web/tests/components/i18n.test.ts` (initialised, no missing or unused keys, error mapping).
+
+---
+
+# ADR-053: A partner sees only their overall rating, never the owner's written review
+
+**Date.** 2026-11-21. **Status.** Accepted. Supersedes the partner reviews list (`GET /partners/me/reviews`).
+
+**Context.** The partner app listed each owner's stars and comment, with the owner's first name, as soon as it was written. A mechanic who has just left a job could read a bad review within seconds and knows where that owner lives. The product owner flagged this as a safety risk.
+
+**Decision.**
+- `GET /partners/me/reviews` is removed, along with its service, repository query and schemas.
+- `GET /jobs/{id}/ratings` returns to each party **only the rating it wrote**. Staff see every rating.
+- The partner keeps `rating_avg` and `rating_count` on their profile. An average over many jobs cannot be traced back to one owner on one evening.
+- The partner data export lists only the ratings the partner wrote (`by: "you"`).
+- Both clients drop the reviews screen and dialog. The partner home shows the plain average and "N ratings".
+
+**Rejected.** Showing comments after a delay or in batches: a small partner with three jobs a week could still match a comment to an owner. Hiding the comment but showing per-job stars: same problem.
+
+**Residual risk.** A partner with very few ratings can still infer something from the average moving after one job. Hiding the average below a minimum count (for example 5) is a possible follow-up.
+
+**Tests.** `test_rating_service.py` (including `test_a_partner_never_reads_the_owners_rating_of_them`), `test_partner_export_and_staff_alerts.py`; live `check_ratings.py` section 8 and `check_partner_deletion.py`.
+
+---
+
+# ADR-054: Clearing notifications, auto-read on open, and a lighter panel
+
+**Date.** 2026-11-21. **Status.** Accepted. Extends ADR-019.
+
+**Context.** Owners and partners could not remove anything from the notification panel. Items stayed unread until tapped one by one. On a low-end Android phone the panel stuttered opening and closing: it animated scale, x, y and opacity together over a full list, and it fetched the list only when opened, so rows replaced the skeleton mid-animation.
+
+**Decision.**
+- **Soft dismiss.** `notifications.dismissed_at` (alembic/0018). `POST /notifications/{id}/dismiss` and `POST /notifications/clear-all` set it, and also mark the row read. The recipient filter used by every read path (list, count, badge) excludes dismissed rows, so the three cannot disagree. Rows are kept as the record of what was sent (support, disputes). Dismissing twice is a 200 with `updated: 0`. Someone else's id is a 404, as with mark-read (principle 6).
+- **Auto-read.** Opening the panel marks everything read after 800 ms. Rows that were unread keep a "new" highlight until the panel closes.
+- **Mobile panel.** It slides in from the right with one native-driver timing on `translateX`, honouring reduced motion. There is one close path. The list query stays warm (fetched on mount, `staleTime` 30 s, refetched when the badge rises), so opening shows rows at once. Rows are memoised. Each row has a clear button (48 dp), and the header has "Clear all" with a confirm.
+- **Web dropdown.** Same behaviour. Escape closes it. A refetch that was already in flight cannot bring back a row that was just cleared; the race was found by the new test.
+
+**Rejected.** Hard delete: it loses the record. Swipe-to-dismiss: it needs react-native-reanimated, which the app does not ship; a visible button is also easier to find and accessible.
+
+**Tests.** 6 unit in `test_notification_dismiss.py`; live `check_notifications.py` section 14b (87 checks); mobile `notification-panel.test.ts`; web `NotificationsDropdown.test.tsx`.
+
+---
+
+# ADR-055: Owner photos of the problem
+
+**Date.** 2026-11-21. **Status.** Accepted. Extends ADR-042.
+
+**Context.** A photo tells the mechanic what to bring: a flat tyre or a bent rim, a dead battery or a smoking engine. Drive Fixit lets the owner attach two photos to a request, and the product owner asked for the same.
+
+**Decision.**
+- **Reuse ADR-042.** `job_photos` gets a third stage, `issue`. A `user_id` uploader column is added and `partner_id` becomes nullable. A CHECK enforces exactly one uploader per stage (alembic/0019). Same private bucket, path and 60-second view links.
+- **Routes.** `POST /jobs/{id}/issue-photos` (owner, 201 ticket) and `POST /jobs/{id}/issue-photos/{photo_id}/confirm`.
+- **Limits.** At most 3 photos per request. Uploads are allowed while the job is `scheduled`, `requested`, `matching`, `assigned` or `partner_en_route`. Unfinished uploads count toward a cap of 6, so a client cannot mint upload URLs forever.
+- **Who sees them.** The owner, the partner who **accepted** the job, and staff (support, ops and super admin; each view is audited). An offered partner never sees them, because a photo can show a plate, a face or a home (follows ADR-017). They appear in `GET /jobs/{id}/safeguards` `photos[]` with `stage: "issue"`.
+- **Client.** Photos stay on the phone until the request exists, then upload one at a time. A failed photo never fails the request; the owner is told.
+- **Retention.** The hourly sweep (beside ADR-038's) deletes every job photo 90 days after the job ends, unless a dispute on it is open. Unconfirmed uploads are deleted after a day. Files are deleted before rows, so a storage failure retries next hour. This closes a gap: tow photos (ADR-042) had no retention either.
+
+**Rejected.** A separate table and bucket: two copies of the same upload, confirm and view code. Showing photos with the offer: better for the partner's decision, but it releases owner data before acceptance.
+
+**Tests.** 12 unit in `test_job_safeguards.py` (statuses, 404 for another owner, limits, a partner's tow photo cannot be confirmed as the owner's, an offered partner gets 404, retention order and retry). Live `check_job_lifecycle.py` (97 checks) uploads a real file to the bucket. It checks that an unassigned partner gets 404 and the assigned partner downloads the same bytes, that a new photo is refused once work starts, and that the run deletes its files.

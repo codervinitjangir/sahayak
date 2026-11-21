@@ -375,3 +375,101 @@ def test_open_off_app_reports_raise_a_critical_alert():
 
 def test_no_risk_no_new_alerts():
     assert _alerts().alerts == []
+
+
+# ---------- ADR-055: the owner's photos of the problem ----------
+
+def _photo_wiring(monkeypatch, wired, confirmed=0, rows=0):
+    from app.schemas.job_safeguards import OwnerPhotoUploadRequest
+    added = []
+    monkeypatch.setattr(svc.repo, "count_issue_photos", AsyncMock(return_value=(confirmed, rows)))
+    monkeypatch.setattr(svc.repo, "add_photo", AsyncMock(side_effect=lambda _db, **k: added.append(k)))
+    monkeypatch.setattr(svc.storage, "signed_upload_url", AsyncMock(return_value="https://u"))
+    return added, OwnerPhotoUploadRequest(content_type="image/jpeg")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["scheduled", "requested", "matching", "assigned", "partner_en_route"])
+async def test_owner_adds_an_issue_photo_before_work_starts(monkeypatch, wired, status):
+    wired.job = _job(status=status)
+    added, req = _photo_wiring(monkeypatch, wired)
+    ticket = await svc.start_owner_photo_upload(AsyncMock(), wired.job.id, OWNER, req)
+    assert ticket.upload_url == "https://u"
+    assert added[0]["stage"] == "issue" and added[0]["user_id"] == OWNER and added[0]["partner_id"] is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status,code", [("in_progress", ErrorCode.INVALID_STATUS_TRANSITION),
+                                         ("completed", ErrorCode.JOB_ALREADY_TERMINAL),
+                                         ("cancelled", ErrorCode.JOB_ALREADY_TERMINAL)])
+async def test_no_issue_photo_once_work_started_or_the_job_ended(monkeypatch, wired, status, code):
+    wired.job = _job(status=status)
+    _, req = _photo_wiring(monkeypatch, wired)
+    with pytest.raises(ConflictError) as exc:
+        await svc.start_owner_photo_upload(AsyncMock(), wired.job.id, OWNER, req)
+    assert exc.value.code == code
+
+
+@pytest.mark.asyncio
+async def test_someone_elses_job_is_a_404_not_a_403(monkeypatch, wired):
+    wired.job = _job(status="requested")
+    _, req = _photo_wiring(monkeypatch, wired)
+    with pytest.raises(NotFoundError) as exc:
+        await svc.start_owner_photo_upload(AsyncMock(), wired.job.id, uuid.uuid4(), req)
+    assert exc.value.code == ErrorCode.JOB_NOT_FOUND
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("confirmed,rows", [(3, 3), (1, 6)])
+async def test_three_photos_and_a_cap_on_unfinished_uploads(monkeypatch, wired, confirmed, rows):
+    wired.job = _job(status="requested")
+    added, req = _photo_wiring(monkeypatch, wired, confirmed, rows)
+    with pytest.raises(ConflictError):
+        await svc.start_owner_photo_upload(AsyncMock(), wired.job.id, OWNER, req)
+    assert added == []
+
+
+@pytest.mark.asyncio
+async def test_owner_cannot_confirm_a_partners_tow_photo(monkeypatch, wired):
+    wired.job = _job(status="partner_en_route")
+    tow = SimpleNamespace(id=uuid.uuid4(), stage="pickup", user_id=None, partner_id=PARTNER,
+                          file_url=None, content_type="image/jpeg", uploaded_at=None)
+    monkeypatch.setattr(svc.repo, "get_photo", AsyncMock(return_value=tow))
+    with pytest.raises(NotFoundError) as exc:
+        await svc.confirm_owner_photo(AsyncMock(), wired.job.id, tow.id, OWNER)
+    assert exc.value.code == ErrorCode.JOB_PHOTO_NOT_FOUND
+
+
+@pytest.mark.asyncio
+async def test_an_offered_partner_cannot_see_the_owners_photos(monkeypatch, wired):
+    """ADR-055 follows ADR-017: photos are released with the assignment, not the offer."""
+    wired.job = _job(status="matching")
+    wired.assignment = None  # an open offer is not a responsible assignment
+    with pytest.raises(NotFoundError):
+        await svc.photo_view_url(AsyncMock(), wired.job.id, uuid.uuid4(),
+                                 Identity(role="partner", local_id=PARTNER, auth_user_id="p"))
+
+
+@pytest.mark.asyncio
+async def test_photo_retention_deletes_files_before_rows(monkeypatch):
+    due = [SimpleNamespace(id=uuid.uuid4(), file_url="jobs/a/1.jpg"), SimpleNamespace(id=uuid.uuid4(), file_url=None)]
+    order = []
+    monkeypatch.setattr(svc.repo, "photos_past_retention", AsyncMock(return_value=due))
+    monkeypatch.setattr(svc.storage, "delete_objects", AsyncMock(side_effect=lambda p: order.append(("files", p))))
+    monkeypatch.setattr(svc.repo, "delete_photo_rows", AsyncMock(side_effect=lambda _db, ids: order.append(("rows", ids))))
+    db = AsyncMock()
+    assert await svc.sweep_photo_retention(db, now=NOW) == 2
+    assert order == [("files", ["jobs/a/1.jpg"]), ("rows", [d.id for d in due])]
+    kw = svc.repo.photos_past_retention.call_args.kwargs
+    assert kw["ended_before"] == NOW - timedelta(days=90) and kw["abandoned_before"] == NOW - timedelta(days=1)
+
+
+@pytest.mark.asyncio
+async def test_a_storage_failure_keeps_the_rows_for_the_next_sweep(monkeypatch):
+    monkeypatch.setattr(svc.repo, "photos_past_retention",
+                        AsyncMock(return_value=[SimpleNamespace(id=uuid.uuid4(), file_url="jobs/a/1.jpg")]))
+    monkeypatch.setattr(svc.storage, "delete_objects", AsyncMock(side_effect=svc.storage.StorageError("x")))
+    rows = AsyncMock()
+    monkeypatch.setattr(svc.repo, "delete_photo_rows", rows)
+    assert await svc.sweep_photo_retention(AsyncMock(), now=NOW) == 0
+    rows.assert_not_called()

@@ -8,7 +8,7 @@
 // and stays on the details sheet.
 import { useKeyboardHeight } from "../../../hooks/useKeyboardHeight";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { View, Text, ScrollView, Pressable, TextInput, StyleSheet, Linking, Animated, KeyboardAvoidingView, Platform, StatusBar } from "react-native";
+import { View, Text, ScrollView, Pressable, TextInput, StyleSheet, Linking, Animated, KeyboardAvoidingView, Platform, StatusBar, Keyboard, useWindowDimensions } from "react-native";
 import { showDialog } from "../../../components/ui/AppDialog";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -32,6 +32,10 @@ import { useJobStore } from "../../../store/jobStore";
 import AddVehicleModal from "../../account/AddVehicleModal";
 import { QK } from "../../shared/ownerData";
 import SlotPicker from "../components/SlotPicker";
+import ServiceTiles from "../components/ServiceTiles";
+import IssuePhotoPicker from "../photos/IssuePhotoPicker";
+import { OwnerIssuePhotos } from "../photos/JobPhotoStrip";
+import { uploadIssuePhotos, type PickedPhoto } from "../photos/issuePhotos";
 import i18n, { bookingError } from "../../../i18n";
 import { codeOf } from "../components/BookingActions";
 import { slotLabel, type ScheduleSlot } from "../schedule";
@@ -125,6 +129,13 @@ export default function OwnerHelpFlowScreen() {
   // ADR-050: book a time instead of help now.
   const [bookLater, setBookLater] = useState(Boolean(route.params?.bookLater));
   const [slot, setSlot] = useState<ScheduleSlot | null>(null);
+  const [leadMin, setLeadMin] = useState<number | null>(null);
+  // ADR-055: photos of the problem stay on the phone until the request exists.
+  const [photos, setPhotos] = useState<PickedPhoto[]>([]);
+  const [photoNote, setPhotoNote] = useState<string | null>(null);
+  const [showNote, setShowNote] = useState(false);
+  const [showLandmark, setShowLandmark] = useState(false);
+  const [vehiclePickerOpen, setVehiclePickerOpen] = useState(false);
   const [sending, setSending] = useState(false);
   // G11: resending the same request while there is no signal.
   const [retrying, setRetrying] = useState<{ attempt: number; secondsLeft: number } | null>(null);
@@ -149,6 +160,10 @@ export default function OwnerHelpFlowScreen() {
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState("");
   const keyboardHeight = useKeyboardHeight();
+  // The sheet never takes more than ~62% of the screen, so on a small phone the
+  // map, the back button and the sheet's own last row all stay on screen.
+  const { height: windowHeight } = useWindowDimensions();
+  const sheetMax = Math.min(520, Math.round(windowHeight * 0.62));
   const [rated, setRated] = useState(false);
   const [rateBusy, setRateBusy] = useState(false);
   const [rateError, setRateError] = useState<string | null>(null);
@@ -160,9 +175,11 @@ export default function OwnerHelpFlowScreen() {
     if (match) setServiceCode(match.code);
   }, [catalog, preferredType, serviceCode]);
 
-  // A single vehicle is selected for the owner; several are a choice.
+  // Preselect the vehicle Home shows as "your vehicle" (the first one). It is
+  // shown in the summary with a Change button, so the owner sees which car the
+  // request is for; in an emergency one step fewer matters more than a choice.
   useEffect(() => {
-    if (!vehicleId && vehicles.length === 1) setVehicleId(vehicles[0].id);
+    if (!vehicleId && vehicles.length > 0) setVehicleId(vehicles[0].id);
   }, [vehicles, vehicleId]);
 
   // ── Location ──
@@ -330,6 +347,9 @@ export default function OwnerHelpFlowScreen() {
 
   const send = async () => {
     if (!pickup || !serviceCode || !vehicleId) return;
+    // Close the keyboard before the notes field unmounts with the phase change;
+    // otherwise Android can drop the hide event and leave the sheet lifted.
+    Keyboard.dismiss();
     setSending(true);
     stopRetry.current = false;
     try {
@@ -350,6 +370,20 @@ export default function OwnerHelpFlowScreen() {
       });
       if (!created?.id) throw new Error("no id");
       idempotencyKey.current = newIdempotencyKey();
+      if (photos.length) {
+        // A failed photo never fails the request; the owner is told, and the
+        // request is already on its way.
+        const toSend = photos;
+        setPhotos([]);
+        void uploadIssuePhotos(created.id, toSend).then(({ failed }) => {
+          if (failed) {
+            setPhotoNote(failed === toSend.length
+              ? "Your photos could not be sent. Your request is on its way."
+              : "A photo could not be sent. Your request is on its way.");
+          }
+          void qc.invalidateQueries({ queryKey: ["safeguards", created.id] });
+        });
+      }
       if (created.status === "scheduled") {
         // ADR-050: nothing to track yet. Confirm and go back; Activity holds the booking.
         void qc.invalidateQueries({ queryKey: QK.jobs });
@@ -457,6 +491,8 @@ export default function OwnerHelpFlowScreen() {
 
   // ── Derived ──
   const mapLocation = pickup ?? MAP_FALLBACK;
+  const selectedVehicle = vehicles.find((v) => v.id === vehicleId) ?? null;
+
   const groups = useMemo(() => {
     const out: Record<string, MobileCatalogService[]> = {};
     for (const s of catalog) (out[s.category_name ?? "Services"] ||= []).push(s);
@@ -504,98 +540,163 @@ export default function OwnerHelpFlowScreen() {
         <View style={[styles.sheet, Shadows.sheet as object, { paddingBottom: Math.max(insets.bottom, Spacing.base) }]}>
           <View style={styles.grabber} />
 
-          {/* ───────── DETAILS ───────── */}
+          {/* ───────── DETAILS ─────────
+              Two flows, not one form with a toggle buried in it (Drive Fixit and
+              Urban Company both split them): "Get help now" is service tiles and
+              a big button over the map; "Book a service" leads with the date and
+              time. The action button is pinned below the scroll so it never
+              disappears under the fold. */}
           {phase === "details" && (
-            <ScrollView style={{ maxHeight: 520 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-              <Text style={styles.h1} accessibilityRole="header">
-                Request roadside help
-              </Text>
-
-              {/* 1. Pickup */}
-              <Text style={styles.label}>1. Pickup location</Text>
-              <View style={styles.pickupRow}>
-                <Ionicons name="location" size={22} color={pickup ? Colors.brand700 : Colors.textMuted} />
-                <Text style={styles.pickupText} numberOfLines={2}>
-                  {pickup ? addressLabel || `${pickup.latitude.toFixed(4)}, ${pickup.longitude.toFixed(4)}` : "Not set yet"}
-                </Text>
-                <Pressable onPress={() => void locate(true)} accessibilityRole="button" accessibilityLabel="Use my current location" style={styles.locBtn}>
-                  <Text style={styles.locBtnText}>{locating ? "…" : "Use GPS"}</Text>
-                </Pressable>
-              </View>
-              {locationNote ? <Text style={styles.note}>{locationNote}</Text> : pickup ? <Text style={styles.note}>{accuracyM != null ? `GPS accuracy about ${Math.round(accuracyM)} m. ` : ""}Drag the pin on the map to fine-tune.</Text> : null}
-              <TextInput
-                value={landmark}
-                onChangeText={setLandmark}
-                placeholder="Landmark (optional), e.g. near the blue petrol pump"
-                placeholderTextColor={Colors.textMuted}
-                accessibilityLabel="Landmark"
-                style={styles.input}
-              />
-
-              {/* 2. Service */}
-              <Text style={[styles.label, { marginTop: Spacing.lg }]}>2. What do you need?</Text>
-              {catalogState === "loading" ? (
-                <Skeleton height={48} />
-              ) : catalogState === "error" ? (
-                <ErrorState message="We could not load the list of services." onRetry={loadCatalog} />
-              ) : catalog.length === 0 ? (
-                <EmptyState icon="construct-outline" title="No services available" message="Please try again in a little while." />
-              ) : (
-                Object.entries(groups).map(([cat, items]) => (
-                  <View key={cat} style={{ marginBottom: Spacing.sm }}>
-                    <Text style={styles.group}>{cat}</Text>
-                    <View style={styles.chips}>
-                      {items.map((s) => (
-                        <Chip key={s.id} label={s.name} selected={serviceCode === s.code} onPress={() => setServiceCode(s.code)} />
-                      ))}
-                    </View>
+            <>
+              <ScrollView
+                style={{ maxHeight: Math.round(windowHeight * (bookLater ? 0.6 : 0.46)) }}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+              >
+                <View style={styles.headRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.h1} accessibilityRole="header">
+                      {bookLater ? i18n.t("booking.title") : "Roadside help"}
+                    </Text>
+                    <Text style={styles.headSub}>
+                      {bookLater ? i18n.t("booking.subtitle") : "We send your request to the best-matched verified partner nearby."}
+                    </Text>
                   </View>
-                ))
-              )}
-
-              {/* 3. Vehicle */}
-              <Text style={[styles.label, { marginTop: Spacing.lg }]}>3. Which vehicle?</Text>
-              {vehiclesState === "loading" ? (
-                <Skeleton height={48} />
-              ) : vehiclesState === "error" ? (
-                <ErrorState message="We could not load your vehicles." onRetry={loadVehicles} />
-              ) : (
-                <View style={styles.chips}>
-                  {vehicles.map((v) => (
-                    <Chip
-                      key={v.id}
-                      icon={v.vehicle_type === "two_wheeler" ? "bicycle-outline" : "car-outline"}
-                      label={`${v.make} ${v.model} · ${v.vehicle_number}`}
-                      selected={vehicleId === v.id}
-                      onPress={() => setVehicleId(v.id)}
-                    />
-                  ))}
-                  <Chip icon="add" label={vehicles.length === 0 ? "Add your vehicle" : "Add another"} onPress={() => setAddVehicleOpen(true)} />
+                  <Pressable
+                    onPress={() => {
+                      setBookLater(!bookLater);
+                      setSlot(null);
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={bookLater ? i18n.t("booking.helpNowLink") : i18n.t("booking.bookATime")}
+                    style={styles.modeLink}
+                  >
+                    <Ionicons name={bookLater ? "flash-outline" : "calendar-outline"} size={16} color={Colors.brand700} />
+                    <Text style={styles.modeLinkText}>{bookLater ? i18n.t("booking.helpNowLink") : i18n.t("booking.bookATime")}</Text>
+                  </Pressable>
                 </View>
-              )}
 
-              {/* When (ADR-050) */}
-              <Text style={[styles.label, { marginTop: Spacing.lg }]}>4. {i18n.t("booking.when")}</Text>
-              <View style={styles.chips}>
-                <Chip icon="flash-outline" label={i18n.t("booking.now")} selected={!bookLater} onPress={() => { setBookLater(false); setSlot(null); }} />
-                <Chip icon="calendar-outline" label={i18n.t("booking.bookATime")} selected={bookLater} onPress={() => setBookLater(true)} />
-              </View>
-              {bookLater ? <View style={{ marginTop: Spacing.sm }}><SlotPicker value={slot?.start ?? null} onChange={setSlot} /></View> : null}
+                {/* What */}
+                <Text style={styles.label}>What do you need?</Text>
+                {catalogState === "loading" ? (
+                  <Skeleton height={104} />
+                ) : catalogState === "error" ? (
+                  <ErrorState message="We could not load the list of services." onRetry={loadCatalog} />
+                ) : catalog.length === 0 ? (
+                  <EmptyState icon="construct-outline" title="No services available" message="Please try again in a little while." />
+                ) : (
+                  <ServiceTiles services={catalog} groupOf={(c) => CODE_GROUP[c]} value={serviceCode} onChange={setServiceCode} />
+                )}
 
-              {/* 4. Notes */}
-              <Text style={[styles.label, { marginTop: Spacing.lg }]}>5. Anything we should know? (optional)</Text>
-              <TextInput
-                value={notes}
-                onChangeText={setNotes}
-                placeholder="e.g. Left rear tyre is flat, hazards are on."
-                placeholderTextColor={Colors.textMuted}
-                multiline
-                accessibilityLabel="Notes"
-                style={[styles.input, { minHeight: 76, textAlignVertical: "top", paddingTop: 12 }]}
-              />
+                {/* When (ADR-050), booking only */}
+                {bookLater ? (
+                  <>
+                    <Text style={styles.label}>{i18n.t("booking.when")}</Text>
+                    <SlotPicker value={slot?.start ?? null} onChange={setSlot} onLeadMinutes={setLeadMin} />
+                  </>
+                ) : null}
 
-              <Text style={styles.priceNote}>Final price is confirmed when the job is completed.</Text>
-              <View style={{ marginTop: Spacing.md }}>
+                {/* Where and which vehicle */}
+                <Text style={styles.label}>{bookLater ? "Where and for which vehicle?" : "Where are you?"}</Text>
+                <View style={styles.summaryCard}>
+                  <View style={styles.summaryRow}>
+                    <Ionicons name="location" size={22} color={pickup ? Colors.brand700 : Colors.textMuted} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.pickupText} numberOfLines={2}>
+                        {pickup ? addressLabel || `${pickup.latitude.toFixed(4)}, ${pickup.longitude.toFixed(4)}` : "Pickup not set yet"}
+                      </Text>
+                      <Text style={styles.summarySub} numberOfLines={2}>
+                        {locationNote ?? (pickup ? `${accuracyM != null ? `GPS about ${Math.round(accuracyM)} m. ` : ""}Drag the pin to fine-tune.` : "Use GPS or drag the pin on the map.")}
+                      </Text>
+                    </View>
+                    <Pressable onPress={() => void locate(true)} accessibilityRole="button" accessibilityLabel="Use my current location" style={styles.locBtn}>
+                      <Text style={styles.locBtnText}>{locating ? "…" : "GPS"}</Text>
+                    </Pressable>
+                  </View>
+                  {showLandmark || landmark ? (
+                    <TextInput
+                      value={landmark}
+                      onChangeText={setLandmark}
+                      placeholder="Landmark, e.g. near the blue petrol pump"
+                      placeholderTextColor={Colors.textMuted}
+                      accessibilityLabel="Landmark"
+                      style={styles.input}
+                      autoFocus={showLandmark && !landmark}
+                    />
+                  ) : (
+                    <Pressable onPress={() => setShowLandmark(true)} accessibilityRole="button" style={styles.addLink}>
+                      <Ionicons name="add" size={18} color={Colors.brand700} />
+                      <Text style={styles.addLinkText}>Add a landmark</Text>
+                    </Pressable>
+                  )}
+
+                  <View style={styles.divider} />
+
+                  {vehiclesState === "loading" ? (
+                    <Skeleton height={48} />
+                  ) : vehiclesState === "error" ? (
+                    <ErrorState message="We could not load your vehicles." onRetry={loadVehicles} />
+                  ) : selectedVehicle && !vehiclePickerOpen ? (
+                    <View style={styles.summaryRow}>
+                      <Ionicons name={selectedVehicle.vehicle_type === "two_wheeler" ? "bicycle-outline" : "car-outline"} size={22} color={Colors.brand700} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.pickupText} numberOfLines={1}>{`${selectedVehicle.make} ${selectedVehicle.model}`}</Text>
+                        <Text style={styles.summarySub}>{selectedVehicle.vehicle_number}</Text>
+                      </View>
+                      <Pressable onPress={() => setVehiclePickerOpen(true)} accessibilityRole="button" accessibilityLabel="Change vehicle" style={styles.changeBtn}>
+                        <Text style={styles.changeText}>Change</Text>
+                      </Pressable>
+                    </View>
+                  ) : (
+                    <View style={styles.chips}>
+                      {vehicles.map((v) => (
+                        <Chip
+                          key={v.id}
+                          icon={v.vehicle_type === "two_wheeler" ? "bicycle-outline" : "car-outline"}
+                          label={`${v.make} ${v.model} · ${v.vehicle_number}`}
+                          selected={vehicleId === v.id}
+                          onPress={() => {
+                            setVehicleId(v.id);
+                            setVehiclePickerOpen(false);
+                          }}
+                        />
+                      ))}
+                      <Chip icon="add" label={vehicles.length === 0 ? "Add your vehicle" : "Add another"} onPress={() => setAddVehicleOpen(true)} />
+                    </View>
+                  )}
+                </View>
+
+                {/* Extras */}
+                <Text style={styles.label}>Show the partner (optional)</Text>
+                <IssuePhotoPicker photos={photos} onChange={setPhotos} />
+                {showNote || notes ? (
+                  <TextInput
+                    value={notes}
+                    onChangeText={setNotes}
+                    placeholder="e.g. Left rear tyre is flat, hazards are on."
+                    placeholderTextColor={Colors.textMuted}
+                    multiline
+                    accessibilityLabel="Notes"
+                    autoFocus={showNote && !notes}
+                    style={[styles.input, { minHeight: 76, textAlignVertical: "top", paddingTop: 12 }]}
+                  />
+                ) : (
+                  <Pressable onPress={() => setShowNote(true)} accessibilityRole="button" style={[styles.addLink, { marginTop: Spacing.sm }]}>
+                    <Ionicons name="create-outline" size={18} color={Colors.brand700} />
+                    <Text style={styles.addLinkText}>Add a note</Text>
+                  </Pressable>
+                )}
+                <View style={{ height: Spacing.base }} />
+              </ScrollView>
+
+              {/* Pinned footer */}
+              <View style={styles.footer}>
+                {bookLater && slot ? (
+                  <View style={styles.whenBar}>
+                    <Ionicons name="calendar-outline" size={20} color={Colors.brand700} />
+                    <Text style={styles.whenText}>{slotLabel(slot.start, slot.end)}</Text>
+                  </View>
+                ) : null}
                 {retrying ? (
                   <View style={styles.retryBox} accessibilityLiveRegion="polite">
                     <Ionicons name="cellular-outline" size={20} color={Colors.warning} />
@@ -608,24 +709,27 @@ export default function OwnerHelpFlowScreen() {
                   </View>
                 ) : null}
                 <Button
-                  label={bookLater ? (slot ? i18n.t("booking.bookSlot", { slot: slot.label }) : i18n.t("booking.bookThisTime")) : i18n.t("booking.requestNow")}
+                  label={bookLater ? (slot ? i18n.t("booking.confirm") : i18n.t("booking.pickATime")) : "Get help now"}
+                  variant={bookLater ? "primary" : "emergency"}
                   onPress={send}
                   loading={sending}
                   disabled={!canSend}
-                  icon={<Ionicons name={bookLater ? "calendar-outline" : "medkit-outline"} size={22} color="#fff" />}
+                  icon={<Ionicons name={bookLater ? "calendar-outline" : "flash"} size={22} color="#fff" />}
                 />
-                {!canSend && !sending ? (
-                  <Text style={styles.needs}>
-                    {!pickup ? "Set your pickup location" : !serviceCode ? "Choose what you need" : !vehicleId ? "Choose or add a vehicle" : "Pick a time"} to continue.
-                  </Text>
-                ) : null}
+                <Text style={styles.footNote}>
+                  {!canSend && !sending
+                    ? `${!serviceCode ? "Choose what you need" : bookLater && !slot ? "Pick a time" : !pickup ? "Set your pickup location" : "Choose or add a vehicle"} to continue.`
+                    : bookLater
+                      ? i18n.t("booking.leadNote", { min: leadMin ?? 45 })
+                      : "Final price is confirmed when the job is completed."}
+                </Text>
               </View>
-            </ScrollView>
+            </>
           )}
 
           {/* ───────── SEARCHING ───────── */}
           {phase === "searching" && (
-            <View>
+            <ScrollView style={{ maxHeight: sheetMax }} showsVerticalScrollIndicator={false}>
               <View style={styles.searchHead}>
                 <Pulse />
                 <View style={{ flex: 1 }}>
@@ -644,6 +748,8 @@ export default function OwnerHelpFlowScreen() {
                 </Text>
               ) : null}
               {pollFailed ? <Text style={styles.warn}>Connection is unstable. We will keep trying.</Text> : null}
+              {photoNote ? <Text style={styles.photoNote}>{photoNote}</Text> : null}
+              {job?.id ? <OwnerIssuePhotos jobId={job.id} /> : null}
               <Text style={styles.note}>You can leave this screen. Your request stays active and appears on Home.</Text>
               <View style={{ marginTop: Spacing.base, gap: Spacing.sm }}>
                 <Button label="Cancel request" variant="outline" onPress={cancel} loading={cancelling} />
@@ -651,12 +757,12 @@ export default function OwnerHelpFlowScreen() {
               <View style={{ marginTop: Spacing.base }}>
                 <SafetyActions jobId={job?.id} shareToken={job?.share_token} />
               </View>
-            </View>
+            </ScrollView>
           )}
 
           {/* ───────── MATCHED ───────── */}
           {phase === "matched" && job && (
-            <ScrollView style={{ maxHeight: 520 }} showsVerticalScrollIndicator={false}>
+            <ScrollView style={{ maxHeight: sheetMax }} showsVerticalScrollIndicator={false}>
               <View style={styles.matchedHead}>
                 <StatusChip status={job.status} />
                 {eta != null && job.status !== "in_progress" ? <Text style={styles.eta}>About {eta} min</Text> : null}
@@ -726,7 +832,7 @@ export default function OwnerHelpFlowScreen() {
 
           {/* ───────── DONE ───────── */}
           {phase === "done" && job && (
-            <ScrollView style={{ maxHeight: 520 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+            <ScrollView style={{ maxHeight: sheetMax }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
               {job.status === "completed" ? (
                 <>
                   <View style={styles.doneHead}>
@@ -897,6 +1003,23 @@ const styles = StyleSheet.create({
   starBtn: { width: 52, height: 52, alignItems: "center", justifyContent: "center" },
   thanks: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, marginTop: Spacing.sm },
   thanksText: { fontSize: Typography.fontSize.base, fontFamily: Typography.fontFamily.semiBold, color: Colors.success },
+  headRow: { flexDirection: "row", alignItems: "flex-start", gap: Spacing.sm },
+  headSub: { marginTop: 4, fontSize: Typography.fontSize.sm, color: Colors.textSecondary, fontFamily: Typography.fontFamily.regular, lineHeight: 20 },
+  modeLink: { flexDirection: "row", alignItems: "center", gap: 4, minHeight: 40, paddingHorizontal: 12, borderRadius: Radius.full, backgroundColor: Colors.brand700Muted, borderWidth: 1, borderColor: Colors.border },
+  modeLinkText: { fontSize: Typography.fontSize.xs, fontFamily: Typography.fontFamily.semiBold, color: Colors.brand700 },
+  summaryCard: { borderRadius: Radius.lg, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.surfaceWhite, padding: Spacing.md, gap: Spacing.sm },
+  summaryRow: { flexDirection: "row", alignItems: "center", gap: Spacing.md, minHeight: 48 },
+  summarySub: { marginTop: 2, fontSize: Typography.fontSize.xs, color: Colors.textSecondary, fontFamily: Typography.fontFamily.regular },
+  divider: { height: StyleSheet.hairlineWidth, backgroundColor: Colors.border, marginVertical: 2 },
+  addLink: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: 44, alignSelf: "flex-start" },
+  addLinkText: { fontSize: Typography.fontSize.sm, fontFamily: Typography.fontFamily.semiBold, color: Colors.brand700 },
+  changeBtn: { minHeight: 40, paddingHorizontal: 14, borderRadius: Radius.full, borderWidth: 1, borderColor: Colors.border, alignItems: "center", justifyContent: "center" },
+  changeText: { fontSize: Typography.fontSize.sm, fontFamily: Typography.fontFamily.semiBold, color: Colors.textPrimary },
+  footer: { paddingTop: Spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.border, marginHorizontal: -Spacing.lg, paddingHorizontal: Spacing.lg },
+  whenBar: { flexDirection: "row", alignItems: "center", gap: Spacing.sm, marginBottom: Spacing.sm },
+  whenText: { fontSize: Typography.fontSize.base, fontFamily: Typography.fontFamily.bold, color: Colors.textPrimary },
+  footNote: { marginTop: 8, textAlign: "center", fontSize: Typography.fontSize.xs, color: Colors.textSecondary, fontFamily: Typography.fontFamily.medium, lineHeight: 18 },
+  photoNote: { marginTop: Spacing.sm, fontSize: Typography.fontSize.sm, color: Colors.warning, fontFamily: Typography.fontFamily.medium },
   retryBox: { flexDirection: "row", alignItems: "center", gap: Spacing.sm, backgroundColor: Colors.warningLight, borderRadius: Radius.md, padding: Spacing.md, marginBottom: Spacing.sm },
   retryText: { flex: 1, fontFamily: Typography.fontFamily.medium, fontSize: 15, color: Colors.textPrimary },
   retryStop: { minHeight: 48, minWidth: 48, alignItems: "center", justifyContent: "center", paddingHorizontal: Spacing.sm },

@@ -9,6 +9,7 @@ from app.api import API_V1_PREFIX
 from app.config.database import get_db
 from app.schemas.common import ApiResponse, envelope
 from app.schemas.job_safeguards import (
+    OwnerPhotoUploadRequest,
     JobPhotoItem,
     JobPhotoViewUrl,
     JobSafeguardsResponse,
@@ -80,3 +81,21 @@ async def confirm_photo(job_id: uuid.UUID, photo_id: uuid.UUID, identity: Identi
 async def photo_view_url(job_id: uuid.UUID, photo_id: uuid.UUID, identity: Identity = Depends(get_current_identity),
                          db: AsyncSession = Depends(get_db)) -> ApiResponse[JobPhotoViewUrl]:
     return envelope(await svc.photo_view_url(db, job_id, photo_id, identity))
+
+
+@router.post("/{job_id}/issue-photos", response_model=ApiResponse[PhotoUploadTicket],
+             status_code=status.HTTP_201_CREATED, summary="Owner starts a photo of the problem (ADR-055)")
+async def start_owner_photo_upload(job_id: uuid.UUID, payload: OwnerPhotoUploadRequest,
+                                   identity: Identity = Depends(require_user),
+                                   db: AsyncSession = Depends(get_db)) -> ApiResponse[PhotoUploadTicket]:
+    """Up to 3 per request, before work starts. PUT the file to upload_url, then confirm.
+    The partner sees them once they have accepted the job (ADR-017), never with the offer."""
+    return envelope(await svc.start_owner_photo_upload(db, job_id, identity.local_id, payload))
+
+
+@router.post("/{job_id}/issue-photos/{photo_id}/confirm", response_model=ApiResponse[JobPhotoItem],
+             summary="Owner confirms an uploaded photo of the problem (ADR-055)")
+async def confirm_owner_photo(job_id: uuid.UUID, photo_id: uuid.UUID, identity: Identity = Depends(require_user),
+                              db: AsyncSession = Depends(get_db)) -> ApiResponse[JobPhotoItem]:
+    return envelope(await svc.confirm_owner_photo(db, job_id, photo_id, identity.local_id))
+

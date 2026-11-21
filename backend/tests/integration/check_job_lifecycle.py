@@ -188,6 +188,21 @@ def purge() -> None:
         "DELETE FROM job_assignments WHERE job_id IN "
         "(SELECT id FROM jobs WHERE issue_description LIKE %(tag)s)", {"tag": JOB_TAG + "%"},
     )
+    paths = [r["file_url"] for r in rows(
+        "SELECT file_url FROM job_photos WHERE file_url IS NOT NULL AND job_id IN "
+        "(SELECT id FROM jobs WHERE issue_description LIKE %(tag)s)", {"tag": JOB_TAG + "%"})]
+    if paths:
+        import asyncio as _aio
+        from app.utils import storage as _storage
+        try:
+            _aio.run(_storage.delete_objects(paths))
+        except RuntimeError:  # already inside the event loop: run it on a fresh thread
+            import threading
+            t = threading.Thread(target=lambda: _aio.run(_storage.delete_objects(paths)))
+            t.start()
+            t.join()
+    q.execute("DELETE FROM job_photos WHERE job_id IN (SELECT id FROM jobs WHERE issue_description LIKE %(tag)s)",
+              {"tag": JOB_TAG + "%"})
     q.execute("DELETE FROM jobs WHERE issue_description LIKE %(tag)s", {"tag": JOB_TAG + "%"})
     q.execute(
         "DELETE FROM partner_services WHERE partner_id IN "
@@ -391,6 +406,43 @@ async def main() -> None:
         count, _ = await load_of(partners[worker]["id"])
         check("accepting put the partner's active job count at 1", count == 1, f"count={count}")
 
+        # ADR-055: the owner's photo of the problem, through the real bucket.
+        other = next(k for k in partners if k != worker)
+        r = await c.post(f"/api/v1/jobs/{job_a}/issue-photos", json={"content_type": "image/jpeg"},
+                         headers=hdr(partners[worker]["token"]))
+        check("a partner cannot start an owner photo (403)", r.status_code == 403, f"HTTP {r.status_code}")
+        r = await c.post(f"/api/v1/jobs/{job_a}/issue-photos", json={"content_type": "image/jpeg"},
+                         headers=hdr(owner_token))
+        check("the owner starts a photo of the problem (201)", r.status_code == 201,
+              f"HTTP {r.status_code} {r.text[:200]}")
+        ticket = data_of(r) if r.status_code == 201 else {}
+        photo_id = ticket.get("photo_id", "00000000-0000-0000-0000-000000000000")
+        r = await c.post(f"/api/v1/jobs/{job_a}/issue-photos/{photo_id}/confirm", headers=hdr(owner_token))
+        check("confirming before the file arrives is 409 JOB_PHOTO_NOT_UPLOADED",
+              r.status_code == 409 and code_of(r) == "JOB_PHOTO_NOT_UPLOADED", f"HTTP {r.status_code} {code_of(r)}")
+        jpeg = bytes([0xFF, 0xD8, 0xFF, 0xE0]) + bytes(64) + bytes([0xFF, 0xD9])
+        async with httpx.AsyncClient(timeout=30) as raw:
+            up = await raw.put(ticket.get("upload_url", "http://invalid"), content=jpeg,
+                               headers={"Content-Type": "image/jpeg"}) if ticket else None
+        check("the file PUTs to the signed URL", up is not None and up.status_code in (200, 201),
+              f"HTTP {up.status_code if up else None} {up.text[:120] if up else ''}")
+        r = await c.post(f"/api/v1/jobs/{job_a}/issue-photos/{photo_id}/confirm", headers=hdr(owner_token))
+        check("then confirm is 200 with stage 'issue'",
+              r.status_code == 200 and (data_of(r) or {}).get("stage") == "issue", f"HTTP {r.status_code} {r.text[:200]}")
+        r = await c.get(f"/api/v1/jobs/{job_a}/safeguards", headers=hdr(partners[worker]["token"]))
+        listed = [p for p in (data_of(r) or {}).get("photos", []) if p.get("stage") == "issue"]
+        check("the assigned partner sees the photo listed", r.status_code == 200 and len(listed) == 1,
+              f"HTTP {r.status_code} {listed}")
+        r = await c.get(f"/api/v1/jobs/{job_a}/photos/{photo_id}/url", headers=hdr(partners[worker]["token"]))
+        view = (data_of(r) or {}).get("url") if r.status_code == 200 else None
+        async with httpx.AsyncClient(timeout=30) as raw:
+            got = await raw.get(view) if view else None
+        check("and opens it through a 60-second link", got is not None and got.content == jpeg,
+              f"HTTP {r.status_code} {got.status_code if got else None}")
+        r = await c.get(f"/api/v1/jobs/{job_a}/photos/{photo_id}/url", headers=hdr(partners[other]["token"]))
+        check("a partner who did not take the job gets 404 JOB_NOT_FOUND",
+              r.status_code == 404 and code_of(r) == "JOB_NOT_FOUND", f"HTTP {r.status_code} {code_of(r)}")
+
         r = await c.post(f"/api/v1/jobs/{job_a}/status",
                          json={"status": "partner_en_route"}, headers=hdr(token))
         check("assigned → partner_en_route accepted", r.status_code == 200,
@@ -423,6 +475,10 @@ async def main() -> None:
                          json={"start_code": start_code_of(job_a)}, headers=hdr(token))
         check("partner_en_route → in_progress accepted via /start", r.status_code == 200,
               f"HTTP {r.status_code} {code_of(r)}")
+        r = await c.post(f"/api/v1/jobs/{job_a}/issue-photos", json={"content_type": "image/jpeg"},
+                         headers=hdr(owner_token))
+        check("once work has started the owner cannot add a photo (409)",
+              r.status_code == 409 and code_of(r) == "INVALID_STATUS_TRANSITION", f"HTTP {r.status_code} {code_of(r)}")
 
         # ADR-039: above estimate + 10% the owner must approve first, through the API.
         r = await c.post(f"/api/v1/jobs/{job_a}/status",

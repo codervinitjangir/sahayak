@@ -28,6 +28,7 @@ from app.schemas.job_safeguards import (
     JobPhotoItem,
     JobPhotoViewUrl,
     JobSafeguardsResponse,
+    OwnerPhotoUploadRequest,
     PhotoUploadRequest,
     PhotoUploadTicket,
     PriceRevisionCreate,
@@ -384,6 +385,72 @@ async def confirm_photo(db: AsyncSession, job_id: uuid.UUID, photo_id: uuid.UUID
     return JobPhotoItem(id=photo.id, stage=photo.stage, uploaded_at=photo.uploaded_at)
 
 
+# --- owner photos of the problem (ADR-055) -----------------------------------------
+
+# The owner adds photos while help is still on its way: before a partner starts
+# work there is something to show; after that the partner is looking at it.
+OWNER_PHOTO_STATUSES = ("scheduled", "requested", "matching", "assigned", "partner_en_route")
+OWNER_PHOTOS_PER_JOB = 3
+# Unconfirmed rows count toward this, so a client cannot mint upload URLs forever;
+# it is twice the limit so one failed upload per photo can still be retried.
+OWNER_PHOTO_ROWS_CAP = 2 * OWNER_PHOTOS_PER_JOB
+
+
+async def _owned_job_or_404(db: AsyncSession, job_id: uuid.UUID, user_id: uuid.UUID):
+    job = await _job_or_404(db, job_id)
+    if job.user_id != user_id:
+        raise NotFoundError(ErrorCode.JOB_NOT_FOUND, "Job not found")  # principle 6
+    return job
+
+
+async def start_owner_photo_upload(
+    db: AsyncSession, job_id: uuid.UUID, user_id: uuid.UUID, req: OwnerPhotoUploadRequest
+) -> PhotoUploadTicket:
+    job = await _owned_job_or_404(db, job_id, user_id)
+    if job.status not in OWNER_PHOTO_STATUSES:
+        raise ConflictError(ErrorCode.JOB_ALREADY_TERMINAL if job.status in ("completed", "cancelled")
+                            else ErrorCode.INVALID_STATUS_TRANSITION,
+                            f"Photos can be added before work starts, not when the job is {job.status}")
+    confirmed, rows = await repo.count_issue_photos(db, job.id)
+    if confirmed >= OWNER_PHOTOS_PER_JOB or rows >= OWNER_PHOTO_ROWS_CAP:
+        raise ConflictError(ErrorCode.FIELD_NOT_APPLICABLE,
+                            f"A request can hold at most {OWNER_PHOTOS_PER_JOB} photos")
+    photo_id = uuid.uuid4()
+    path = photo_path(job.id, photo_id, req.content_type)
+    try:
+        url = await storage.signed_upload_url(path)
+    except storage.StorageError as exc:
+        await db.rollback()
+        raise _unavailable(exc) from exc
+    await repo.add_photo(db, id=photo_id, job_id=job.id, partner_id=None, user_id=user_id,
+                         stage="issue", content_type=req.content_type)
+    await db.commit()
+    return PhotoUploadTicket(photo_id=photo_id, upload_url=url, max_bytes=PHOTO_MAX_BYTES)
+
+
+async def confirm_owner_photo(db: AsyncSession, job_id: uuid.UUID, photo_id: uuid.UUID,
+                              user_id: uuid.UUID) -> JobPhotoItem:
+    job = await _owned_job_or_404(db, job_id, user_id)
+    photo = await repo.get_photo(db, job.id, photo_id)
+    if photo is None or photo.stage != "issue" or photo.user_id != user_id:
+        raise NotFoundError(ErrorCode.JOB_PHOTO_NOT_FOUND, "Photo not found")
+    if photo.file_url is None:
+        path = photo_path(job.id, photo.id, photo.content_type)
+        try:
+            info = await storage.object_info(path)
+        except storage.StorageError as exc:
+            await db.rollback()
+            raise _unavailable(exc) from exc
+        if info is None:
+            raise ConflictError(ErrorCode.JOB_PHOTO_NOT_UPLOADED, "The photo has not been uploaded yet.")
+        photo.file_url = path
+        photo.uploaded_at = datetime.now(timezone.utc)
+        await db.flush()
+        await db.commit()
+        log_event("job_photo_uploaded", job_id=str(job_id), stage="issue", outcome="success")
+    return JobPhotoItem(id=photo.id, stage=photo.stage, uploaded_at=photo.uploaded_at)
+
+
 async def photo_view_url(db: AsyncSession, job_id: uuid.UUID, photo_id: uuid.UUID, identity: Identity) -> JobPhotoViewUrl:
     """A 60-second link. Owner and assigned partner see their own job; staff views are audited."""
     job = await _job_or_404(db, job_id)
@@ -403,3 +470,34 @@ async def photo_view_url(db: AsyncSession, job_id: uuid.UUID, photo_id: uuid.UUI
             target_id=job.id, details={"photo_id": str(photo_id), "stage": stage})
         await db.commit()
     return JobPhotoViewUrl(url=url, expires_in=storage.VIEW_URL_TTL_S)
+
+
+# --- retention (ADR-055) --------------------------------------------------------------
+
+# Job photos can show a face, a plate or a home. Kept 90 days after the job ends
+# (the same window as rejected partner documents, ADR-038), longer only while a
+# dispute on the job is open; unconfirmed uploads go after a day.
+PHOTO_RETENTION_AFTER_JOB = timedelta(days=90)
+PHOTO_ABANDONED_AFTER = timedelta(days=1)
+
+
+async def sweep_photo_retention(db: AsyncSession, now: Optional[datetime] = None) -> int:
+    """Delete expired photo files, then their rows. Returns rows removed."""
+    now = now or datetime.now(timezone.utc)
+    due = await repo.photos_past_retention(db, ended_before=now - PHOTO_RETENTION_AFTER_JOB,
+                                           abandoned_before=now - PHOTO_ABANDONED_AFTER)
+    if not due:
+        return 0
+    paths = [p.file_url for p in due if p.file_url]
+    try:
+        await storage.delete_objects(paths)
+    except storage.StorageError as exc:
+        # Rows stay, so the next sweep tries the same files again.
+        await db.rollback()
+        log_event("job_photo_retention", level=logging.ERROR, error_type=type(exc).__name__, outcome="failure")
+        return 0
+    await repo.delete_photo_rows(db, [p.id for p in due])
+    await db.commit()
+    log_event("job_photo_retention", deleted=len(due), files=len(paths), outcome="success")
+    return len(due)
+

@@ -23,7 +23,6 @@ import PartnerHomeScreen from "../features/partner/screens/PartnerHomeScreen";
 import IncomingOfferScreen from "../features/partner/screens/IncomingOfferScreen";
 import ActiveJobScreen from "../features/partner/screens/ActiveJobScreen";
 import PartnerJobDoneScreen from "../features/partner/screens/PartnerJobDoneScreen";
-import PartnerReviewsScreen from "../features/partner/screens/PartnerReviewsScreen";
 import OwnerSettingsScreen from "../features/account/screens/OwnerSettingsScreen";
 import ReceiptScreen from "../features/shared/ReceiptScreen";
 import ReportProblemScreen from "../features/activity/screens/ReportProblemScreen";
@@ -84,7 +83,6 @@ function PartnerNavigator() {
         component={PartnerJobDoneScreen}
         options={{ animation: "fade", gestureEnabled: false }}
       />
-      <PartnerStack.Screen name="PartnerReviews" component={PartnerReviewsScreen} />
       <PartnerStack.Screen name="PartnerServices" component={PartnerServicesScreen} />
       <PartnerStack.Screen name="PartnerVerification" component={PartnerVerificationScreen} />
       <PartnerStack.Screen name="PartnerSettings" component={PartnerSettingsScreen} />

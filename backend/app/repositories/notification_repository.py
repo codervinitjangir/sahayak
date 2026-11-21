@@ -47,6 +47,8 @@ def _recipient_filter(recipient_type: str, recipient_id: uuid.UUID):
     return (
         Notification.recipient_type == recipient_type,
         Notification.recipient_id == recipient_id,
+        # ADR-054: a cleared notification is gone from every read path at once.
+        Notification.dismissed_at.is_(None),
     )
 
 
@@ -227,3 +229,36 @@ async def mark_all_read(
         .execution_options(synchronize_session=False)
     )
     return int(result.rowcount or 0)
+
+
+async def dismiss(
+    db: AsyncSession,
+    *,
+    recipient_type: str,
+    recipient_id: uuid.UUID,
+    notification_id: Optional[uuid.UUID] = None,
+) -> int:
+    """Clear one notification, or all of them when notification_id is None
+    (ADR-054). Sets dismissed_at and is_read; returns rows changed. Flush only."""
+    query = update(Notification).where(*_recipient_filter(recipient_type, recipient_id))
+    if notification_id is not None:
+        query = query.where(Notification.id == notification_id)
+    result = await db.execute(
+        query.values(dismissed_at=func.now(), is_read=True).execution_options(synchronize_session=False)
+    )
+    return int(result.rowcount or 0)
+
+
+async def ever_existed_for_recipient(
+    db: AsyncSession, *, notification_id: uuid.UUID, recipient_type: str, recipient_id: uuid.UUID
+) -> bool:
+    """Like exists_for_recipient but counts cleared rows too, so clearing twice is a 200."""
+    result = await db.execute(
+        select(func.count()).select_from(Notification).where(
+            Notification.id == notification_id,
+            Notification.recipient_type == recipient_type,
+            Notification.recipient_id == recipient_id,
+        )
+    )
+    return int(result.scalar_one()) > 0
+

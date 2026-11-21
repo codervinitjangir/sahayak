@@ -1,16 +1,5 @@
 import { apiClient } from "./client";
 import type { BackendJob } from "./jobs";
-
-/** One owner's rating of this partner. Owner shown as first name + initial only. */
-export interface MobilePartnerReview {
-  job_id: string;
-  service_name: string;
-  rating: number;
-  comment: string | null;
-  owner_display_name: string;
-  created_at: string;
-}
-
 export interface MobilePartnerTrustStats {
   partner_id: string;
   verification_status: string;
@@ -94,14 +83,6 @@ export const partnerApi = {
   /** Replace the services this partner offers (POST /partners/{id}/services). */
   setServices: (partnerId: string, serviceCodes: string[]) =>
     apiClient.post(`/partners/${partnerId}/services`, { service_codes: serviceCodes }).then((r) => r.data),
-
-  /** Each owner rating behind the average, newest first (GET /partners/me/reviews). */
-  getReviews: (limit = 50, offset = 0) =>
-    apiClient
-      .get<{ items: MobilePartnerReview[]; limit: number; offset: number }>("/partners/me/reviews", {
-        params: { limit, offset },
-      })
-      .then((r) => r.data),
 
   /** Required documents and their review status (ADR-038). */
   getDocuments: () =>

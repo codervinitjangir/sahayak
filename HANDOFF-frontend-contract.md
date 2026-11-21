@@ -2542,3 +2542,24 @@ Route fixtures re-exported for web and mobile (88 routes).
 **Privacy notice.** `PRIVACY_ITEMS` now lists the booked time, location during an accepted job while another app is open, and the Care membership.
 
 Route fixtures re-exported for web and mobile (94 routes).
+
+## 28. Ratings privacy, clearing notifications, owner photos, request redesign (ADR-053 to ADR-055, 2026-11-21)
+
+**Ratings (ADR-053).** `GET /partners/me/reviews` is removed. `GET /jobs/{id}/ratings` returns only the caller's own rating (staff see all). Partners show `rating_avg` / `rating_count` only.
+
+**Notifications (ADR-054).**
+- `POST /api/v1/notifications/{id}/dismiss` and `POST /api/v1/notifications/clear-all` return `{updated, unread_count}`. Dismissed rows never come back in the list, the count or the badge. A repeat is `updated: 0`. Another account's id is `404 NOTIFICATION_NOT_FOUND`.
+- Clients mark all read about 800 ms after the panel opens and keep a "new" highlight for that visit. Each row has a clear button, and the header has Clear all.
+
+**Owner photos (ADR-055).**
+- `POST /api/v1/jobs/{id}/issue-photos` `{content_type: image/jpeg|png|webp}` → 201 `{photo_id, upload_url, max_bytes}`. PUT the file to `upload_url`, then `POST /api/v1/jobs/{id}/issue-photos/{photo_id}/confirm`.
+- Limits: 3 per request, before work starts. Errors: `409 JOB_PHOTO_NOT_UPLOADED`, `409 FIELD_NOT_APPLICABLE` (limit), `409 INVALID_STATUS_TRANSITION` / `JOB_ALREADY_TERMINAL`, `404 JOB_NOT_FOUND` (not your job).
+- Listed in `GET /jobs/{id}/safeguards` `photos[]` with `stage: "issue"`. Opened through `GET /jobs/{id}/photos/{photo_id}/url` by the owner, the partner who accepted, and staff. An offered partner gets 404.
+- Deleted 90 days after the job ends, unless a dispute is open.
+
+**Mobile request screen.**
+- "Roadside help" (urgent) and "Book a service" are two layouts. Each has service tiles with catalogue prices, a location and vehicle summary with Change, optional photos and note, and a pinned action button. Booking adds day cards, a slot grid and a summary bar.
+- The first vehicle is preselected.
+- The keyboard-height hook now also checks for a focused input. `Keyboard.isVisible()` only reports the last event, so a missed hide event used to leave the sheet floating until the screen was reopened.
+
+Route fixtures re-exported (97 routes).

@@ -506,12 +506,20 @@ def test_both_ratings_close_both_slots(wiring):
     wiring["state"]["ratings"] = [
         FakeRating(rated_by="partner"), FakeRating(rated_by="user"),
     ]
-    _, (_, ratings, owner_can_rate) = read(OWNER)
-    _, (_, _, partner_can_rate) = read(PARTNER)
+    _, (_, owner_sees, owner_can_rate) = read(OWNER)
+    _, (_, partner_sees, partner_can_rate) = read(PARTNER)
 
-    assert len(ratings) == 2
+    # ADR-053: each side sees only the rating it wrote, never the one about it.
+    assert [r.rated_by for r in owner_sees] == ["user"]
+    assert [r.rated_by for r in partner_sees] == ["partner"]
     assert owner_can_rate is False
     assert partner_can_rate is False
+
+
+def test_a_partner_never_reads_the_owners_rating_of_them(wiring):
+    wiring["state"]["ratings"] = [FakeRating(rated_by="user")]
+    _, (_, partner_sees, partner_can_rate) = read(PARTNER)
+    assert partner_sees == [] and partner_can_rate is True
 
 
 def test_reading_is_authorised_the_same_way_as_writing(wiring):
