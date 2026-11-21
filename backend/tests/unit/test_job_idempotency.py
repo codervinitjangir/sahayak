@@ -215,3 +215,21 @@ def test_integrity_error_without_a_recoverable_job_is_a_500(wiring):
 
     assert exc.value.code == ErrorCode.INTERNAL_ERROR
     assert session.rolled_back is True
+
+
+# ADR-056: car wash is booking only.
+def test_a_booking_only_service_is_refused_without_a_slot(wiring, monkeypatch):
+    class WashService(FakeService):
+        code = "exterior_wash"
+        booking_only = True
+
+    async def wash(db, code):
+        return WashService()
+
+    monkeypatch.setattr(job_repository, "get_service_by_code", wash)
+    session = FakeSession()
+    with pytest.raises(AppError) as exc:
+        _create(session, key=None)
+    assert exc.value.code == ErrorCode.BOOKING_REQUIRED
+    assert wiring["created_keys"] == []
+    assert session.committed is False

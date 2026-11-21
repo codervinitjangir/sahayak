@@ -257,6 +257,10 @@ class ErrorCode:
     # Reschedule only while the booking is still waiting for its slot.
     JOB_NOT_SCHEDULED = "JOB_NOT_SCHEDULED"
     TOO_MANY_SCHEDULED_JOBS = "TOO_MANY_SCHEDULED_JOBS"
+    # ADR-056: car wash and other booking-only services cannot be requested "now".
+    BOOKING_REQUIRED = "BOOKING_REQUIRED"
+    # ADR-057/058: chat and owner location need an accepted partner on a live job.
+    JOB_NOT_ACTIVE = "JOB_NOT_ACTIVE"
 
     # Sahayak Care (ADR-051)
     CARE_PLAN_NOT_FOUND = "CARE_PLAN_NOT_FOUND"

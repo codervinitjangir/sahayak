@@ -296,6 +296,17 @@ async def create_job(
         )
         raise BadRequestError(ErrorCode.INVALID_SERVICE_CODE, "Invalid service_code")
 
+    if getattr(service, "booking_only", False) and payload.scheduled_for is None:
+        log_event(
+            "job_created",
+            level=logging.WARNING,
+            actor_role="owner",
+            service_code=payload.service_code,
+            outcome="rejected_booking_required",
+            duration_ms=round((time.perf_counter() - started) * 1000, 2),
+        )
+        raise BadRequestError(ErrorCode.BOOKING_REQUIRED, "This service can only be booked for a time slot.")
+
     pickup_location = _build_pickup_point(payload.pickup_lat, payload.pickup_lng)
     estimated_price = base_price_for(service) or DEFAULT_BASE_PRICE
 

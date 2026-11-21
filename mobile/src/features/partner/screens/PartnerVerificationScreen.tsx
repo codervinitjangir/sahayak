@@ -83,7 +83,7 @@ export default function PartnerVerificationScreen() {
             </View>
           </View>
 
-          {docs && !verified ? <DocumentsCard docs={docs} onChange={setDocs} /> : null}
+          {docs && (!verified || docs.documents.some((d) => d.status !== "approved")) ? <DocumentsCard docs={docs} onChange={setDocs} /> : null}
 
           <Card>
             <Text style={styles.h2}>What happens next</Text>

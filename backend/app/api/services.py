@@ -71,6 +71,7 @@ async def list_services(
             code=service.code,
             name=service.name,
             requires_vehicle_equipment=bool(service.requires_vehicle_equipment),
+            booking_only=bool(getattr(service, "booking_only", False)),
             base_price=base_price_for(service),
             category_id=service.category_id,
             category_code=category.code if category else None,

@@ -40,6 +40,8 @@ const alert = vi.fn();
 // ADR-055 photos: the picker is native; the upload is checked through its module.
 vi.mock("expo-image-picker", () => ({}));
 vi.mock("../../src/features/jobs/photos/JobPhotoStrip", () => ({ default: () => null, OwnerIssuePhotos: () => null }));
+vi.mock("../../src/features/jobs/contact/JobChatModal", () => ({ default: () => null }));
+vi.mock("../../src/features/jobs/contact/useJobContact", () => ({ isActiveStatus: () => false, useShareOwnerLocation: () => false, useJobChat: () => ({ items: [], canSend: false, error: false, send: async () => undefined, unread: 0 }) }));
 const uploadIssuePhotos = vi.fn(async () => ({ sent: 1, failed: 0 }));
 vi.mock("../../src/features/jobs/photos/issuePhotos", () => ({ MAX_ISSUE_PHOTOS: 3, uploadIssuePhotos: (...a: unknown[]) => uploadIssuePhotos(...(a as [])) }));
 

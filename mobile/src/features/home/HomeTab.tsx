@@ -110,6 +110,21 @@ export default function HomeTab({
         <View style={styles.stripGo}><Ionicons name="arrow-forward" size={20} color="#065F46" /></View>
       </Pressable>
 
+      {/* ADR-056: car wash, booking only */}
+      <Pressable
+        onPress={() => nav.navigate("OwnerFlow", { initialStep: "service_select", serviceType: "wash", bookLater: true })}
+        accessibilityRole="button"
+        accessibilityLabel="Book a car wash at your place"
+        style={({ pressed }) => [styles.strip, styles.washStrip, pressed && { opacity: 0.9 }]}
+      >
+        <View style={styles.stripArt}><Ionicons name="water-outline" size={32} color="#0369A1" /></View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.stripKicker}>At your doorstep</Text>
+          <Text style={styles.stripTitle}>Book a car wash</Text>
+        </View>
+        <View style={styles.stripGo}><Ionicons name="arrow-forward" size={20} color="#065F46" /></View>
+      </Pressable>
+
       {/* ADR-050: book a time instead of help now */}
       <Pressable
         onPress={() => nav.navigate("OwnerFlow", { initialStep: "service_select", bookLater: true })}
@@ -235,6 +250,7 @@ const styles = StyleSheet.create({
   tileLabel: { fontSize: Typography.fontSize.base, fontFamily: Typography.fontFamily.semiBold, color: Colors.textPrimary, textAlign: "center" },
   strip: { flexDirection: "row", alignItems: "center", gap: Spacing.md, padding: Spacing.md, borderRadius: Radius.xl, backgroundColor: "#047857" },
   bookStrip: { backgroundColor: "#1E3A8A" },
+  washStrip: { backgroundColor: "#0C4A6E" },
   stripArt: { width: 72, height: 60, borderRadius: Radius.lg, overflow: "hidden", backgroundColor: "#ECFDF5", alignItems: "center", justifyContent: "center" },
   stripKicker: { color: "#A7F3D0", fontSize: Typography.fontSize.sm, fontFamily: Typography.fontFamily.medium },
   stripTitle: { color: "#fff", fontSize: Typography.fontSize["2xl"], fontFamily: Typography.fontFamily.bold },

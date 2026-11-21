@@ -25,6 +25,8 @@
     "GET /api/v1/jobs/schedule-slots",
     "GET /api/v1/jobs/{job_id}",
     "GET /api/v1/jobs/{job_id}/disputes",
+    "GET /api/v1/jobs/{job_id}/messages",
+    "GET /api/v1/jobs/{job_id}/owner-location",
     "GET /api/v1/jobs/{job_id}/partner-location",
     "GET /api/v1/jobs/{job_id}/photos/{photo_id}/url",
     "GET /api/v1/jobs/{job_id}/public-tracking",
@@ -74,6 +76,7 @@
     "POST /api/v1/jobs/{job_id}/disputes",
     "POST /api/v1/jobs/{job_id}/issue-photos",
     "POST /api/v1/jobs/{job_id}/issue-photos/{photo_id}/confirm",
+    "POST /api/v1/jobs/{job_id}/messages",
     "POST /api/v1/jobs/{job_id}/photos",
     "POST /api/v1/jobs/{job_id}/photos/{photo_id}/confirm",
     "POST /api/v1/jobs/{job_id}/price-revisions",
@@ -97,6 +100,7 @@
     "POST /api/v1/payments/{payment_id}/confirm",
     "POST /api/v1/users",
     "POST /api/v1/users/{user_id}/link-auth",
-    "POST /api/v1/vehicles"
+    "POST /api/v1/vehicles",
+    "PUT /api/v1/jobs/{job_id}/owner-location"
   ]
 }

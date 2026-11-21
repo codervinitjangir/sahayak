@@ -1,5 +1,6 @@
 from app.models.dispute import JobDispute
 from app.models.job_trust import JobPhoto, JobPriceRevision
+from app.models.job_message import JobMessage
 from app.models.user import User
 from app.models.vehicle import Vehicle
 from app.models.service import ServiceCategory, Service
@@ -38,4 +39,5 @@ __all__ = [
     "JobDispute",
     "JobPriceRevision",
     "JobPhoto",
+    "JobMessage",
 ]

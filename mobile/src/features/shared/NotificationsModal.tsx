@@ -131,18 +131,15 @@ export default function NotificationsModal({ visible, onClose }: { visible: bool
   }, []);
   React.useEffect(() => {
     if (visible) {
+      // The slide starts in the Modal's onShow (below): starting it here ran the
+      // first frames while Android was still creating the Modal window, which is
+      // the stutter owners saw on opening.
       shownRef.current = true;
       setShown(true);
-      Animated.timing(anim, {
-        toValue: 1,
-        duration: reduceMotion ? 0 : 220,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }).start();
     } else if (shownRef.current) {
       Animated.timing(anim, {
         toValue: 0,
-        duration: reduceMotion ? 0 : 180,
+        duration: reduceMotion ? 0 : 160,
         easing: Easing.in(Easing.cubic),
         useNativeDriver: true,
       }).start(() => {
@@ -168,9 +165,23 @@ export default function NotificationsModal({ visible, onClose }: { visible: bool
 
   // Show what is cached at once, and fetch anything newer underneath.
   const { refetch } = list;
+  const [settled, setSettled] = React.useState(false);
+  const slideIn = React.useCallback(() => {
+    Animated.timing(anim, {
+      toValue: 1,
+      duration: reduceMotion ? 0 : 220,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start(() => setSettled(true));
+  }, [anim, reduceMotion]);
   React.useEffect(() => {
-    if (visible) void refetch();
-  }, [visible, refetch]);
+    if (!visible) setSettled(false);
+  }, [visible]);
+  // Refetch only once the slide has finished, so new rows never re-render the
+  // list mid-animation.
+  React.useEffect(() => {
+    if (visible && settled) void refetch();
+  }, [visible, settled, refetch]);
   // Keep the closed panel warm: when the badge (already polled by the home
   // screen, same query) goes up, fetch the list then, not when the bell is tapped.
   const badge = useUnreadCount().data ?? 0;
@@ -184,7 +195,7 @@ export default function NotificationsModal({ visible, onClose }: { visible: bool
   // visit, even after the auto-read below has cleared the badge.
   const [newIds, setNewIds] = React.useState<Set<string>>(() => new Set());
   React.useEffect(() => {
-    if (!visible || !list.data) return;
+    if (!visible || !settled || !list.data) return;
     const fresh = unreadIds(list.data);
     if (fresh.size === 0) return;
     setNewIds((prev) => new Set([...prev, ...fresh]));
@@ -200,7 +211,7 @@ export default function NotificationsModal({ visible, onClose }: { visible: bool
         .catch(() => undefined); // a convenience; the badge simply stays
     }, AUTO_READ_DELAY_MS);
     return () => clearTimeout(t);
-  }, [visible, list.data, qc, setList]);
+  }, [visible, settled, list.data, qc, setList]);
   React.useEffect(() => {
     if (!shown) setNewIds(new Set());
   }, [shown]);
@@ -256,9 +267,8 @@ export default function NotificationsModal({ visible, onClose }: { visible: bool
   const newCount = newIds.size;
 
   return (
-    <Modal visible={shown} transparent animationType="none" statusBarTranslucent onRequestClose={onClose}>
+    <Modal visible={shown} transparent animationType="none" statusBarTranslucent onShow={slideIn} onRequestClose={onClose}>
       <Animated.View
-        renderToHardwareTextureAndroid
         style={[
           styles.root,
           { paddingTop: insets.top },

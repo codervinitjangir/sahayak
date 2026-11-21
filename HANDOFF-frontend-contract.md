@@ -2563,3 +2563,10 @@ Route fixtures re-exported for web and mobile (94 routes).
 - The keyboard-height hook now also checks for a focused input. `Keyboard.isVisible()` only reports the last event, so a missed hide event used to leave the sheet floating until the screen was reopened.
 
 Route fixtures re-exported (97 routes).
+
+## 29. Car wash, owner live location, job chat (2026-11-21, ADR-056 to ADR-058)
+
+- `GET /services` items now carry `booking_only`. For those, `POST /jobs` without `scheduled_for` returns 400 `BOOKING_REQUIRED`. New wash codes: `exterior_wash`, `interior_exterior_wash`, `deep_clean` (category `washing`).
+- `PUT /jobs/{id}/owner-location` `{lat, lng, accuracy_m?}` (owner) and `GET /jobs/{id}/owner-location` (owner or accepted partner) return `{lat, lng, accuracy_m, updated_at, sharing}`. 409 `JOB_NOT_ACTIVE` outside assigned / partner_en_route / in_progress.
+- `GET /jobs/{id}/messages` returns `{items: [{id, sender: "owner"|"partner", mine, body, created_at}], can_send}`. `POST /jobs/{id}/messages` `{body}` (1 to 500 characters) returns 201 with the item. 409 `JOB_NOT_ACTIVE` once the job has ended. New notification event: `new_message`.
+- Web does not use any of these yet.

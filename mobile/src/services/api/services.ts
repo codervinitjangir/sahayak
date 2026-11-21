@@ -5,6 +5,8 @@ export interface MobileCatalogService {
   code: string;
   name: string;
   requires_vehicle_equipment: boolean;
+  /** ADR-056: car wash. POST /jobs refuses it without scheduled_for. */
+  booking_only?: boolean;
   base_price: number | null;
   category_id: number;
   category_code: string | null;
