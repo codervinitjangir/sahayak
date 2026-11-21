@@ -240,6 +240,7 @@ export const JobStatusConfig = {
   complete: { label: "Completed", color: Colors.success, bg: Colors.successLight },
   cancelled: { label: "Cancelled", color: Colors.error, bg: Colors.errorLight },
   no_match_found: { label: "No partner found", color: Colors.warning, bg: Colors.warningLight },
+  scheduled: { label: "Booked", color: Colors.info, bg: Colors.infoLight },
 } as const;
 
 // ─── Hero header (shared screen template) ─────────────────────────────────────

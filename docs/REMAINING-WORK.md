@@ -207,3 +207,27 @@ New items for section A (need a person):
 - Create a Slack, Google Chat or Discord incoming webhook for the ops channel and set
   `STAFF_ALERT_WEBHOOK_URL` on Render; leave it blank and nothing is sent.
 - Lawyer review of the new privacy table and `docs/DPDP-READINESS.md` (part of R3).
+
+## L. 2026-11-21 fourth pass: the large code items from PLAN section 2.3A
+
+Built (HANDOFF section 27):
+- Zone supply gaps on the staff board (ADR-048).
+- Partner location during an accepted job through an Android foreground service (ADR-049; **not yet run on a phone**).
+- Scheduled jobs in two-hour India-time slots (ADR-050, alembic/0016).
+- Sahayak Care memberships granted by staff, with call-outs counted from jobs and **no billing** (ADR-051, alembic/0017).
+- Translation groundwork with i18next, English only, covering the booking flow and Care (ADR-052).
+
+Both migrations are already applied to production (Supabase MCP). Apply them to staging with `backend/tools/apply_migration.py` before the next staging test. The privacy table now lists the booked time, location during a job while another app is open, and the Care membership.
+
+Regression after this pass:
+- Backend: 746 unit, ruff clean.
+- Clients: web 190, mobile 107, both typechecks clean, web build clean.
+- Live: all twenty-two harnesses, 1065 of 1067 checks. New are `check_scheduled_jobs` (26, `+91900000083x`) and `check_care` (26, `+91900000079x`); auth_flow 77 and user_registration 36 ran with uvicorn up.
+- The two failures are again admin_analytics counting the real job `1123e9be` (section H).
+- `check_notifications` needed `scheduled_job_starting` in its list of events that other harnesses write. This was a harness expectation, not a code bug.
+
+New items for section A (need a person):
+- Rebuild the APK (`expo-task-manager` is native) and test job location on a real phone, including one with an aggressive battery saver. Then fill the Play Console foreground-service declaration (`FOREGROUND_SERVICE_LOCATION`) with a short video.
+- Decide what a covered job costs once billing exists: zero, a cap, or call-out free with parts paid (ADR-051, waits on G3).
+- Hindi copy from a translator, then add `hi.json`, device-language detection and a plural check on Android (ADR-052).
+

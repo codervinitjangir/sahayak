@@ -176,6 +176,20 @@ async def main():
         r = await c.get("/api/v1/admin/jobs")
         check("an owner cannot read the board", r.status_code == 403, f"HTTP {r.status_code}")
 
+        section("1a. Zone supply gap (ADR-048) under asyncpg")
+        from datetime import datetime as _dt, timezone as _tz
+        from app.services import admin_ops_service
+        async with AsyncSessionLocal() as db:
+            zone = await admin_ops_service.zone_alert(db, _dt.now(_tz.utc), partners_on_duty=1)
+        cell = admin_ops_service._centre(admin_ops_service._cell(23.03, 72.56))
+        hit = next((z for z in (zone.zones if zone else []) if (z.latitude, z.longitude) == cell), None)
+        check("the area of the job that found nobody is reported, by its cell centre",
+              hit is not None and hit.no_match >= 1 and hit.partners_nearby == 0, f"{zone}")
+        current["identity"] = as_admin
+        r = await c.get("/api/v1/admin/alerts")
+        check("GET /admin/alerts is still 200 with the zone check in it", r.status_code == 200,
+              f"HTTP {r.status_code} {r.text[:160]}")
+
         section("1b. Device push tokens (ADR-026)")
         from app.services import push_service
         sent: list = []

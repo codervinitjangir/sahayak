@@ -10,6 +10,7 @@ export interface StatusPillProps {
 
 const STATUS_CONFIG: Record<string, { label: string; variant: 'default' | 'brand' | 'success' | 'warning' | 'danger' | 'neutral' }> = {
   // Job statuses
+  scheduled: { label: 'Booked', variant: 'default' },
   requested: { label: 'Requested', variant: 'warning' },
   matching: { label: 'Finding Partner', variant: 'warning' },
   assigned: { label: 'Partner Assigned', variant: 'default' },

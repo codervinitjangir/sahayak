@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  BellRing, CalendarClock, Check, ChevronDown, GraduationCap, Home, KeyRound, Truck, Wallet, type LucideIcon,
+  BellRing, Check, ChevronDown, GraduationCap, Home, KeyRound, Truck, Wallet, type LucideIcon,
 } from 'lucide-react';
 import { Badge } from './ui/Badge';
 import { featureInterestService, type ComingSoonFeature } from '../services/featureInterest.service';
@@ -17,15 +17,8 @@ export interface ComingSoonItem {
 // Announced only. None of these exist yet (docs/FUTURE-ROADMAP.md), so the cards
 // carry no price, slot or booking action. "Notify me" records interest (ADR-035).
 // B2B is deliberately not here: it stays in the roadmap until it has its own panel.
+// Scheduled service shipped on 2026-11-21 (ADR-050) and left this list.
 export const OWNER_COMING_SOON: readonly ComingSoonItem[] = [
-  {
-    id: 'scheduled',
-    icon: CalendarClock,
-    title: 'Scheduled service',
-    blurb: 'Book a time that suits you, like a Sunday morning.',
-    detail:
-      'Pick a date and a time slot instead of asking for help right now. Good for a puncture in your basement parking or a routine check.',
-  },
   {
     id: 'doorstep',
     icon: Home,

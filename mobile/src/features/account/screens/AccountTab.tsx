@@ -17,6 +17,7 @@ import { WEB_URL } from "../../../constants";
 import { useMyVehicles } from "../../shared/ownerData";
 import { vehiclesApi } from "../../../services/api/vehicles";
 import { usersApi, type OwnerProfile } from "../../../services/api/users";
+import CareCard from "../../care/CareCard";
 import EditProfileModal from "../EditProfileModal";
 import EditVehicleModal from "../EditVehicleModal";
 import BrandLogo from "../../../components/brand/BrandLogo";
@@ -32,6 +33,7 @@ export default function AccountTab({ onAddVehicle, editSignal = 0 }: { onAddVehi
   // The real profile from the backend; the auth store only knows a placeholder
   // name after a session restore.
   const me = useQuery({ queryKey: ["owner", "me"], queryFn: usersApi.getMe });
+  const care = useQuery({ queryKey: ["owner", "care"], queryFn: usersApi.getMyCare });
   const [editOpen, setEditOpen] = useState(false);
   // The hero's "Edit profile" button bumps editSignal.
   useEffect(() => {
@@ -128,6 +130,8 @@ export default function AccountTab({ onAddVehicle, editSignal = 0 }: { onAddVehi
           </Pressable>
         ))}
       </View>
+
+      <CareCard care={care.data} />
 
       {/* My Vehicles Garage Table */}
       <View>

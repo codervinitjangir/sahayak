@@ -29,6 +29,9 @@ from app.schemas.common import ApiResponse, ErrorResponse, envelope
 from app.utils import rate_limit
 from app.utils.rate_limit import limit_public_tracking
 from app.schemas.job import (
+    JobRescheduleRequest,
+    ScheduleSlot,
+    ScheduleSlotsResponse,
     JobCancelRequest,
     JobHistoryResponse,
     JobCancelResponse,
@@ -117,6 +120,42 @@ async def create_job(
     job = await job_service.create_job(
         db, payload, identity.local_id, idempotency_key=idempotency_key
     )
+    return envelope(job)
+
+
+@router.get(
+    "/schedule-slots",
+    response_model=ApiResponse[ScheduleSlotsResponse],
+    summary="Slots an owner can book (ADR-050)",
+)
+async def schedule_slots(identity: Identity = Depends(require_user)) -> ApiResponse[ScheduleSlotsResponse]:
+    """Two-hour slots in India time, from 2 hours ahead to 7 days ahead. Pass a
+    slot's `start` as `scheduled_for` on POST /jobs."""
+    from datetime import datetime as _dt, timezone as _tz
+    from app.services import schedule_service
+    slots = schedule_service.available_slots(_dt.now(_tz.utc))
+    return envelope(ScheduleSlotsResponse(
+        slots=[ScheduleSlot(start=s, end=e, label=schedule_service.slot_label(s, e)) for s, e in slots],
+        release_lead_min=int(schedule_service.RELEASE_LEAD.total_seconds() // 60),
+    ))
+
+
+@router.patch(
+    "/{job_id}/schedule",
+    response_model=ApiResponse[JobResponse],
+    summary="Move a booking to another slot (ADR-050)",
+)
+async def reschedule_job(
+    job_id: uuid.UUID,
+    payload: JobRescheduleRequest,
+    identity: Identity = Depends(require_user),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[JobResponse]:
+    """Owner only, while the job is still 'scheduled' (409 JOB_NOT_SCHEDULED once
+    matching has started). 400 SLOT_NOT_AVAILABLE for a slot not on offer. To call
+    a booking off, use POST /jobs/{job_id}/cancel: it is free until it is released."""
+    from app.services import schedule_service
+    job = await schedule_service.reschedule(db, job_id, identity.local_id, payload.scheduled_for)
     return envelope(job)
 
 

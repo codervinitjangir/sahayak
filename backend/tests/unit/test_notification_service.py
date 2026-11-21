@@ -226,6 +226,8 @@ def test_every_message_is_reachable():
         # ADR-038 amendment: emitted by the retention sweep.
         "document_expiring",
         "document_expired",
+        # ADR-050: emitted by schedule_service when a booking is released.
+        "scheduled_job_starting",
     }
     assert set(NOTIFICATION_EVENTS) == reachable
 

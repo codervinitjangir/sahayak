@@ -1,4 +1,5 @@
 import { apiClient } from "./client";
+import type { MyCare } from "../../features/care/care";
 
 export interface RegisteredUser {
   id: string;
@@ -22,6 +23,9 @@ export const usersApi = {
   /** Edit name / email. Send email: null to clear it. 400 USER_ALREADY_EXISTS if the email is taken. */
   updateMe: (body: { name?: string; email?: string | null }) =>
     apiClient.patch<OwnerProfile>("/users/me", body).then((r) => r.data),
+
+  /** Sahayak Care membership in force, if any (ADR-051). */
+  getMyCare: () => apiClient.get<MyCare>("/users/me/care").then((r) => r.data),
 
   /** Everything Sahayak stores about the owner, as JSON (G10). */
   exportMe: () => apiClient.get<Record<string, unknown>>("/users/me/export").then((r) => r.data),

@@ -133,6 +133,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const authToken = get().token;
     set({ user: null, token: null, isAuthenticated: false });
     void clearCachedUser();
+    // ADR-049: never keep sharing a signed-out partner's position.
+    void import("../features/partner/jobLocationTracking")
+      .then((m) => m.stopJobTracking())
+      .catch(() => undefined);
     // Drop this device's push token first (it needs the old access token), then
     // end the Supabase session, or the subscription below restores the token.
     void import("../services/push")

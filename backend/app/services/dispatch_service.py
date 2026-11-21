@@ -1250,6 +1250,8 @@ async def list_open_offers(
                 issue_description=row.issue_description,
                 price_estimate=row.price_estimate,
                 requested_at=row.requested_at,
+                scheduled_for=row.scheduled_for,
+                slot_end=row.slot_end,
             ),
         )
         for row in rows

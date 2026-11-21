@@ -52,6 +52,8 @@ class AdminUserItem(BaseModel):
     has_login: bool
     suspended_at: Optional[datetime] = None
     suspension_reason: Optional[str] = None
+    # ADR-051: end of the Sahayak Care membership in force, or null.
+    care_until: Optional[datetime] = None
 
 
 class AdminUserListResponse(BaseModel):
@@ -85,16 +87,30 @@ class AdminAuditListResponse(BaseModel):
     offset: int
 
 
+class AdminZoneGap(BaseModel):
+    """ADR-048: an area with recent requests and no verified partner on duty in reach.
+
+    The point is the centre of a grid cell (about 5 km), never a pickup address."""
+
+    latitude: float
+    longitude: float
+    requests: int = Field(..., description="Requests from this area in the window, any status.")
+    no_match: int = Field(..., description="Of those, how many found no partner.")
+    partners_nearby: int = 0
+
+
 class AdminAlert(BaseModel):
     """One condition staff should look at now. Computed on read, never stored."""
 
-    code: str = Field(..., description="STUCK_JOBS | HIGH_NO_MATCH_RATE | NO_PARTNERS_ON_DUTY | LOW_PARTNERS_ON_DUTY | PARTNER_CANCELS_AFTER_START | PARTNER_STARTS_WITHOUT_GPS | PARTNER_OFTEN_LATE | OFF_APP_PAYMENT_REPORTS")
+    code: str = Field(..., description="STUCK_JOBS | HIGH_NO_MATCH_RATE | NO_PARTNERS_ON_DUTY | LOW_PARTNERS_ON_DUTY | PARTNER_CANCELS_AFTER_START | PARTNER_STARTS_WITHOUT_GPS | PARTNER_OFTEN_LATE | OFF_APP_PAYMENT_REPORTS | ZONE_SUPPLY_GAP")
     severity: str = Field(..., description="'critical' or 'warning'")
     message: str
     count: int = 0
     job_ids: list[uuid.UUID] = Field(default_factory=list, description="For STUCK_JOBS: oldest first, at most 20.")
     partner_ids: list[uuid.UUID] = Field(
         default_factory=list, description="For the ADR-043 partner flags: the partners to review, at most 20.")
+    zones: list[AdminZoneGap] = Field(
+        default_factory=list, description="For ZONE_SUPPLY_GAP: the uncovered areas, busiest first, at most 20.")
 
 
 class AdminAlertsResponse(BaseModel):

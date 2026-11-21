@@ -49,6 +49,8 @@ from app.schemas.user import (
     UserRegistrationResponse,
 )
 from app.services import auth_service, user_service
+from app.services import care_service
+from app.schemas.care import MyCareResponse
 from app.services.auth_service import TokenClaims
 from app.services.auth_service import Identity
 from app.utils.auth import get_token_claims, require_user
@@ -155,6 +157,14 @@ async def update_my_profile(
         email_set="email" in payload.model_fields_set,
     )
     return envelope(UserMeResponse.model_validate(user))
+
+
+@router.get("/me/care", response_model=ApiResponse[MyCareResponse], summary="Your Sahayak Care membership")
+async def read_my_care(
+    identity: Identity = Depends(require_user), db: AsyncSession = Depends(get_db)
+) -> ApiResponse[MyCareResponse]:
+    """ADR-051. `membership` is null when none is in force."""
+    return envelope(await care_service.my_care(db, identity.local_id))
 
 
 @router.get("/me/export", summary="Download everything Sahayak stores about you (JSON)")

@@ -114,12 +114,15 @@ async def photos_required(db: AsyncSession, job) -> bool:
     return bool(service is not None and getattr(service, "requires_vehicle_equipment", False))
 
 
-def overdue_at(assignment) -> Optional[datetime]:
+def overdue_at(assignment, job=None) -> Optional[datetime]:
     accepted = getattr(assignment, "accepted_at", None)
     if accepted is None:
         return None
     eta = timedelta(minutes=assignment.estimated_arrival_min or DEFAULT_ETA_MIN)
-    return accepted + max(2 * eta, eta + OVERDUE_GRACE, OVERDUE_FLOOR)
+    # ADR-050: a partner who accepts a booking early is due at the slot, not now.
+    slot = getattr(job, "scheduled_for", None) if job is not None else None
+    start = max(accepted, slot) if slot is not None else accepted
+    return start + max(2 * eta, eta + OVERDUE_GRACE, OVERDUE_FLOOR)
 
 
 # --- completion gate (called by job_service.transition_job_status under the job lock)
@@ -234,7 +237,7 @@ async def get_safeguards(db: AsyncSession, job_id: uuid.UUID, identity: Identity
     available_at, can_swap = None, False
     if job.status in SWAPPABLE_STATUSES:
         assignment = await job_repository.get_responsible_assignment(db, job.id)
-        available_at = overdue_at(assignment) if assignment is not None else None
+        available_at = overdue_at(assignment, job) if assignment is not None else None
         now = now or datetime.now(timezone.utc)
         can_swap = viewer == "owner" and available_at is not None and now >= available_at
     return JobSafeguardsResponse(
@@ -276,7 +279,7 @@ async def request_new_partner(
         await db.rollback()
         raise ConflictError(ErrorCode.JOB_NOT_REASSIGNABLE,
                             f"A job that is {status_now} cannot be moved to another partner")
-    due = overdue_at(accepted)
+    due = overdue_at(accepted, job)
     now = now or datetime.now(timezone.utc)
     if due is None or now < due:
         await db.rollback()

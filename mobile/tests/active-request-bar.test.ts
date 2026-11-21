@@ -58,3 +58,10 @@ describe("partner formatters", () => {
     expect(firstNameFor(null)).toBeNull();
   });
 });
+
+describe("pickBarJob and bookings (ADR-050)", () => {
+  it("an upcoming booking never shows as a live request", () => {
+    expect(pickBarJob([job("b", "scheduled")], new Set(), NOW)).toBeNull();
+    expect(pickBarJob([job("b", "scheduled"), job("l", "matching")], new Set(), NOW)?.job.id).toBe("l");
+  });
+});

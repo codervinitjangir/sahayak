@@ -132,9 +132,14 @@ async def export_rows(db: AsyncSession, user_id: uuid.UUID) -> dict:
         select(Notification).where(Notification.recipient_type == "user")
         .where(Notification.recipient_id == user_id).order_by(Notification.sent_at.desc())
     )).scalars().all()
+    from app.models.care import CareMembership
+    care = (await db.execute(
+        select(CareMembership).where(CareMembership.user_id == user_id).order_by(CareMembership.starts_at.desc())
+    )).scalars().all()
     return {
         "vehicles": vehicles, "jobs": jobs, "history": history,
         "payments": payments, "ratings": ratings, "notifications": notifications,
+        "care_memberships": care,
     }
 
 

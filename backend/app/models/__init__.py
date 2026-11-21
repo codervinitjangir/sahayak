@@ -8,6 +8,7 @@ from app.models.admin_audit import AdminAuditLog
 from app.models.admin_invite import AdminInvite  # noqa: F401
 from app.models.device_push_token import DevicePushToken
 from app.models.feature_interest import FeatureInterest  # noqa: F401
+from app.models.care import CareMembership, CarePlan  # noqa: F401
 from app.models.partner import (
     Partner, PartnerService, PartnerEquipment, PartnerDocument
 )

@@ -130,6 +130,7 @@ def test_a_sweep_expires_orphaned_requests(monkeypatch):
 
     monkeypatch.setattr(dispatch_repository, "get_expired_offer_ids", empty)
     monkeypatch.setattr(dispatch_repository, "get_searchable_job_ids", empty)
+    monkeypatch.setattr(dispatch_repository, "get_due_scheduled_job_ids", _no_due)
     monkeypatch.setattr(dispatch_repository, "get_orphaned_requested_job_ids", orphans)
     monkeypatch.setattr(dispatch_service, "expire_orphaned_request", expire)
 
@@ -155,3 +156,7 @@ def test_an_old_no_match_job_is_not_a_stuck_job():
     (alert,) = r.alerts
     assert alert.job_ids == [recent]
     assert r.live_jobs == 1, "an ended search is not a live job"
+
+
+async def _no_due(_db, **_k):
+    return []

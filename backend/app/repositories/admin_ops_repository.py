@@ -182,12 +182,14 @@ async def live_jobs_with_status_age(
     The last change is the newest job_status_history row. A job with no history
     row (should not exist, principle 4) falls back to requested_at in the service.
     """
-    last_change = func.max(JobStatusHistory.changed_at)
+    # ADR-050: for a booking, the clock starts at the slot (GREATEST skips NULLs),
+    # so a partner who accepted early and waits for 10:00 is not "stuck".
+    last_change = func.greatest(func.max(JobStatusHistory.changed_at), Job.scheduled_for)
     result = await db.execute(
         select(Job.id, Job.status, Job.requested_at, last_change)
         .outerjoin(JobStatusHistory, JobStatusHistory.job_id == Job.id)
         .where(Job.status.in_(tuple(statuses)))
-        .group_by(Job.id, Job.status, Job.requested_at)
+        .group_by(Job.id, Job.status, Job.requested_at, Job.scheduled_for)
         .order_by(Job.requested_at)
         .limit(limit)
     )
@@ -197,7 +199,9 @@ async def live_jobs_with_status_age(
 async def job_status_counts_since(db: AsyncSession, since: datetime) -> dict[str, int]:
     """How many jobs requested since `since` are in each status now."""
     result = await db.execute(
-        select(Job.status, func.count()).where(Job.requested_at >= since).group_by(Job.status)
+        select(Job.status, func.count())
+        .where(Job.requested_at >= since, Job.status != "scheduled")   # ADR-050: not a request yet
+        .group_by(Job.status)
     )
     return {status: int(n) for status, n in result.all()}
 
@@ -260,3 +264,36 @@ async def open_off_app_reports(db: AsyncSession) -> int:
         select(func.count()).select_from(JobDispute)
         .where(JobDispute.reason == "off_app_payment", JobDispute.status == "open"))
     return int(result.scalar_one() or 0)
+
+
+# --- ADR-048: zone supply gaps ---------------------------------------------------
+
+async def demand_points_since(db: AsyncSession, since: datetime, *, limit: int = 2000) -> list[tuple[str, float, float]]:
+    """(status, latitude, longitude) of every job requested since `since`.
+
+    ST_Y is the latitude and ST_X the longitude (PostGIS stores x=lng, y=lat);
+    the cast to geometry is needed because ST_X/ST_Y are not defined on geography.
+    """
+    from geoalchemy2 import Geometry
+    from sqlalchemy import cast
+
+    point = cast(Job.pickup_location, Geometry)
+    result = await db.execute(
+        select(Job.status, func.ST_Y(point), func.ST_X(point))
+        .where(Job.requested_at >= since, Job.status != "scheduled")
+        .order_by(Job.requested_at.desc())
+        .limit(limit)
+    )
+    return [(s, float(lat), float(lng)) for s, lat, lng in result.all()]
+
+
+async def on_duty_partner_ids(db: AsyncSession) -> set[uuid.UUID]:
+    """Verified, not suspended, not deleted partners with the duty switch on."""
+    result = await db.execute(
+        select(Partner.id).where(
+            Partner.verification_status == "verified",
+            Partner.is_available.is_(True),
+            Partner.deleted_at.is_(None),
+        )
+    )
+    return {row[0] for row in result.all()}

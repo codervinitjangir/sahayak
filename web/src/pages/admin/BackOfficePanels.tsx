@@ -143,6 +143,23 @@ export const AlertsStrip: React.FC = () => {
               Partners to review (Partners tab): {a.partner_ids!.map((id) => id.slice(0, 8)).join(', ')}
             </span>
           )}
+          {(a.zones?.length ?? 0) > 0 && (
+            <ul className="mt-1 space-y-0.5 text-xs font-normal">
+              {a.zones!.map((z) => (
+                <li key={`${z.latitude},${z.longitude}`}>
+                  <a
+                    className="underline"
+                    target="_blank"
+                    rel="noreferrer"
+                    href={`https://www.google.com/maps/search/?api=1&query=${z.latitude},${z.longitude}`}
+                  >
+                    Area near {z.latitude.toFixed(2)}, {z.longitude.toFixed(2)}
+                  </a>
+                  : {z.requests} {z.requests === 1 ? 'request' : 'requests'}, {z.no_match} found nobody
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       ))}
       <p className="text-xs text-[#475569]">
@@ -328,12 +345,23 @@ export const OwnersPanel: React.FC = () => {
   const [q, setQ] = useState('');
   const [offset, setOffset] = useState(0);
   const [target, setTarget] = useState<AdminUserItem | null>(null);
+  const [careTarget, setCareTarget] = useState<{ user: AdminUserItem; grant: boolean } | null>(null);
 
   const users = useQuery({
     queryKey: ['admin', 'users', q, offset],
     queryFn: () => adminService.listUsers({ q: q.trim() || undefined, limit: PAGE, offset }),
     placeholderData: keepPreviousData,
   });
+  const care = useMutation({
+    mutationFn: ({ id, grant, reason }: { id: string; grant: boolean; reason: string }) =>
+      grant ? adminService.grantCare(id, reason) : adminService.revokeCare(id, reason),
+    onSuccess: () => {
+      setCareTarget(null);
+      void qc.invalidateQueries({ queryKey: ['admin', 'users'] });
+      void qc.invalidateQueries({ queryKey: ['admin', 'audit'] });
+    },
+  });
+
   const suspend = useMutation({
     mutationFn: ({ id, suspended, reason }: { id: string; suspended: boolean; reason?: string }) =>
       adminService.setUserSuspension(id, suspended, reason),
@@ -381,8 +409,12 @@ export const OwnersPanel: React.FC = () => {
                       <span className="text-emerald-700">{u.has_login ? 'Active' : 'No login yet'}</span>
                     )}
                     {u.suspension_reason && <div className="text-xs text-slate-500">{u.suspension_reason}</div>}
+                    {u.care_until && <div className="text-xs text-emerald-700">Care until {when(u.care_until)}</div>}
                   </td>
-                  <td className="px-3 py-2 text-right">
+                  <td className="px-3 py-2 text-right space-x-2 whitespace-nowrap">
+                    <Button size="sm" variant="outline" onClick={() => { care.reset(); setCareTarget({ user: u, grant: !u.care_until }); }}>
+                      {u.care_until ? 'End Care' : 'Give Care'}
+                    </Button>
                     {u.suspended_at ? (
                       <Button size="sm" variant="outline" isLoading={suspend.isPending && suspend.variables?.id === u.id}
                         onClick={() => suspend.mutate({ id: u.id, suspended: false })}>
@@ -413,6 +445,20 @@ export const OwnersPanel: React.FC = () => {
           onConfirm={(reason) => suspend.mutate({ id: target.id, suspended: true, reason })}
         />
       )}
+
+      {careTarget && (
+        <ReasonDialog
+          title={careTarget.grant ? `Give ${careTarget.user.name} Sahayak Care?` : `End ${careTarget.user.name}'s Sahayak Care?`}
+          description={careTarget.grant
+            ? 'The Sahayak Care plan starts now. No payment is taken and prices do not change yet.'
+            : 'It ends now. Jobs already raised under it stay covered.'}
+          confirm={careTarget.grant ? 'Give Care' : 'End Care'}
+          busy={care.isPending}
+          error={care.isError ? errText(care.error) : null}
+          onClose={() => setCareTarget(null)}
+          onConfirm={(reason) => care.mutate({ id: careTarget.user.id, grant: careTarget.grant, reason })}
+        />
+      )}
     </section>
   );
 };
@@ -422,6 +468,8 @@ export const OwnersPanel: React.FC = () => {
 const ACTION_LABELS: Record<string, string> = {
   job_cancelled: 'Cancelled a job',
   user_suspended: 'Suspended an owner',
+  care_granted: 'Gave Sahayak Care',
+  care_revoked: 'Ended Sahayak Care',
   user_reinstated: 'Reinstated an owner',
   partner_verified: 'Verified a partner',
   partner_rejected: 'Rejected a partner',

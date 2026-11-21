@@ -23,6 +23,8 @@ import type { BackendJob } from "../../../services/api/jobs";
 import type { PartnerStackParamList } from "../../../types";
 import { inr, serviceMetaFor } from "../partnerFormat";
 import { directionsUrl, getNavApp } from "../../../services/navigationPreference";
+import { useAuthStore } from "../../../store/authStore";
+import { startJobTracking, stopJobTracking, TRACKED_STATUSES, type TrackingMode } from "../jobLocationTracking";
 
 type Nav = NativeStackNavigationProp<PartnerStackParamList, "ActiveJob">;
 type Route = RouteProp<PartnerStackParamList, "ActiveJob">;
@@ -36,6 +38,8 @@ export default function ActiveJobScreen() {
   const nav = useNavigation<Nav>();
   const route = useRoute<Route>();
   const jobId = route.params?.jobId;
+  const partnerId = useAuthStore((s) => s.user?.id);
+  const [tracking, setTracking] = useState<TrackingMode>("off");
 
   const [job, setJob] = useState<BackendJob | null>(null);
   const [loading, setLoading] = useState(true);
@@ -96,6 +100,20 @@ export default function ActiveJobScreen() {
   useEffect(() => {
     void loadJob(true);
   }, [loadJob]);
+
+  // ADR-049: report position for the length of the job, including while the
+  // partner navigates in another app. Not stopped on unmount: going back to
+  // the dashboard does not end the drive. Stopped when the job ends.
+  const jobStatus = job?.status;
+  useEffect(() => {
+    if (!jobStatus || !partnerId) return;
+    if (TRACKED_STATUSES.has(jobStatus)) {
+      void startJobTracking(partnerId).then(setTracking).catch(() => setTracking("off"));
+    } else {
+      void stopJobTracking();
+      setTracking("off");
+    }
+  }, [jobStatus, partnerId]);
 
   // A quiet refresh keeps cancellation and owner-side changes visible without
   // flashing a spinner over a screen the mechanic is actively using.
@@ -504,6 +522,23 @@ export default function ActiveJobScreen() {
           <Text style={styles.issueText} numberOfLines={2}>
             “{job.issue_description}”
           </Text>
+        ) : null}
+
+        {TRACKED_STATUSES.has(job.status) ? (
+          <View style={styles.metaItem} accessibilityRole="text">
+            <Ionicons
+              name={tracking === "off" ? "location-outline" : "location"}
+              size={14}
+              color={tracking === "off" ? Colors.textSecondary : "#15803D"}
+            />
+            <Text style={styles.metaText}>
+              {tracking === "service"
+                ? "Sharing your location with the owner, also while you navigate"
+                : tracking === "foreground"
+                  ? "Sharing your location while this screen is open"
+                  : "Location off: the owner cannot see you on the way"}
+            </Text>
+          </View>
         ) : null}
 
         <View style={styles.metaRow}>

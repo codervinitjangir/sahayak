@@ -12,7 +12,10 @@ import Button from "../../../components/ui/Button";
 import Card from "../../../components/ui/Card";
 import { Chip, EmptyState, ErrorState, Skeleton, StatusChip } from "../../../components/ui/kit";
 import { jobsApi, type BackendJob } from "../../../services/api/jobs";
-import { QK, useMyJobs, isActiveStatus, formatWhen } from "../../shared/ownerData";
+import { QK, useMyJobs, isActiveStatus, isOpenStatus, formatWhen } from "../../shared/ownerData";
+import { slotLabel } from "../../jobs/schedule";
+import BookingActions from "../../jobs/components/BookingActions";
+import i18n from "../../../i18n";
 
 type Nav = NativeStackNavigationProp<OwnerStackParamList>;
 type Filter = "all" | "active" | "past";
@@ -26,7 +29,7 @@ export default function ActivityTab() {
   const [selected, setSelected] = useState<BackendJob | null>(null);
 
   const items = (jobs.data ?? []).filter((j) =>
-    filter === "all" ? true : filter === "active" ? isActiveStatus(j.status) : !isActiveStatus(j.status)
+    filter === "all" ? true : filter === "active" ? isOpenStatus(j.status) : !isOpenStatus(j.status)
   );
 
   return (
@@ -94,7 +97,9 @@ export default function ActivityTab() {
                     {j.pickup_address_text || "Pickup location"}
                   </Text>
                 </View>
-                <Text style={[styles.muted, { marginTop: 6 }]}>{formatWhen(j.requested_at ?? j.created_at)}</Text>
+                <Text style={[styles.muted, { marginTop: 6 }]}>
+                  {j.status === "scheduled" ? `Booked for ${slotLabel(j.scheduled_for, j.slot_end)}` : formatWhen(j.requested_at ?? j.created_at)}
+                </Text>
               </Card>
             </Pressable>
           )}
@@ -226,8 +231,13 @@ function JobSheet({
             <View style={styles.facts}>
               <Fact icon="car-outline" label="Vehicle" value={job.vehicle_number ?? "—"} />
               <Fact icon="location-outline" label="Pickup" value={job.pickup_address_text || "—"} />
-              <Fact icon="time-outline" label="Requested" value={formatWhen(job.requested_at ?? job.created_at) || "—"} />
+              {job.status === "scheduled" ? (
+                <Fact icon="calendar-outline" label="Booked for" value={slotLabel(job.scheduled_for, job.slot_end) || "—"} />
+              ) : (
+                <Fact icon="time-outline" label="Requested" value={formatWhen(job.requested_at ?? job.created_at) || "—"} />
+              )}
               {job.counterpart_name ? <Fact icon="person-outline" label="Partner" value={job.counterpart_name} /> : null}
+              {job.care_covered ? <Fact icon="shield-checkmark-outline" label={i18n.t("care.jobLabel")} value={i18n.t("care.jobValue")} /> : null}
               {price != null ? (
                 <Fact icon="receipt-outline" label="Final amount" value={`₹${Number(price)}`} />
               ) : active ? (
@@ -237,6 +247,8 @@ function JobSheet({
                 <Fact icon="close-circle-outline" label="Reason" value={job.cancellation_reason} />
               ) : null}
             </View>
+
+            {job.status === "scheduled" ? <BookingActions job={job} onDone={close} /> : null}
 
             {active && !cancelling ? (
               <View style={{ gap: Spacing.sm, marginTop: Spacing.lg }}>

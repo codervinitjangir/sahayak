@@ -106,6 +106,8 @@ export interface AdminUserItem {
   has_login: boolean;
   suspended_at?: string | null;
   suspension_reason?: string | null;
+  /** ADR-051: end of the Sahayak Care membership in force. */
+  care_until?: string | null;
 }
 
 export interface AdminAuditEntry {
@@ -165,6 +167,8 @@ export interface AdminAlert {
   job_ids: string[];
   /** ADR-043 partner flags: the partners to review. */
   partner_ids?: string[];
+  /** ADR-048 ZONE_SUPPLY_GAP: uncovered areas (cell centres, about 5 km). */
+  zones?: { latitude: number; longitude: number; requests: number; no_match: number; partners_nearby: number }[];
 }
 
 export type DisputeReason = 'overcharged' | 'service_not_done' | 'partner_behaviour' | 'damage' | 'off_app_payment' | 'other';
@@ -329,6 +333,24 @@ export const adminService = {
     const res = await apiClient<AdminUserItem>(`/admin/users/${userId}/suspension`, {
       method: 'PATCH',
       body: JSON.stringify({ suspended, ...(reason ? { reason } : {}) }),
+    });
+    return res.data;
+  },
+
+  /** ADR-051: give an owner Sahayak Care (ops / super admin). 409 CARE_ALREADY_ACTIVE. */
+  async grantCare(userId: string, reason: string): Promise<unknown> {
+    const res = await apiClient(`/admin/users/${userId}/care`, {
+      method: 'POST',
+      body: JSON.stringify({ plan_code: 'care', reason }),
+    });
+    return res.data;
+  },
+
+  /** ADR-051: end it now. 409 CARE_NOT_ACTIVE. */
+  async revokeCare(userId: string, reason: string): Promise<unknown> {
+    const res = await apiClient(`/admin/users/${userId}/care/revoke`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
     });
     return res.data;
   },

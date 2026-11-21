@@ -6,6 +6,7 @@ import { Modal } from '../../components/ui/Modal';
 import { ApiError } from '../../services/api';
 import { usersService } from '../../services/users.service';
 import { useAuth } from '../../app/AuthProvider';
+import { CareCard } from '../../components/CareCard';
 
 /** Owner self-service on web: edit profile, download data, delete account (G8 / G10, ADR-025). */
 export const AccountSection: React.FC = () => {
@@ -66,6 +67,7 @@ export const AccountSection: React.FC = () => {
   return (
     <section aria-labelledby="account-heading" className="space-y-3">
       <h2 id="account-heading" className="text-lg font-bold text-ink">Your account</h2>
+      <CareCard />
       <div className="rounded-card border border-line bg-white p-4 space-y-3">
         {me.data ? (
           <div>

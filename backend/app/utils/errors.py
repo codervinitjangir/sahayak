@@ -252,6 +252,18 @@ class ErrorCode:
     # Staff tried to resolve a dispute someone already closed.
     DISPUTE_ALREADY_CLOSED = "DISPUTE_ALREADY_CLOSED"
 
+    # Scheduled jobs (ADR-050)
+    SLOT_NOT_AVAILABLE = "SLOT_NOT_AVAILABLE"
+    # Reschedule only while the booking is still waiting for its slot.
+    JOB_NOT_SCHEDULED = "JOB_NOT_SCHEDULED"
+    TOO_MANY_SCHEDULED_JOBS = "TOO_MANY_SCHEDULED_JOBS"
+
+    # Sahayak Care (ADR-051)
+    CARE_PLAN_NOT_FOUND = "CARE_PLAN_NOT_FOUND"
+    # One membership in force at a time; staff revoke and grant to change it.
+    CARE_ALREADY_ACTIVE = "CARE_ALREADY_ACTIVE"
+    CARE_NOT_ACTIVE = "CARE_NOT_ACTIVE"
+
 
 # Codes for HTTPExceptions raised by FastAPI itself (unknown route, unsupported
 # method) or by third-party dependencies, which never went through AppError.

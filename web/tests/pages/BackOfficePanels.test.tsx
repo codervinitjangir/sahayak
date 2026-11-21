@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
 
-import { CataloguePanel, JobsBoardPanel, OwnersPanel, StaffPanel } from '../../src/pages/admin/BackOfficePanels';
+import { AlertsStrip, CataloguePanel, JobsBoardPanel, OwnersPanel, StaffPanel } from '../../src/pages/admin/BackOfficePanels';
 import { adminService } from '../../src/services/admin.service';
 
 vi.mock('../../src/services/admin.service', async (orig) => {
@@ -12,7 +12,7 @@ vi.mock('../../src/services/admin.service', async (orig) => {
   return {
     ...real,
     adminService: {
-      listJobs: vi.fn(), reassignJob: vi.fn(), getAlerts: vi.fn(), listCatalogue: vi.fn(), setServicePrice: vi.fn(), listStaff: vi.fn(), inviteStaff: vi.fn(), revokeInvite: vi.fn(), updateStaff: vi.fn(), cancelJob: vi.fn(), listUsers: vi.fn(), setUserSuspension: vi.fn(), listAudit: vi.fn(),
+      listJobs: vi.fn(), reassignJob: vi.fn(), getAlerts: vi.fn(), listCatalogue: vi.fn(), setServicePrice: vi.fn(), listStaff: vi.fn(), inviteStaff: vi.fn(), revokeInvite: vi.fn(), updateStaff: vi.fn(), cancelJob: vi.fn(), listUsers: vi.fn(), setUserSuspension: vi.fn(), listAudit: vi.fn(), grantCare: vi.fn(), revokeCare: vi.fn(),
     },
   };
 });
@@ -78,6 +78,24 @@ describe('JobsBoardPanel', () => {
   });
 });
 
+describe('AlertsStrip zone gaps (ADR-048)', () => {
+  it('lists each uncovered area with a map link to the area, not an address', async () => {
+    vi.mocked(adminService.getAlerts).mockResolvedValue({
+      generated_at: '2026-11-21T12:00:00Z',
+      alerts: [{
+        code: 'ZONE_SUPPLY_GAP', severity: 'critical', message: '1 area(s) had 3 request(s) in the last 60 minutes and no verified partner on duty within reach.',
+        count: 1, job_ids: [], zones: [{ latitude: 13.125, longitude: 77.575, requests: 3, no_match: 2, partners_nearby: 0 }],
+      }],
+      live_jobs: 0, partners_on_duty: 2, partners_verified: 4, window_minutes: 60,
+      jobs_in_window: 3, no_match_in_window: 2, no_match_rate: null,
+    });
+    wrap(<AlertsStrip />);
+    const link = await screen.findByRole('link', { name: /area near 13\.13, 77\.58/i });
+    expect(link).toHaveAttribute('href', expect.stringContaining('query=13.125,77.575'));
+    expect(screen.getByText(/3 requests, 2 found nobody/)).toBeInTheDocument();
+  });
+});
+
 describe('OwnersPanel', () => {
   it('reinstates a suspended owner in one click', async () => {
     vi.mocked(adminService.listUsers).mockResolvedValue({
@@ -96,6 +114,31 @@ describe('OwnersPanel', () => {
   });
 });
 
+
+describe('OwnersPanel Sahayak Care (ADR-051)', () => {
+  it('gives Care with a reason, and offers to end it for a member', async () => {
+    vi.mocked(adminService.listUsers).mockResolvedValue({
+      items: [
+        { id: 'u1', name: 'Ravi', phone: '+919000000002', created_at: '2026-11-01T00:00:00Z', job_count: 3, has_login: true },
+        { id: 'u2', name: 'Meera', phone: '+919000000003', created_at: '2026-11-01T00:00:00Z', job_count: 1, has_login: true,
+          care_until: '2027-11-21T06:00:00Z' },
+      ],
+      total: 2, limit: 50, offset: 0,
+    });
+    vi.mocked(adminService.grantCare).mockResolvedValue({});
+    const user = userEvent.setup();
+    wrap(<OwnersPanel />);
+    expect(await screen.findByText(/Care until/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'End Care' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Give Care' }));
+    const all = screen.getAllByRole('button', { name: 'Give Care' });
+    const confirm = all[all.length - 1];
+    expect(confirm).toBeDisabled();            // a reason is required
+    await user.type(screen.getByLabelText(/reason/i), 'pilot owner');
+    await user.click(confirm);
+    await waitFor(() => expect(adminService.grantCare).toHaveBeenCalledWith('u1', 'pilot owner'));
+  });
+});
 
 describe('CataloguePanel', () => {
   const item = { id: 3, code: 'flat_tyre', name: 'Flat tyre', base_price: '399.00', category_name: 'Mechanical' };

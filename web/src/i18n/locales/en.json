@@ -1,0 +1,35 @@
+{
+  "booking": {
+    "when": "When?",
+    "now": "Now",
+    "bookATime": "Book a time",
+    "bookSlot": "Book {{slot}}",
+    "bookThisTime": "Book this time",
+    "requestNow": "Request help now",
+    "day": "Day",
+    "time": "Time",
+    "slotsFailed": "We could not load the available times.",
+    "noneNow": "No times can be booked right now.",
+    "leadNote": "We start finding a partner {{min}} minutes before your slot. You can move or cancel the booking for free until then.",
+    "move": "Move booking",
+    "keep": "Keep current time",
+    "moveOther": "Move to another time",
+    "cancel": "Cancel booking",
+    "moveFailed": "Could not move the booking. Try again.",
+    "errors": {
+      "JOB_NOT_SCHEDULED": "Matching has already started for this booking, so it can no longer be moved. You can still cancel it.",
+      "SLOT_NOT_AVAILABLE": "That time can no longer be booked. Pick another one.",
+      "TOO_MANY_SCHEDULED_JOBS": "You already have three upcoming bookings. Cancel one or wait until one has happened."
+    },
+    "loading": "Loading available times…",
+    "pickTime": "Please pick a time for your booking.",
+    "waitingNote": "Nothing happens until shortly before your slot. Then we find a verified partner nearby and you can follow them here.",
+    "bookedFor": "Booked for {{slot}}",
+    "tryAgain": "Try again"
+  },
+  "care": {
+    "coveredUntil": "Covered until {{date}}",
+    "calloutsLeft": "{{left}} of {{allowed}} covered call-outs left",
+    "coveredJob": "Covered by Sahayak Care"
+  }
+}

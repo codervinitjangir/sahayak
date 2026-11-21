@@ -147,6 +147,7 @@ STAFF_WRITE_ROLES: dict[str, tuple[str, ...]] = {
     "disputes": ("super_admin", "ops", "support", "finance"),
     "refunds": ("super_admin", "finance"),             # a dispute resolved as refunded
     "pricing": ("super_admin", "finance"),             # catalogue base prices
+    "care": ("super_admin", "ops"),                    # grant / end Sahayak Care (ADR-051)
 }
 
 
